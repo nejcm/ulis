@@ -105,8 +105,8 @@ export const McpServerSchema = z.object({
   url: z.string().optional(),
   command: z.string().optional(),
   args: z.array(z.string()).optional(),
-  env: z.record(z.string()).optional(),
-  headers: z.record(z.string()).optional(),
+  env: z.record(z.string(), z.string()).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
   localFallback: z
     .object({
       command: z.string(),
@@ -117,7 +117,7 @@ export const McpServerSchema = z.object({
 });
 
 export const McpConfigSchema = z.object({
-  servers: z.record(McpServerSchema),
+  servers: z.record(z.string(), McpServerSchema),
 });
 
 export const SkillFrontmatterSchema = z.object({
