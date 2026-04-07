@@ -7,6 +7,7 @@ import { BUILD_CONFIG } from "../config.js";
 import { writeFile, cleanDir, fileExists, readFile } from "../utils/fs.js";
 import { translateEnvVar } from "../utils/env-var.js";
 import { log } from "../utils/logger.js";
+import { buildPolicyCommentBlock } from "../utils/policy-comments.js";
 
 export function generateCodex(
   agents: readonly ParsedAgent[],
@@ -123,7 +124,12 @@ export function generateCodex(
       agentLines.push(`nickname_candidates = [${nicks}]`);
     }
 
-    writeFile(join(outDir, "agents", `${agent.name}.toml`), agentLines.join("\n"));
+    // All policy fields (contextHints, toolPolicy, security) → TOML comments at top
+    const policyBlock = buildPolicyCommentBlock(agent.frontmatter, "toml");
+    const tomlContent = policyBlock
+      ? `${policyBlock}\n${agentLines.join("\n")}`
+      : agentLines.join("\n");
+    writeFile(join(outDir, "agents", `${agent.name}.toml`), tomlContent);
     log.dim(`  agent: ${agent.name}`);
   }
   log.success("agents/ (per-agent TOML files)");

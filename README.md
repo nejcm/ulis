@@ -4,6 +4,12 @@ Single source of truth for AI tool configurations across [OpenCode](https://open
 
 A TypeScript build system reads canonical sources from `.ai/` and generates tool-specific configs into `generated/` at the repo root, which are then deployed by an install script.
 
+## Specification
+
+- **[docs/SPEC.md](./docs/SPEC.md)** — Architecture, entity model, capability matrix, versioning, and extension guide.
+- **[docs/REFERENCE.md](./docs/REFERENCE.md)** — Auto-generated field reference for every schema type (regenerate with `bun run gen:reference`).
+- **[schemas/](./schemas/)** — JSON Schema files for all entity types (regenerate with `bun run gen:schemas`).
+
 ## Why
 
 Each tool uses a different config format, different MCP server syntax, different agent/rule structures, and different env var interpolation. Without a single source, configs diverge and secrets (like API keys) end up hardcoded in tool-specific files.

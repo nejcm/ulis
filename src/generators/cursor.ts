@@ -5,6 +5,7 @@ import type { McpConfig } from "../schema.js";
 import { writeFile, copyDir, cleanDir } from "../utils/fs.js";
 import { translateEnvVar } from "../utils/env-var.js";
 import { log } from "../utils/logger.js";
+import { buildPolicyCommentBlock } from "../utils/policy-comments.js";
 
 const MODEL_MAP: Record<string, string> = {
   opus: "claude-opus-4-6",
@@ -54,7 +55,12 @@ export function generateCursor(
     }
     frontmatterLines.push("---");
 
-    const content = `${frontmatterLines.join("\n")}\n\n${agent.body.trim()}\n`;
+    // All policy fields → MDC comments (no native Cursor support)
+    const policyBlock = buildPolicyCommentBlock(agent.frontmatter, "mdc");
+    const bodyWithPolicy = policyBlock
+      ? `${policyBlock}\n${agent.body.trim()}`
+      : agent.body.trim();
+    const content = `${frontmatterLines.join("\n")}\n\n${bodyWithPolicy}\n`;
     writeFile(join(outDir, "agents", `${agent.name}.mdc`), content);
     log.dim(`  agent: ${agent.name}`);
   }

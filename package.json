@@ -17,6 +17,10 @@
     "install:deps": "bun install",
     "install:configs": "bun install.js",
     "rebuild": "bun run build",
+    "test": "bun test",
+    "test:update": "bun test --update-snapshots",
+    "gen:schemas": "tsx tools/gen-json-schema.ts",
+    "gen:reference": "tsx tools/gen-reference.ts",
     "fmt": "oxfmt .",
     "fmt:check": "oxfmt --check ."
   },
@@ -25,11 +29,13 @@
     "zod": "~4.3.6"
   },
   "devDependencies": {
+    "@types/bun": "^1.3.11",
     "@types/node": "~24.12.2",
     "oxfmt": "~0.43.0",
     "rimraf": "~6.1.3",
     "tsx": "~4.21.0",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "zod-to-json-schema": "^3.25.2"
   },
   "packageManager": "bun@1.3.10"
 }

@@ -1,0 +1,17 @@
+{
+  "servers": {
+    "test-local": {
+      "type": "local",
+      "command": "npx",
+      "args": ["-y", "test-mcp-server"],
+      "targets": ["claude", "opencode", "codex", "cursor"]
+    },
+    "test-remote": {
+      "type": "remote",
+      "url": "https://mcp.example.com",
+      "headers": { "Authorization": "Bearer ${TEST_TOKEN}" },
+      "localFallback": { "command": "npx", "args": ["-y", "test-mcp-server-local"] },
+      "targets": ["claude", "opencode", "codex", "cursor"]
+    }
+  }
+}

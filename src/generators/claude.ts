@@ -5,6 +5,7 @@ import type { McpConfig, PluginsConfig } from "../schema.js";
 import { translateEnvVar } from "../utils/env-var.js";
 import { cleanDir, copyDir, fileExists, readFile, writeFile } from "../utils/fs.js";
 import { log } from "../utils/logger.js";
+import { buildPolicyCommentBlock } from "../utils/policy-comments.js";
 
 const MODEL_MAP: Record<string, string> = {
   opus: "opus",
@@ -67,18 +68,35 @@ function generateSubagentFrontmatter(agent: ParsedAgent): string {
   }
 
   const allowedTools = buildToolsList(agent);
-  const disallowedTools = claudePlatform?.disallowedTools ?? [];
+
+  // security.permissionLevel "readonly" → plan mode (read-only); toolPolicy.avoid → disallowedTools
+  const disallowedTools = [
+    ...(claudePlatform?.disallowedTools ?? []),
+    ...(fm.toolPolicy?.avoid ?? []),
+  ];
 
   if (allowedTools.length > 0) {
     lines.push(`tools: ${allowedTools.join(", ")}`);
   }
   if (disallowedTools.length > 0) {
-    lines.push(`disallowedTools: ${disallowedTools.join(", ")}`);
+    lines.push(`disallowedTools: ${[...new Set(disallowedTools)].join(", ")}`);
   }
 
-  if (claudePlatform?.permissionMode) {
-    lines.push(`permissionMode: ${claudePlatform.permissionMode}`);
+  // Resolve permissionMode: security wins over platform override
+  let permissionMode = claudePlatform?.permissionMode;
+  if (fm.security?.permissionLevel === "readonly") {
+    permissionMode = "plan";
+  } else if (
+    fm.security?.requireApproval?.length ||
+    fm.toolPolicy?.requireConfirmation?.length
+  ) {
+    // requireApproval or requireConfirmation without readonly → default (ask on sensitive ops)
+    permissionMode ??= "default";
   }
+  if (permissionMode) {
+    lines.push(`permissionMode: ${permissionMode}`);
+  }
+
   if (fm.maxTurns !== undefined) {
     lines.push(`maxTurns: ${fm.maxTurns}`);
   }
@@ -106,10 +124,26 @@ function generateSubagentFrontmatter(agent: ParsedAgent): string {
       lines.push(`  - ${s}`);
     }
   }
-  if (fm.hooks) {
+  // Merge explicit hooks + blocked-command hooks (security.blockedCommands → PreToolUse Bash deny)
+  const blockedCmds = fm.security?.blockedCommands ?? [];
+  const blockedHookEntries = blockedCmds.map((cmd) => ({
+    matcher: `Bash(${cmd}*)`,
+    command: `echo "Blocked by ULIS security policy: ${cmd}" && exit 1`,
+  }));
+  const mergedPreToolUse = [
+    ...(fm.hooks?.PreToolUse ?? []),
+    ...blockedHookEntries,
+  ];
+  const mergedHooks = {
+    ...(fm.hooks ?? {}),
+    ...(mergedPreToolUse.length > 0 ? { PreToolUse: mergedPreToolUse } : {}),
+  };
+
+  const hasHooks = Object.values(mergedHooks).some((v) => Array.isArray(v) && v.length > 0);
+  if (hasHooks) {
     lines.push(`hooks:`);
-    for (const [event, entries] of Object.entries(fm.hooks)) {
-      if (!entries || entries.length === 0) continue;
+    for (const [event, entries] of Object.entries(mergedHooks)) {
+      if (!entries || (entries as unknown[]).length === 0) continue;
       lines.push(`  ${event}:`);
       for (const entry of entries as Array<{ matcher?: string; command: string }>) {
         if (entry.matcher) {
@@ -236,9 +270,16 @@ Rules are **not** used by OpenCode, Codex, or Cursor — those tools use agents 
   let subagentCount = 0;
   for (const agent of enabledAgents) {
     const frontmatter = generateSubagentFrontmatter(agent);
-    const content = `${frontmatter}\n\n${agent.body.trim()}\n`;
+    const policyBlock = buildPolicyCommentBlock(agent.frontmatter, "md");
+    const bodyWithPolicy = policyBlock
+      ? `${policyBlock}\n${agent.body.trim()}`
+      : agent.body.trim();
+    const content = `${frontmatter}\n\n${bodyWithPolicy}\n`;
     writeFile(join(outDir, "agents", `${agent.name}.md`), content);
     subagentCount++;
+    if (policyBlock) {
+      log.dim(`  agent: ${agent.name} (policy hints embedded)`);
+    }
   }
   if (subagentCount > 0) {
     log.success(`agents/ (${subagentCount} subagents generated)`);

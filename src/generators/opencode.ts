@@ -8,6 +8,7 @@ import { writeFile, copyDir, cleanDir, fileExists } from "../utils/fs.js";
 import { translateEnvVar } from "../utils/env-var.js";
 import { readFile } from "../utils/fs.js";
 import { log } from "../utils/logger.js";
+import { buildPolicyCommentBlock } from "../utils/policy-comments.js";
 
 export function generateOpencode(
   agents: readonly ParsedAgent[],
@@ -54,8 +55,31 @@ export function generateOpencode(
     if (ocPlatform?.disable) {
       entry.disable = true;
     }
-    if (ocPlatform?.permission) {
-      entry.permission = ocPlatform.permission;
+
+    // Derive permission from security + toolPolicy (security wins over platform override)
+    const sec = agent.frontmatter.security;
+    const toolPolicy = agent.frontmatter.toolPolicy;
+    const basePerm = ocPlatform?.permission ?? {};
+    const derivedPerm: Record<string, string> = { ...basePerm };
+
+    if (sec?.permissionLevel === "readonly") {
+      derivedPerm.edit ??= "deny";
+      derivedPerm.bash ??= "deny";
+    }
+    if (sec?.requireApproval?.includes("edit") || toolPolicy?.requireConfirmation?.includes("edit")) {
+      derivedPerm.edit ??= "ask";
+    }
+    if (sec?.requireApproval?.includes("bash") || toolPolicy?.requireConfirmation?.includes("bash")) {
+      derivedPerm.bash ??= "ask";
+    }
+    if (Object.keys(derivedPerm).length > 0) {
+      entry.permission = derivedPerm;
+    }
+
+    // rate_limit_per_hour: platform override or security.rateLimit
+    const rateLimit = ocPlatform?.rate_limit_per_hour ?? sec?.rateLimit?.perHour;
+    if (rateLimit !== undefined) {
+      entry.rate_limit_per_hour = rateLimit;
     }
 
     agentBlock[ocName] = entry;
@@ -133,7 +157,7 @@ export function generateOpencode(
   writeFile(join(outDir, "opencode.json"), JSON.stringify(opencodeJson, null, 2));
   log.success("opencode.json");
 
-  // Copy agent markdown bodies
+  // Copy agent markdown bodies, prepending policy comment block for non-native fields
   const agentsCoreDir = join(outDir, "agents", "core");
   const agentsSpecDir = join(outDir, "agents", "specialized");
   for (const agent of agents) {
@@ -141,7 +165,19 @@ export function generateOpencode(
     const ocName = config.agentNameMap[agent.name] ?? agent.name;
     const isCore = agent.frontmatter.tags.includes("core");
     const destDir = isCore ? agentsCoreDir : agentsSpecDir;
-    writeFile(join(destDir, `${ocName}.md`), agent.body);
+    // contextHints and restrictedPaths have no native OpenCode equivalent → comments in body
+    const commentOnlyHints = agent.frontmatter.contextHints
+      ? { contextHints: agent.frontmatter.contextHints }
+      : {};
+    const commentOnlySec = agent.frontmatter.security?.restrictedPaths?.length
+      ? { security: { ...agent.frontmatter.security, blockedCommands: [], requireApproval: [] } }
+      : {};
+    const policyBlock = buildPolicyCommentBlock(
+      { ...commentOnlyHints, ...commentOnlySec },
+      "md",
+    );
+    const body = policyBlock ? `${policyBlock}\n${agent.body}` : agent.body;
+    writeFile(join(destDir, `${ocName}.md`), body);
   }
   log.success("agents/");
 

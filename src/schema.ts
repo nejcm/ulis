@@ -50,6 +50,35 @@ export const AgentFrontmatterSchema = z.object({
   // MCP (agent-scoped) - names from mcp.json
   mcpServers: z.array(z.string()).optional(),
 
+  // CONTEXT WINDOW HINTS (emitted as comments; consumed by external harnesses)
+  contextHints: z
+    .object({
+      maxInputTokens: z.number().positive().optional(),
+      excludeFromContext: z.array(z.string()).optional(),
+      priority: z.enum(["low", "normal", "high"]).default("normal"),
+    })
+    .optional(),
+
+  // TOOL SELECTION POLICY (prefer/avoid emitted as comments; requireConfirmation maps to native where supported)
+  toolPolicy: z
+    .object({
+      prefer: z.array(z.string()).optional(),
+      avoid: z.array(z.string()).optional(),
+      requireConfirmation: z.array(z.string()).optional(),
+    })
+    .optional(),
+
+  // SECURITY POLICY (maps to native permission controls where supported; otherwise comments)
+  security: z
+    .object({
+      permissionLevel: z.enum(["readonly", "readwrite", "full"]).default("readwrite"),
+      blockedCommands: z.array(z.string()).optional(),
+      restrictedPaths: z.array(z.string()).optional(),
+      requireApproval: z.array(z.enum(["write", "edit", "bash", "agent", "mcp"])).optional(),
+      rateLimit: z.object({ perHour: z.number().positive() }).optional(),
+    })
+    .optional(),
+
   // UI
   color: z.enum(["red", "blue", "green", "yellow", "purple", "orange", "pink", "cyan"]).optional(),
   tags: z.array(z.string()).default([]),
@@ -219,3 +248,6 @@ export type McpConfig = z.infer<typeof McpConfigSchema>;
 export type McpServer = z.infer<typeof McpServerSchema>;
 export type PluginsConfig = z.infer<typeof PluginsConfigSchema>;
 export type ToolPermissions = z.infer<typeof ToolPermissionsSchema>;
+export type ContextHints = NonNullable<AgentFrontmatter["contextHints"]>;
+export type ToolPolicy = NonNullable<AgentFrontmatter["toolPolicy"]>;
+export type SecurityPolicy = NonNullable<AgentFrontmatter["security"]>;
