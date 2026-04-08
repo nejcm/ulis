@@ -1,7 +1,8 @@
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$GeneratedDir = Join-Path $ScriptDir "generated"
+$RootDir = Split-Path -Parent $ScriptDir
+$GeneratedDir = Join-Path $RootDir "generated"
 $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 
 Write-Host "`n━━━ AI Config Installer (Windows) ━━━" -ForegroundColor Cyan
@@ -19,7 +20,7 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 # Build if generated/ doesn't exist or --rebuild flag passed
 if (-not (Test-Path (Join-Path $GeneratedDir "opencode")) -or ($args -contains "--rebuild")) {
     Write-Host "[build] Running build..." -ForegroundColor Yellow
-    Push-Location $ScriptDir
+    Push-Location $RootDir
     try {
         bun install --silent
         bun run build
@@ -43,6 +44,7 @@ Write-Host "[done] OpenCode -> $OcTarget" -ForegroundColor Green
 # --- Claude Code ---
 Write-Host "`n━━━ Installing Claude Code ━━━" -ForegroundColor Cyan
 $CcTarget = Join-Path $env:USERPROFILE ".claude"
+if (-not (Test-Path $CcTarget)) { New-Item -Path $CcTarget -ItemType Directory -Force | Out-Null }
 
 # Merge settings.json
 $SettingsSrc = Join-Path $GeneratedDir "claude" "settings.json"
@@ -69,6 +71,17 @@ if (Test-Path $SettingsSrc) {
     }
 }
 
+# Copy agents, commands, rules, AGENTS.md (replace)
+foreach ($item in @("agents", "commands", "rules", "AGENTS.md")) {
+    $src = Join-Path $GeneratedDir "claude" $item
+    if (Test-Path $src) {
+        $dest = Join-Path $CcTarget $item
+        if (Test-Path $dest) { Remove-Item -Path $dest -Recurse -Force }
+        Copy-Item -Path $src -Destination $dest -Recurse
+        Write-Host "[done] $item" -ForegroundColor Green
+    }
+}
+
 # Install marketplace plugins
 if (Get-Command claude -ErrorAction SilentlyContinue) {
     Write-Host "[info] Installing Claude marketplace plugins..."
@@ -88,7 +101,18 @@ if (Test-Path $CxConfig) {
     Write-Host "[backup] config.toml"
 }
 Copy-Item -Path (Join-Path $GeneratedDir "codex" "config.toml") -Destination $CxConfig -Force
-Write-Host "[done] Codex -> $CxConfig" -ForegroundColor Green
+Write-Host "[done] config.toml" -ForegroundColor Green
+
+# Copy agents, skills, AGENTS.md (replace)
+foreach ($item in @("agents", "skills", "AGENTS.md")) {
+    $src = Join-Path $GeneratedDir "codex" $item
+    if (Test-Path $src) {
+        $dest = Join-Path $CxTarget $item
+        if (Test-Path $dest) { Remove-Item -Path $dest -Recurse -Force }
+        Copy-Item -Path $src -Destination $dest -Recurse
+        Write-Host "[done] $item" -ForegroundColor Green
+    }
+}
 
 # --- Cursor ---
 Write-Host "`n━━━ Installing Cursor ━━━" -ForegroundColor Cyan
@@ -108,6 +132,17 @@ if (Test-Path $CrConfig) {
 } else {
     Copy-Item -Path $CrSrc -Destination $CrConfig
     Write-Host "[done] mcp.json (copied)" -ForegroundColor Green
+}
+
+# Copy skills, AGENTS.md (replace)
+foreach ($item in @("skills", "AGENTS.md")) {
+    $src = Join-Path $GeneratedDir "cursor" $item
+    if (Test-Path $src) {
+        $dest = Join-Path $CrTarget $item
+        if (Test-Path $dest) { Remove-Item -Path $dest -Recurse -Force }
+        Copy-Item -Path $src -Destination $dest -Recurse
+        Write-Host "[done] $item" -ForegroundColor Green
+    }
 }
 
 # --- Summary ---

@@ -17,7 +17,7 @@
     "format": "oxfmt .",
     "gen:reference": "tsx src/tools/gen-reference.ts",
     "gen:schemas": "tsx src/tools/gen-json-schema.ts",
-    "install:configs": "bun install.js",
+    "install:configs": "bun scripts/install.js",
     "install:deps": "bun install",
     "lint": "tsc --noEmit",
     "rebuild": "bun run build",

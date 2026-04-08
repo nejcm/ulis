@@ -4,9 +4,10 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
+const rootDir = resolve(__dirname, "..");
 
 // Auto-load .env if it exists
-const envFile = resolve(__dirname, ".env");
+const envFile = resolve(rootDir, ".env");
 if (existsSync(envFile)) {
   readFileSync(envFile, "utf8")
     .split("\n")
@@ -21,6 +22,6 @@ if (existsSync(envFile)) {
     });
 }
 
-const cmd = process.platform === "win32" ? "powershell -ExecutionPolicy Bypass -File install.ps1" : "bash install.sh";
+const cmd = process.platform === "win32" ? "powershell -ExecutionPolicy Bypass -File scripts/install.ps1" : "bash scripts/install.sh";
 
-execSync(cmd, { stdio: "inherit", cwd: __dirname });
+execSync(cmd, { stdio: "inherit", cwd: rootDir });

@@ -2,7 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-GENERATED_DIR="$SCRIPT_DIR/generated"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+GENERATED_DIR="$ROOT_DIR/generated"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 echo "━━━ AI Config Installer (Linux/macOS) ━━━"
@@ -16,7 +17,7 @@ command -v git >/dev/null 2>&1 || { echo "ERROR: git is required"; exit 1; }
 # Build if generated/ doesn't exist or --rebuild flag passed
 if [ ! -d "$GENERATED_DIR/opencode" ] || [ "${1:-}" = "--rebuild" ]; then
   echo "[build] Running build..."
-  (cd "$SCRIPT_DIR" && bun install --silent && bun run build)
+  (cd "$ROOT_DIR" && bun install --silent && bun run build)
 fi
 
 # --- OpenCode ---
@@ -36,6 +37,7 @@ echo "[done] OpenCode -> $OC_TARGET"
 echo ""
 echo "━━━ Installing Claude Code ━━━"
 CC_TARGET="$HOME/.claude"
+mkdir -p "$CC_TARGET"
 
 # Merge settings.json (additive merge using jq if available)
 if [ -f "$GENERATED_DIR/claude/settings.json" ]; then
@@ -48,6 +50,16 @@ if [ -f "$GENERATED_DIR/claude/settings.json" ]; then
     echo "[done] settings.json (copied)"
   fi
 fi
+
+# Copy agents, commands, rules, AGENTS.md (replace)
+for item in agents commands rules AGENTS.md; do
+  src="$GENERATED_DIR/claude/$item"
+  if [ -e "$src" ]; then
+    rm -rf "$CC_TARGET/$item"
+    cp -r "$src" "$CC_TARGET/$item"
+    echo "[done] $item"
+  fi
+done
 
 # Install marketplace plugins (if claude CLI available)
 if command -v claude >/dev/null 2>&1; then
@@ -68,7 +80,17 @@ if [ -f "$CX_TARGET/config.toml" ]; then
   cp "$CX_TARGET/config.toml" "$CX_TARGET/config.toml.backup.$TIMESTAMP"
 fi
 cp "$GENERATED_DIR/codex/config.toml" "$CX_TARGET/config.toml"
-echo "[done] Codex -> $CX_TARGET/config.toml"
+echo "[done] config.toml"
+
+# Copy agents, skills, AGENTS.md (replace)
+for item in agents skills AGENTS.md; do
+  src="$GENERATED_DIR/codex/$item"
+  if [ -e "$src" ]; then
+    rm -rf "$CX_TARGET/$item"
+    cp -r "$src" "$CX_TARGET/$item"
+    echo "[done] $item"
+  fi
+done
 
 # --- Cursor ---
 echo ""
@@ -89,6 +111,16 @@ else
   cp "$GENERATED_DIR/cursor/mcp.json" "$CR_TARGET/mcp.json"
   echo "[done] mcp.json (copied)"
 fi
+
+# Copy skills, AGENTS.md (replace)
+for item in skills AGENTS.md; do
+  src="$GENERATED_DIR/cursor/$item"
+  if [ -e "$src" ]; then
+    rm -rf "$CR_TARGET/$item"
+    cp -r "$src" "$CR_TARGET/$item"
+    echo "[done] $item"
+  fi
+done
 
 # --- Summary ---
 echo ""
