@@ -95,7 +95,6 @@ export const BUILD_CONFIG: BuildConfig = {
         "bun run lint:file:*": "allow",
         "bun run test:*": "allow",
         "bun run test:file:*": "allow",
-        "bun run typecheck:*": "allow",
         "bun test:*": "allow",
         "cc:*": "allow",
         "comm:*": "allow",

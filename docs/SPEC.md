@@ -259,8 +259,22 @@ const skills = parseSkills(join(aiDir, "skills"));
 const mcp = parseMcpConfig(join(aiDir, "mcp.json"));
 const plugins = parsePluginsConfig(join(aiDir, "plugins.json"));
 
-generateClaude(agents, skills, mcp, plugins, aiDir, join(generatedDir, "claude"));
-generateOpencode(agents, skills, mcp, plugins, aiDir, join(generatedDir, "opencode"));
+generateClaude(
+  agents,
+  skills,
+  mcp,
+  plugins,
+  aiDir,
+  join(generatedDir, "claude"),
+);
+generateOpencode(
+  agents,
+  skills,
+  mcp,
+  plugins,
+  aiDir,
+  join(generatedDir, "opencode"),
+);
 generateCodex(agents, skills, mcp, aiDir, join(generatedDir, "codex"));
 generateCursor(agents, skills, mcp, join(generatedDir, "cursor"));
 ```
@@ -337,6 +351,6 @@ Run `bun run build` to see a full end-to-end example using the project's own age
 | `bun run test`                                    | Run test suite (54 tests)                   |
 | `bun run gen:schemas`                             | Regenerate `schemas/*.json` from Zod        |
 | `bun run gen:reference`                           | Regenerate `docs/REFERENCE.md` from Zod     |
-| `bun run typecheck`                               | TypeScript type check                       |
+| `bun run lint`                                    | TypeScript type check                       |
 | `bun run clean`                                   | Delete `generated/`                         |
 | `bun run install:configs`                         | Deploy `generated/` to platform config dirs |

@@ -109,10 +109,10 @@ Schemas in `schema.ts` validate canonical sources at build time with Zod. The bu
 | Package       | Purpose                                          |
 | ------------- | ------------------------------------------------ |
 | `tsx`         | Run TypeScript directly (no compile step)        |
-| `typescript`  | Type checking via `bun run typecheck`            |
+| `typescript`  | Type checking via `bun run lint`                 |
 | `zod`         | Schema validation for all config types           |
 | `gray-matter` | Parse YAML frontmatter from agent Markdown files |
-| `oxfmt`       | Formatting (`fmt` / `fmt:check`)                 |
+| `oxfmt`       | Formatting (`format` / `format:check`)           |
 | `@types/node` | Node.js type definitions                         |
 
 ## Bun scripts
@@ -123,13 +123,13 @@ bun run build:opencode     # Build OpenCode only
 bun run build:claude       # Build Claude Code only
 bun run build:codex        # Build Codex only
 bun run build:cursor       # Build Cursor only
-bun run typecheck          # Type-check the build system
+bun run lint               # Type-check the build system
 bun run clean              # Delete generated/
 bun run install:deps       # Install build dependencies
 bun run install:configs    # Deploy to home directory
 bun run rebuild            # Force rebuild
-bun run fmt                # Format with [Oxfmt](https://oxc.rs/docs/guide/usage/formatter.html)
-bun run fmt:check          # Check formatting (CI-friendly)
+bun run format             # Format with [Oxfmt](https://oxc.rs/docs/guide/usage/formatter.html)
+bun run format:check       # Check formatting (CI-friendly)
 ```
 
 ## Install Behavior
