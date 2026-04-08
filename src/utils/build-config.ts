@@ -1,4 +1,5 @@
 import { join } from "node:path";
+
 import { BUILD_CONFIG, type BuildConfig } from "../config.js";
 import { fileExists, readFile } from "./fs.js";
 
@@ -20,9 +21,7 @@ export function loadBuildConfig(aiDir: string): BuildConfig {
   try {
     parsed = JSON.parse(readFile(overridePath));
   } catch (err) {
-    throw new Error(
-      `Failed to parse .ai/build.config.json: ${(err as Error).message}`,
-    );
+    throw new Error(`Failed to parse .ai/build.config.json: ${(err as Error).message}`);
   }
 
   if (!isPlainObject(parsed)) {
@@ -40,7 +39,7 @@ export function loadBuildConfig(aiDir: string): BuildConfig {
  */
 export function deepMerge<T>(base: T, override: unknown): T {
   if (!isPlainObject(base) || !isPlainObject(override)) {
-    return (override === undefined ? base : (override as T));
+    return override === undefined ? base : (override as T);
   }
 
   const result: Record<string, unknown> = { ...base };

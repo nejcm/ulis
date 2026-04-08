@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { join, resolve } from "node:path";
+
 import { parseSkills } from "./skill.js";
 
 const fixturesDir = resolve(join(import.meta.dirname, "../../tests/fixtures/skills"));

@@ -21,8 +21,8 @@
     "test:update": "bun test --update-snapshots",
     "gen:schemas": "tsx src/tools/gen-json-schema.ts",
     "gen:reference": "tsx src/tools/gen-reference.ts",
-    "fmt": "oxfmt .",
-    "fmt:check": "oxfmt --check ."
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check ."
   },
   "dependencies": {
     "gray-matter": "~4.0.3",

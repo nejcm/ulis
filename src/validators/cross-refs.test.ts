@@ -1,13 +1,11 @@
 import { describe, it, expect } from "bun:test";
-import { validateCrossRefs } from "./cross-refs.js";
+
 import type { ParsedAgent } from "../parsers/agent.js";
 import type { ParsedSkill } from "../parsers/skill.js";
 import type { AgentFrontmatter, McpConfig } from "../schema.js";
+import { validateCrossRefs } from "./cross-refs.js";
 
-function makeAgent(
-  name: string,
-  fm: Partial<AgentFrontmatter> = {},
-): ParsedAgent {
+function makeAgent(name: string, fm: Partial<AgentFrontmatter> = {}): ParsedAgent {
   return {
     name,
     body: "",
@@ -44,10 +42,7 @@ describe("validateCrossRefs", () => {
   });
 
   it("returns no diagnostics when every reference resolves", () => {
-    const agents = [
-      makeAgent("alpha", { skills: ["my-skill"], mcpServers: ["server-a"] }),
-      makeAgent("beta"),
-    ];
+    const agents = [makeAgent("alpha", { skills: ["my-skill"], mcpServers: ["server-a"] }), makeAgent("beta")];
     const skills = [makeSkill("my-skill")];
     const mcp: McpConfig = {
       servers: { "server-a": { type: "local", targets: ["claude"] } },

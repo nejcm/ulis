@@ -1,5 +1,10 @@
 # TODO
 
+- Validate current impl. and improve
+- Missing: extensions...
+- Skills with symlink?
+- Add configs and improve
+
 ## Global configs
 
 - agents & subagents

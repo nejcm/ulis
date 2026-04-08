@@ -1,11 +1,12 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
+
+import type { BuildConfig } from "../config.js";
 import { type ParsedAgent, enabledAgentsFor } from "../parsers/agent.js";
 import { type ParsedSkill, enabledSkillsFor } from "../parsers/skill.js";
 import type { McpConfig } from "../schema.js";
-import type { BuildConfig } from "../config.js";
-import { writeFile, cleanDir, copyDir, fileExists, readFile } from "../utils/fs.js";
 import { translateEnvVar } from "../utils/env-var.js";
+import { writeFile, cleanDir, copyDir, fileExists, readFile } from "../utils/fs.js";
 import { log } from "../utils/logger.js";
 import { mcpServersFor } from "../utils/mcp-block.js";
 import { buildPolicyCommentBlock } from "../utils/policy-comments.js";
@@ -66,9 +67,7 @@ export function generateCodex(
       // Use local fallback for remote servers
       lines.push(`[mcp_servers.${name}]`);
       lines.push(`command = "${server.localFallback.command}"`);
-      const args = server.localFallback.args
-        .map((a) => `"${translateEnvVar(a, "codex")}"`)
-        .join(", ");
+      const args = server.localFallback.args.map((a) => `"${translateEnvVar(a, "codex")}"`).join(", ");
       lines.push(`args = [${args}]`);
       lines.push(`startup_timeout_sec = ${cfg.mcpStartupTimeoutSec}`);
       lines.push("");
@@ -125,9 +124,7 @@ export function generateCodex(
 
     // All policy fields (contextHints, toolPolicy, security) → TOML comments at top
     const policyBlock = buildPolicyCommentBlock(agent.frontmatter, "toml");
-    const tomlContent = policyBlock
-      ? `${policyBlock}\n${agentLines.join("\n")}`
-      : agentLines.join("\n");
+    const tomlContent = policyBlock ? `${policyBlock}\n${agentLines.join("\n")}` : agentLines.join("\n");
     writeFile(join(outDir, "agents", `${agent.name}.toml`), tomlContent);
     log.dim(`  agent: ${agent.name}`);
   }
@@ -193,10 +190,7 @@ export function generateCodex(
         }
       }
 
-      writeFile(
-        join(outDir, "skills", skill.name, "agents", "openai.yaml"),
-        yamlLines.join("\n") + "\n",
-      );
+      writeFile(join(outDir, "skills", skill.name, "agents", "openai.yaml"), yamlLines.join("\n") + "\n");
     }
 
     log.dim(`  skill: ${skill.name}`);
@@ -217,9 +211,7 @@ export function generateCodex(
   agentsSections.push("| Agent | Purpose | Model |");
   agentsSections.push("|-------|---------|-------|");
   for (const agent of enabledAgents) {
-    agentsSections.push(
-      `| ${agent.name} | ${agent.frontmatter.description} | ${agent.frontmatter.model} |`,
-    );
+    agentsSections.push(`| ${agent.name} | ${agent.frontmatter.description} | ${agent.frontmatter.model} |`);
   }
   agentsSections.push("");
 
@@ -255,9 +247,7 @@ export function generateCodex(
   // Append workflows
   const workflowsDir = join(aiDir, "workflows");
   if (fileExists(workflowsDir)) {
-    const workflowFiles = readdirSync(workflowsDir).filter(
-      (f) => f.endsWith(".md") && f.toLowerCase() !== "readme.md",
-    );
+    const workflowFiles = readdirSync(workflowsDir).filter((f) => f.endsWith(".md") && f.toLowerCase() !== "readme.md");
     for (const file of workflowFiles) {
       agentsSections.push("---");
       agentsSections.push("");

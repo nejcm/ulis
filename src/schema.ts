@@ -89,9 +89,7 @@ export const AgentFrontmatterSchema = z.object({
       claude: z
         .object({
           enabled: z.boolean().default(true),
-          permissionMode: z
-            .enum(["default", "auto", "acceptEdits", "dontAsk", "bypassPermissions", "plan"])
-            .optional(),
+          permissionMode: z.enum(["default", "auto", "acceptEdits", "dontAsk", "bypassPermissions", "plan"]).optional(),
           disallowedTools: z.array(z.string()).optional(),
           initialPrompt: z.string().optional(),
         })

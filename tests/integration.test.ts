@@ -8,19 +8,20 @@
  * in generator logic.
  */
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { join, resolve } from "node:path";
 import { mkdirSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+import { BUILD_CONFIG } from "../src/config.js";
+import { generateClaude } from "../src/generators/claude.js";
+import { generateCodex } from "../src/generators/codex.js";
+import { generateCursor } from "../src/generators/cursor.js";
+import { generateOpencode } from "../src/generators/opencode.js";
 import { parseAgents } from "../src/parsers/agent.js";
 import { parseSkills } from "../src/parsers/skill.js";
 import { McpConfigSchema, PluginsConfigSchema } from "../src/schema.js";
 import { readFile } from "../src/utils/fs.js";
-import { generateClaude } from "../src/generators/claude.js";
-import { generateOpencode } from "../src/generators/opencode.js";
-import { generateCodex } from "../src/generators/codex.js";
-import { generateCursor } from "../src/generators/cursor.js";
-import { BUILD_CONFIG } from "../src/config.js";
-import { validateCrossRefs } from "../src/validators/cross-refs.js";
 import { validateCollisions } from "../src/validators/collisions.js";
+import { validateCrossRefs } from "../src/validators/cross-refs.js";
 
 const fixturesDir = resolve(join(import.meta.dirname, "fixtures"));
 const outDir = resolve(join(import.meta.dirname, ".tmp-test-output"));
@@ -124,7 +125,7 @@ describe("OpenCode generator", () => {
 describe("Codex generator", () => {
   it("generates config.toml", () => {
     const toml = readOut("codex", "config.toml");
-    expect(toml).toContain('[mcp_servers.test-local]');
+    expect(toml).toContain("[mcp_servers.test-local]");
   });
 
   it("generates agent TOML with policy comments", () => {
@@ -173,10 +174,7 @@ describe("Validation pipeline (real fixtures)", () => {
     const agents = parseAgents(join(fixturesDir, "agents"));
     const skills = parseSkills(join(fixturesDir, "skills"));
     const mcp = McpConfigSchema.parse(JSON.parse(readFile(join(fixturesDir, "mcp.json"))));
-    const diags = [
-      ...validateCrossRefs(agents, skills, mcp),
-      ...validateCollisions(agents, skills),
-    ];
+    const diags = [...validateCrossRefs(agents, skills, mcp), ...validateCollisions(agents, skills)];
     expect(diags).toEqual([]);
   });
 });

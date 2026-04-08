@@ -15,11 +15,7 @@ export type ToolPlatform = "claude" | "cursor" | "opencode" | "codex";
  * Tool name maps come from `BuildConfig.platforms.<tool>.toolNames`, so users
  * can rename a tool through `.ai/build.config.json` without code changes.
  */
-export function mapTools(
-  perms: ToolPermissions,
-  platform: ToolPlatform,
-  cfg: BuildConfig,
-): string[] {
+export function mapTools(perms: ToolPermissions, platform: ToolPlatform, cfg: BuildConfig): string[] {
   if (platform === "opencode" || platform === "codex") {
     // These platforms consume the structured `ToolPermissions` directly;
     // no flat tool name list is needed.

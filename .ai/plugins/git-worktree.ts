@@ -276,13 +276,8 @@ Worktrees are stored in \`{repoRoot}/.opencode/worktrees/{name}\` with branches 
           name: tool.schema
             .string()
             .optional()
-            .describe(
-              "Worktree name for create/merge actions (auto-generated if not provided for create)",
-            ),
-          targetBranch: tool.schema
-            .string()
-            .optional()
-            .describe("Target branch to merge into (for merge action)"),
+            .describe("Worktree name for create/merge actions (auto-generated if not provided for create)"),
+          targetBranch: tool.schema.string().optional().describe("Target branch to merge into (for merge action)"),
           mergeStrategy: tool.schema
             .enum(["ours", "theirs", "manual"])
             .optional()
@@ -295,10 +290,7 @@ Worktrees are stored in \`{repoRoot}/.opencode/worktrees/{name}\` with branches 
             .describe(
               "Optional shell command to run after creating the worktree (e.g., 'npm install'). WARNING: Runs arbitrary shell commands.",
             ),
-          commitMessage: tool.schema
-            .string()
-            .optional()
-            .describe("Commit message for merge commit"),
+          commitMessage: tool.schema.string().optional().describe("Commit message for merge commit"),
         },
 
         async execute(args, toolCtx): Promise<string> {
@@ -308,14 +300,7 @@ Worktrees are stored in \`{repoRoot}/.opencode/worktrees/{name}\` with branches 
           try {
             switch (args.action) {
               case "create":
-                result = await createWorktree(
-                  client,
-                  $,
-                  repoRoot,
-                  sessionID,
-                  args.name,
-                  args.startCommand,
-                );
+                result = await createWorktree(client, $, repoRoot, sessionID, args.name, args.startCommand);
                 break;
 
               case "list":
@@ -337,14 +322,7 @@ Worktrees are stored in \`{repoRoot}/.opencode/worktrees/{name}\` with branches 
                 break;
 
               case "remove":
-                result = await removeWorktree(
-                  client,
-                  $,
-                  findWorktreeByName,
-                  repoRoot,
-                  sessionID,
-                  args.name,
-                );
+                result = await removeWorktree(client, $, findWorktreeByName, repoRoot, sessionID, args.name);
                 break;
 
               case "prune":
@@ -400,20 +378,12 @@ async function createWorktree(
 
   // Retry loop to handle race conditions
   for (let attempt = 0; attempt < MAX_NAME_RETRIES; attempt++) {
-    const worktreeName =
-      attempt === 0 && baseName
-        ? baseName
-        : baseName
-          ? `${baseName}-${randomName()}`
-          : randomName();
+    const worktreeName = attempt === 0 && baseName ? baseName : baseName ? `${baseName}-${randomName()}` : randomName();
     const branch = `opencode/${worktreeName}`;
     const worktreeDir = `${repoRoot}/.opencode/worktrees/${worktreeName}`;
 
     // Attempt to create the worktree directly - let git handle the collision
-    const result = await $`git worktree add -b ${branch} ${worktreeDir}`
-      .quiet()
-      .nothrow()
-      .cwd(repoRoot);
+    const result = await $`git worktree add -b ${branch} ${worktreeDir}`.quiet().nothrow().cwd(repoRoot);
 
     if (result.exitCode === 0) {
       // Success - run start command if provided
@@ -551,12 +521,7 @@ async function removeWorktree(
 /**
  * Prunes stale worktree entries (where the directory no longer exists).
  */
-async function pruneWorktrees(
-  client: any,
-  $: any,
-  repoRoot: string,
-  sessionID: string,
-): Promise<WorktreeResult> {
+async function pruneWorktrees(client: any, $: any, repoRoot: string, sessionID: string): Promise<WorktreeResult> {
   await log(client, "info", "Pruning stale worktrees", { sessionID });
 
   // Run with verbose flag to capture what was pruned
@@ -693,10 +658,7 @@ async function mergeWorktree(
   const message = commitMessage || `Merge branch '${branch}' into ${targetBranch}`;
 
   // Check if target branch exists
-  const branchCheck = await $`git show-ref --verify --quiet refs/heads/${targetBranch}`
-    .quiet()
-    .nothrow()
-    .cwd(repoRoot);
+  const branchCheck = await $`git show-ref --verify --quiet refs/heads/${targetBranch}`.quiet().nothrow().cwd(repoRoot);
 
   if (branchCheck.exitCode !== 0) {
     return {
@@ -719,15 +681,9 @@ async function mergeWorktree(
   let mergeResult: { exitCode: number; stdout: Uint8Array; stderr: Uint8Array };
 
   if (strategy === "ours") {
-    mergeResult = await $`git merge -X ours -m ${message} ${branch}`
-      .quiet()
-      .nothrow()
-      .cwd(repoRoot);
+    mergeResult = await $`git merge -X ours -m ${message} ${branch}`.quiet().nothrow().cwd(repoRoot);
   } else if (strategy === "theirs") {
-    mergeResult = await $`git merge -X theirs -m ${message} ${branch}`
-      .quiet()
-      .nothrow()
-      .cwd(repoRoot);
+    mergeResult = await $`git merge -X theirs -m ${message} ${branch}`.quiet().nothrow().cwd(repoRoot);
   } else {
     // Manual - try merge without auto-commit
     mergeResult = await $`git merge --no-commit --no-ff ${branch}`.quiet().nothrow().cwd(repoRoot);

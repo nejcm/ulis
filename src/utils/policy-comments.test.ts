@@ -1,4 +1,5 @@
 import { describe, it, expect } from "bun:test";
+
 import {
   formatContextHintsComment,
   formatToolPolicyComment,
@@ -19,10 +20,7 @@ describe("formatContextHintsComment", () => {
   });
 
   it("emits HTML comment for md syntax", () => {
-    const out = formatContextHintsComment(
-      { maxInputTokens: 10000, priority: "normal" },
-      "md",
-    );
+    const out = formatContextHintsComment({ maxInputTokens: 10000, priority: "normal" }, "md");
     expect(out).toContain("<!--");
     expect(out).toContain("-->");
     expect(out).toContain("[ULIS contextHints]");
@@ -75,10 +73,7 @@ describe("formatSecurityComment", () => {
   });
 
   it("omits 'readwrite' permissionLevel (default)", () => {
-    const out = formatSecurityComment(
-      { permissionLevel: "readwrite" },
-      "toml",
-    );
+    const out = formatSecurityComment({ permissionLevel: "readwrite" }, "toml");
     expect(out).not.toContain("permissionLevel");
   });
 });
@@ -104,10 +99,7 @@ describe("buildPolicyCommentBlock", () => {
   });
 
   it("omits absent fields silently", () => {
-    const out = buildPolicyCommentBlock(
-      { toolPolicy: { prefer: ["Read"] } },
-      "toml",
-    );
+    const out = buildPolicyCommentBlock({ toolPolicy: { prefer: ["Read"] } }, "toml");
     expect(out).not.toContain("contextHints");
     expect(out).not.toContain("security");
     expect(out).toContain("prefer: Read");

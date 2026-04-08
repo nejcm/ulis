@@ -1,8 +1,9 @@
 import { join } from "node:path";
+
+import type { BuildConfig } from "../config.js";
 import { type ParsedAgent, enabledAgentsFor } from "../parsers/agent.js";
 import { type ParsedSkill, enabledSkillsFor } from "../parsers/skill.js";
 import type { McpConfig, PluginsConfig, ToolPermissions } from "../schema.js";
-import type { BuildConfig } from "../config.js";
 import { cleanDir, copyDir, fileExists, readFile, writeFile } from "../utils/fs.js";
 import { log } from "../utils/logger.js";
 import { mcpServersFor, translateEnvMap } from "../utils/mcp-block.js";
@@ -25,10 +26,7 @@ function generateSubagentFrontmatter(agent: ParsedAgent, cfg: BuildConfig): stri
   const allowedTools = mapTools(fm.tools, "claude", cfg);
 
   // security.permissionLevel "readonly" → plan mode (read-only); toolPolicy.avoid → disallowedTools
-  const disallowedTools = [
-    ...(claudePlatform?.disallowedTools ?? []),
-    ...(fm.toolPolicy?.avoid ?? []),
-  ];
+  const disallowedTools = [...(claudePlatform?.disallowedTools ?? []), ...(fm.toolPolicy?.avoid ?? [])];
 
   if (allowedTools.length > 0) {
     lines.push(`tools: ${allowedTools.join(", ")}`);
@@ -41,10 +39,7 @@ function generateSubagentFrontmatter(agent: ParsedAgent, cfg: BuildConfig): stri
   let permissionMode = claudePlatform?.permissionMode;
   if (fm.security?.permissionLevel === "readonly") {
     permissionMode = "plan";
-  } else if (
-    fm.security?.requireApproval?.length ||
-    fm.toolPolicy?.requireConfirmation?.length
-  ) {
+  } else if (fm.security?.requireApproval?.length || fm.toolPolicy?.requireConfirmation?.length) {
     // requireApproval or requireConfirmation without readonly → default (ask on sensitive ops)
     permissionMode ??= "default";
   }
@@ -85,10 +80,7 @@ function generateSubagentFrontmatter(agent: ParsedAgent, cfg: BuildConfig): stri
     matcher: `Bash(${cmd}*)`,
     command: `echo "Blocked by ULIS security policy: ${cmd}" && exit 1`,
   }));
-  const mergedPreToolUse = [
-    ...(fm.hooks?.PreToolUse ?? []),
-    ...blockedHookEntries,
-  ];
+  const mergedPreToolUse = [...(fm.hooks?.PreToolUse ?? []), ...blockedHookEntries];
   const mergedHooks = {
     ...(fm.hooks ?? {}),
     ...(mergedPreToolUse.length > 0 ? { PreToolUse: mergedPreToolUse } : {}),
@@ -139,9 +131,7 @@ export function generateClaude(
   // Generate agents orchestration table into rules/common/agents.md
   const enabledAgents = enabledAgentsFor(agents, "claude");
 
-  const agentRows = enabledAgents.map(
-    (a) => `| ${a.name} | ${a.frontmatter.description} | ${a.frontmatter.model} |`,
-  );
+  const agentRows = enabledAgents.map((a) => `| ${a.name} | ${a.frontmatter.description} | ${a.frontmatter.model} |`);
 
   const agentsRule = `# Agent Orchestration
 
@@ -227,9 +217,7 @@ Rules are **not** used by OpenCode, Codex, or Cursor — those tools use agents 
   for (const agent of enabledAgents) {
     const frontmatter = generateSubagentFrontmatter(agent, cfg);
     const policyBlock = buildPolicyCommentBlock(agent.frontmatter, "md");
-    const bodyWithPolicy = policyBlock
-      ? `${policyBlock}\n${agent.body.trim()}`
-      : agent.body.trim();
+    const bodyWithPolicy = policyBlock ? `${policyBlock}\n${agent.body.trim()}` : agent.body.trim();
     const content = `${frontmatter}\n\n${bodyWithPolicy}\n`;
     writeFile(join(outDir, "agents", `${agent.name}.md`), content);
     subagentCount++;
@@ -247,11 +235,7 @@ Rules are **not** used by OpenCode, Codex, or Cursor — those tools use agents 
     const model = cfg.platforms.claude.modelMap[agent.frontmatter.model] ?? agent.frontmatter.model;
     const allowedTools = mapTools(agent.frontmatter.tools, "claude", cfg);
 
-    const frontmatterLines = [
-      "---",
-      `description: ${agent.frontmatter.description}`,
-      `model: ${model}`,
-    ];
+    const frontmatterLines = ["---", `description: ${agent.frontmatter.description}`, `model: ${model}`];
     if (allowedTools.length > 0) {
       frontmatterLines.push(`allowed-tools: ${allowedTools.join(", ")}`);
     }

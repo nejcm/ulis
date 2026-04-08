@@ -1,7 +1,8 @@
 import { describe, it, expect } from "bun:test";
-import { mapTools } from "./tool-mapper.js";
+
 import { BUILD_CONFIG } from "../config.js";
 import type { ToolPermissions } from "../schema.js";
+import { mapTools } from "./tool-mapper.js";
 
 const empty: ToolPermissions = {
   read: false,
@@ -36,15 +37,7 @@ describe("mapTools — claude", () => {
   it("includes every group when all permissions are on", () => {
     const out = mapTools(all, "claude", BUILD_CONFIG);
     expect(out).toEqual(
-      expect.arrayContaining([
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "WebSearch",
-        "WebFetch",
-        "mcp__playwright__navigate",
-      ]),
+      expect.arrayContaining(["Read", "Write", "Edit", "Bash", "WebSearch", "WebFetch", "mcp__playwright__navigate"]),
     );
   });
 
@@ -54,11 +47,7 @@ describe("mapTools — claude", () => {
   });
 
   it("emits Agent(allowlist) for agent=string[]", () => {
-    const out = mapTools(
-      { ...empty, agent: ["worker", "reviewer"] },
-      "claude",
-      BUILD_CONFIG,
-    );
+    const out = mapTools({ ...empty, agent: ["worker", "reviewer"] }, "claude", BUILD_CONFIG);
     expect(out).toContain("Agent(worker, reviewer)");
   });
 });
@@ -73,11 +62,7 @@ describe("mapTools — cursor", () => {
   });
 
   it("does NOT emit Agent for cursor", () => {
-    const out = mapTools(
-      { ...empty, agent: true },
-      "cursor",
-      BUILD_CONFIG,
-    );
+    const out = mapTools({ ...empty, agent: true }, "cursor", BUILD_CONFIG);
     expect(out).not.toContain("Agent");
   });
 });

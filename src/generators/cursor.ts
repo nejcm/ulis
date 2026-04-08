@@ -1,8 +1,9 @@
 import { join } from "node:path";
+
+import type { BuildConfig } from "../config.js";
 import { type ParsedAgent, enabledAgentsFor } from "../parsers/agent.js";
 import { type ParsedSkill, enabledSkillsFor } from "../parsers/skill.js";
 import type { McpConfig } from "../schema.js";
-import type { BuildConfig } from "../config.js";
 import { writeFile, cleanDir, copySkillDirs, copyDir, fileExists } from "../utils/fs.js";
 import { log } from "../utils/logger.js";
 import { mcpServersFor, translateEnvMap } from "../utils/mcp-block.js";
@@ -45,9 +46,7 @@ export function generateCursor(
 
     // All policy fields → MDC comments (no native Cursor support)
     const policyBlock = buildPolicyCommentBlock(agent.frontmatter, "mdc");
-    const bodyWithPolicy = policyBlock
-      ? `${policyBlock}\n${agent.body.trim()}`
-      : agent.body.trim();
+    const bodyWithPolicy = policyBlock ? `${policyBlock}\n${agent.body.trim()}` : agent.body.trim();
     const content = `${frontmatterLines.join("\n")}\n\n${bodyWithPolicy}\n`;
     writeFile(join(outDir, "agents", `${agent.name}.mdc`), content);
     log.dim(`  agent: ${agent.name}`);

@@ -23,10 +23,7 @@ function wrapBlock(lines: string[], syntax: CommentSyntax): string {
   return `<!--\n${lines.map((l) => `  ${l}`).join("\n")}\n-->\n`;
 }
 
-export function formatContextHintsComment(
-  hints: ContextHints,
-  syntax: CommentSyntax,
-): string {
+export function formatContextHintsComment(hints: ContextHints, syntax: CommentSyntax): string {
   const lines: string[] = ["[ULIS contextHints]"];
   if (hints.maxInputTokens !== undefined) {
     lines.push(`  maxInputTokens: ${hints.maxInputTokens}`);
@@ -40,10 +37,7 @@ export function formatContextHintsComment(
   return wrapBlock(lines, syntax);
 }
 
-export function formatToolPolicyComment(
-  policy: ToolPolicy,
-  syntax: CommentSyntax,
-): string {
+export function formatToolPolicyComment(policy: ToolPolicy, syntax: CommentSyntax): string {
   const lines: string[] = ["[ULIS toolPolicy]"];
   if (policy.prefer && policy.prefer.length > 0) {
     lines.push(`  prefer: ${policy.prefer.join(", ")}`);
@@ -57,10 +51,7 @@ export function formatToolPolicyComment(
   return wrapBlock(lines, syntax);
 }
 
-export function formatSecurityComment(
-  sec: SecurityPolicy,
-  syntax: CommentSyntax,
-): string {
+export function formatSecurityComment(sec: SecurityPolicy, syntax: CommentSyntax): string {
   const lines: string[] = [`[ULIS security]`];
   if (sec.permissionLevel !== "readwrite") {
     lines.push(`  permissionLevel: ${sec.permissionLevel}`);

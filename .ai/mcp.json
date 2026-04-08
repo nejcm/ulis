@@ -44,7 +44,7 @@
       "headers": {
         "Authorization": "Bearer ${LINEAR_API_KEY}"
       },
-      "targets": ["opencode", "claude"]
+      "targets": []
     }
   }
 }

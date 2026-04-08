@@ -6,13 +6,10 @@
  */
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+
 import { zodToJsonSchema } from "zod-to-json-schema";
-import {
-  AgentFrontmatterSchema,
-  SkillFrontmatterSchema,
-  McpConfigSchema,
-  PluginsConfigSchema,
-} from "../schema.js";
+
+import { AgentFrontmatterSchema, SkillFrontmatterSchema, McpConfigSchema, PluginsConfigSchema } from "../schema.js";
 
 const outDir = resolve(join(import.meta.dirname, "../..", "docs"));
 mkdirSync(outDir, { recursive: true });
@@ -55,11 +52,7 @@ function formatDefault(val: unknown): string {
   return `\`${JSON.stringify(val)}\``;
 }
 
-function renderPropertiesTable(
-  properties: Record<string, JsonSchemaProperty>,
-  required: string[],
-  depth = 0,
-): string {
+function renderPropertiesTable(properties: Record<string, JsonSchemaProperty>, required: string[], depth = 0): string {
   const indent = depth > 0 ? `${"  ".repeat(depth)}` : "";
   const rows: string[] = [];
 
@@ -72,9 +65,7 @@ function renderPropertiesTable(
 
     // Recurse into nested objects
     if (prop.type === "object" && prop.properties) {
-      rows.push(
-        renderPropertiesTable(prop.properties, [], depth + 1),
-      );
+      rows.push(renderPropertiesTable(prop.properties, [], depth + 1));
     }
   }
   return rows.join("\n");

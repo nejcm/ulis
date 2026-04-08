@@ -6,13 +6,10 @@
  */
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+
 import { zodToJsonSchema } from "zod-to-json-schema";
-import {
-  AgentFrontmatterSchema,
-  SkillFrontmatterSchema,
-  McpConfigSchema,
-  PluginsConfigSchema,
-} from "../schema.js";
+
+import { AgentFrontmatterSchema, SkillFrontmatterSchema, McpConfigSchema, PluginsConfigSchema } from "../schema.js";
 
 const outDir = resolve(join(import.meta.dirname, "../..", "schemas"));
 mkdirSync(outDir, { recursive: true });

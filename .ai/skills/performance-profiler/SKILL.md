@@ -794,9 +794,7 @@ const budget = {
 const results = runBenchmark();
 
 if (results.responseTime > budget.responseTime) {
-  console.error(
-    `❌ Response time ${results.responseTime}ms exceeds budget ${budget.responseTime}ms`,
-  );
+  console.error(`❌ Response time ${results.responseTime}ms exceeds budget ${budget.responseTime}ms`);
   process.exit(1);
 }
 

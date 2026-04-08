@@ -1,6 +1,7 @@
 import { describe, it, expect } from "bun:test";
-import { mcpServersFor, translateEnvMap } from "./mcp-block.js";
+
 import type { McpConfig } from "../schema.js";
+import { mcpServersFor, translateEnvMap } from "./mcp-block.js";
 
 const mcp: McpConfig = {
   servers: {

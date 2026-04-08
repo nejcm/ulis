@@ -1,16 +1,17 @@
 import { join, resolve } from "node:path";
-import { parseAgents } from "./parsers/agent.js";
-import { parseSkills } from "./parsers/skill.js";
-import { McpConfigSchema, PluginsConfigSchema } from "./schema.js";
-import { generateOpencode } from "./generators/opencode.js";
+
 import { generateClaude } from "./generators/claude.js";
 import { generateCodex } from "./generators/codex.js";
 import { generateCursor } from "./generators/cursor.js";
+import { generateOpencode } from "./generators/opencode.js";
+import { parseAgents } from "./parsers/agent.js";
+import { parseSkills } from "./parsers/skill.js";
+import { McpConfigSchema, PluginsConfigSchema } from "./schema.js";
 import { loadBuildConfig } from "./utils/build-config.js";
 import { readFile } from "./utils/fs.js";
-import { validateCrossRefs, type Diagnostic } from "./validators/cross-refs.js";
-import { validateCollisions } from "./validators/collisions.js";
 import { log } from "./utils/logger.js";
+import { validateCollisions } from "./validators/collisions.js";
+import { validateCrossRefs, type Diagnostic } from "./validators/cross-refs.js";
 
 const args = process.argv.slice(2);
 const targetIdx = args.indexOf("--target");

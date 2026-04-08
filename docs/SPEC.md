@@ -259,22 +259,8 @@ const skills = parseSkills(join(aiDir, "skills"));
 const mcp = parseMcpConfig(join(aiDir, "mcp.json"));
 const plugins = parsePluginsConfig(join(aiDir, "plugins.json"));
 
-generateClaude(
-  agents,
-  skills,
-  mcp,
-  plugins,
-  aiDir,
-  join(generatedDir, "claude"),
-);
-generateOpencode(
-  agents,
-  skills,
-  mcp,
-  plugins,
-  aiDir,
-  join(generatedDir, "opencode"),
-);
+generateClaude(agents, skills, mcp, plugins, aiDir, join(generatedDir, "claude"));
+generateOpencode(agents, skills, mcp, plugins, aiDir, join(generatedDir, "opencode"));
 generateCodex(agents, skills, mcp, aiDir, join(generatedDir, "codex"));
 generateCursor(agents, skills, mcp, join(generatedDir, "cursor"));
 ```

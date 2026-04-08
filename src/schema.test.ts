@@ -1,10 +1,6 @@
 import { describe, it, expect } from "bun:test";
-import {
-  AgentFrontmatterSchema,
-  SkillFrontmatterSchema,
-  McpConfigSchema,
-  PluginsConfigSchema,
-} from "./schema.js";
+
+import { AgentFrontmatterSchema, SkillFrontmatterSchema, McpConfigSchema, PluginsConfigSchema } from "./schema.js";
 
 describe("AgentFrontmatterSchema", () => {
   it("parses minimal valid agent", () => {
@@ -28,9 +24,7 @@ describe("AgentFrontmatterSchema", () => {
   });
 
   it("rejects invalid model alias", () => {
-    expect(() =>
-      AgentFrontmatterSchema.parse({ description: "x", tools: {}, model: "gpt-4" }),
-    ).toThrow();
+    expect(() => AgentFrontmatterSchema.parse({ description: "x", tools: {}, model: "gpt-4" })).toThrow();
   });
 
   it("rejects missing description", () => {

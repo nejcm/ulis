@@ -1,5 +1,7 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "ignorePatterns": ["generated/**", ".claude/**"],
-  "sortPackageJson": false
+  "sortPackageJson": false,
+  "printWidth": 120,
+  "sortImports": true
 }

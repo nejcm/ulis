@@ -21,9 +21,6 @@ if (existsSync(envFile)) {
     });
 }
 
-const cmd =
-  process.platform === "win32"
-    ? "powershell -ExecutionPolicy Bypass -File install.ps1"
-    : "bash install.sh";
+const cmd = process.platform === "win32" ? "powershell -ExecutionPolicy Bypass -File install.ps1" : "bash install.sh";
 
 execSync(cmd, { stdio: "inherit", cwd: __dirname });

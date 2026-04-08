@@ -1,6 +1,8 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
+
 import matter from "gray-matter";
+
 import { SkillFrontmatterSchema, type SkillFrontmatter } from "../schema.js";
 import { readFile, fileExists } from "../utils/fs.js";
 
@@ -14,10 +16,7 @@ export interface ParsedSkill {
 export type SkillPlatform = "claude" | "opencode" | "codex" | "cursor";
 
 /** Filter skills that are not explicitly disabled for the given platform. */
-export function enabledSkillsFor(
-  skills: readonly ParsedSkill[],
-  platform: SkillPlatform,
-): readonly ParsedSkill[] {
+export function enabledSkillsFor(skills: readonly ParsedSkill[], platform: SkillPlatform): readonly ParsedSkill[] {
   return skills.filter((s) => s.frontmatter.platforms?.[platform]?.enabled !== false);
 }
 

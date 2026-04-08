@@ -1,8 +1,9 @@
 import { join } from "node:path";
+
+import type { BuildConfig } from "../config.js";
 import { type ParsedAgent, enabledAgentsFor } from "../parsers/agent.js";
 import { type ParsedSkill, enabledSkillsFor } from "../parsers/skill.js";
 import type { McpConfig, PluginsConfig } from "../schema.js";
-import type { BuildConfig } from "../config.js";
 import { writeFile, copyDir, cleanDir, copySkillDirs, fileExists, readFile } from "../utils/fs.js";
 import { log } from "../utils/logger.js";
 import { mcpServersFor, translateEnvMap } from "../utils/mcp-block.js";
@@ -144,16 +145,11 @@ export function generateOpencode(
     const isCore = agent.frontmatter.tags.includes("core");
     const destDir = isCore ? agentsCoreDir : agentsSpecDir;
     // contextHints and restrictedPaths have no native OpenCode equivalent → comments in body
-    const commentOnlyHints = agent.frontmatter.contextHints
-      ? { contextHints: agent.frontmatter.contextHints }
-      : {};
+    const commentOnlyHints = agent.frontmatter.contextHints ? { contextHints: agent.frontmatter.contextHints } : {};
     const commentOnlySec = agent.frontmatter.security?.restrictedPaths?.length
       ? { security: { ...agent.frontmatter.security, blockedCommands: [], requireApproval: [] } }
       : {};
-    const policyBlock = buildPolicyCommentBlock(
-      { ...commentOnlyHints, ...commentOnlySec },
-      "md",
-    );
+    const policyBlock = buildPolicyCommentBlock({ ...commentOnlyHints, ...commentOnlySec }, "md");
     const body = policyBlock ? `${policyBlock}\n${agent.body}` : agent.body;
     writeFile(join(destDir, `${ocName}.md`), body);
   }
