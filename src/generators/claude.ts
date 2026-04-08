@@ -128,45 +128,7 @@ export function generateClaude(
   cleanDir(outDir);
   log.header("Claude Code");
 
-  // Generate agents orchestration table into rules/common/agents.md
   const enabledAgents = enabledAgentsFor(agents, "claude");
-
-  const agentRows = enabledAgents.map((a) => `| ${a.name} | ${a.frontmatter.description} | ${a.frontmatter.model} |`);
-
-  const agentsRule = `# Agent Orchestration
-
-## Available Agents
-
-| Agent | Purpose | Model |
-|-------|---------|-------|
-${agentRows.join("\n")}
-
-## Immediate Agent Usage
-
-No user prompt needed:
-1. Complex feature requests - Use **planner** agent
-2. Code just written/modified - Use **reviewer** agent
-3. Bug fix or new feature - Use **tester** agent (TDD)
-4. Architectural decision - Use **architect** agent
-5. Security-sensitive changes - Use **security** agent
-
-## Parallel Task Execution
-
-ALWAYS use parallel execution for independent operations:
-- Launch multiple agents concurrently when tasks don't depend on each other
-- Example: Security analysis + Performance review + Code review in parallel
-
-## Multi-Perspective Analysis
-
-For complex problems, use split role sub-agents:
-- Factual reviewer
-- Senior engineer
-- Security expert
-- Consistency reviewer
-`;
-
-  writeFile(join(outDir, "rules", "common", "agents.md"), agentsRule);
-  log.success("rules/common/agents.md (generated)");
 
   // Copy guardrails as a rule
   const guardrailsSrc = join(aiDir, "guardrails.md");
@@ -181,29 +143,6 @@ For complex problems, use split role sub-agents:
     copyDir(workflowsSrc, join(outDir, "rules", "workflows"));
     log.success("rules/workflows/");
   }
-
-  const rulesReadme = `# Rules
-
-Instruction files for Claude Code. The build writes this tree under \`generated/claude/\`; the install script can deploy it to \`~/.claude/rules/\`, where Claude Code loads Markdown rules.
-
-## What the build produces
-
-| Path | Source |
-|------|--------|
-| \`common/agents.md\` | Generated orchestration table from \`.ai/agents/*.md\` |
-| \`common/guardrails.md\` | Copied from \`.ai/guardrails.md\` when present |
-| \`workflows/\` | Copied from \`.ai/workflows/\` when present |
-
-There is no \`.ai/rules/\` directory in this repo. Add guidance via \`guardrails.md\`, workflows, or agent prompts, then run \`bun run build:claude\`.
-
-## File format
-
-Each rule is a Markdown file with optional YAML frontmatter (for example \`paths\` globs to scope when Claude applies the rule). Rules without \`paths\` apply globally.
-
-Rules are **not** used by OpenCode, Codex, or Cursor — those tools use agents and MCP configs instead.
-`;
-  writeFile(join(outDir, "rules", "README.md"), rulesReadme);
-  log.success("rules/README.md");
 
   // Copy commands (Claude Code native slash commands)
   const commandsSrc = join(aiDir, "commands");
@@ -368,10 +307,15 @@ Rules are **not** used by OpenCode, Codex, or Cursor — those tools use agents 
   writeFile(join(outDir, "settings.json"), JSON.stringify(settings, null, 2));
   log.success("settings.json");
 
-  // Copy raw/common files (preserve subfolder structure)
+  // Copy raw files (common first, then platform-specific to allow overrides)
   const rawCommon = join(aiDir, "raw", "common");
   if (fileExists(rawCommon)) {
     copyDir(rawCommon, outDir);
     log.success("raw/common/");
+  }
+  const rawPlatform = join(aiDir, "raw", "claude");
+  if (fileExists(rawPlatform)) {
+    copyDir(rawPlatform, outDir);
+    log.success("raw/claude/");
   }
 }

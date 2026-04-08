@@ -1,4 +1,3 @@
-import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import type { BuildConfig } from "../config.js";
@@ -6,7 +5,7 @@ import { type ParsedAgent, enabledAgentsFor } from "../parsers/agent.js";
 import { type ParsedSkill, enabledSkillsFor } from "../parsers/skill.js";
 import type { McpConfig } from "../schema.js";
 import { translateEnvVar } from "../utils/env-var.js";
-import { writeFile, cleanDir, copyDir, fileExists, readFile } from "../utils/fs.js";
+import { writeFile, cleanDir, copyDir, fileExists } from "../utils/fs.js";
 import { log } from "../utils/logger.js";
 import { mcpServersFor } from "../utils/mcp-block.js";
 import { buildPolicyCommentBlock } from "../utils/policy-comments.js";
@@ -199,71 +198,15 @@ export function generateCodex(
     log.success(`skills/ (${enabledSkills.length} skills)`);
   }
 
-  // Generate AGENTS.md with agent instructions
-  const agentsSections: string[] = [];
-
-  // Agent orchestration table (reuse enabledAgents computed earlier)
-
-  agentsSections.push("# Agent Instructions");
-  agentsSections.push("");
-  agentsSections.push("## Available Agents");
-  agentsSections.push("");
-  agentsSections.push("| Agent | Purpose | Model |");
-  agentsSections.push("|-------|---------|-------|");
-  for (const agent of enabledAgents) {
-    agentsSections.push(`| ${agent.name} | ${agent.frontmatter.description} | ${agent.frontmatter.model} |`);
-  }
-  agentsSections.push("");
-
-  if (enabledSkills.length > 0) {
-    agentsSections.push("## Available Skills");
-    agentsSections.push("");
-    agentsSections.push("| Skill | Description | Category |");
-    agentsSections.push("|-------|-------------|----------|");
-    for (const skill of enabledSkills) {
-      const category = skill.frontmatter.category ?? "-";
-      agentsSections.push(`| $${skill.name} | ${skill.frontmatter.description} | ${category} |`);
-    }
-    agentsSections.push("");
-  }
-
-  // Individual agent instructions
-  for (const agent of enabledAgents) {
-    agentsSections.push(`---`);
-    agentsSections.push("");
-    agentsSections.push(agent.body);
-    agentsSections.push("");
-  }
-
-  // Append guardrails
-  const guardrailsSrc = join(aiDir, "guardrails.md");
-  if (fileExists(guardrailsSrc)) {
-    agentsSections.push("---");
-    agentsSections.push("");
-    agentsSections.push(readFile(guardrailsSrc));
-    agentsSections.push("");
-  }
-
-  // Append workflows
-  const workflowsDir = join(aiDir, "workflows");
-  if (fileExists(workflowsDir)) {
-    const workflowFiles = readdirSync(workflowsDir).filter((f) => f.endsWith(".md") && f.toLowerCase() !== "readme.md");
-    for (const file of workflowFiles) {
-      agentsSections.push("---");
-      agentsSections.push("");
-      agentsSections.push(readFile(join(workflowsDir, file)));
-      agentsSections.push("");
-    }
-    log.success(`AGENTS.md (${workflowFiles.length} workflows included)`);
-  }
-
-  writeFile(join(outDir, "AGENTS.md"), agentsSections.join("\n"));
-  log.success(`AGENTS.md (${enabledAgents.length} agents)`);
-
-  // Copy raw/common files (preserve subfolder structure)
+  // Copy raw files (common first, then platform-specific to allow overrides)
   const rawCommon = join(aiDir, "raw", "common");
   if (fileExists(rawCommon)) {
     copyDir(rawCommon, outDir);
     log.success("raw/common/");
+  }
+  const rawPlatform = join(aiDir, "raw", "codex");
+  if (fileExists(rawPlatform)) {
+    copyDir(rawPlatform, outDir);
+    log.success("raw/codex/");
   }
 }

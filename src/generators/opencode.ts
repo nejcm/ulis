@@ -178,25 +178,18 @@ export function generateOpencode(
     log.success("config/guardrails.md");
   }
 
-  // Copy AGENTS.md and README.md if they exist in .opencode
-  const agentsMdSrc = join(aiDir, "..", ".opencode", "AGENTS.md");
-  if (fileExists(agentsMdSrc)) {
-    writeFile(join(outDir, "AGENTS.md"), readFile(agentsMdSrc));
-    log.success("AGENTS.md");
-  }
-  const readmeSrc = join(aiDir, "..", ".opencode", "README.md");
-  if (fileExists(readmeSrc)) {
-    writeFile(join(outDir, "README.md"), readFile(readmeSrc));
-    log.success("README.md");
-  }
-
   // Empty settings.json
   writeFile(join(outDir, "settings.json"), "{}");
 
-  // Copy raw/common files (preserve subfolder structure)
+  // Copy raw files (common first, then platform-specific to allow overrides)
   const rawCommon = join(aiDir, "raw", "common");
   if (fileExists(rawCommon)) {
     copyDir(rawCommon, outDir);
     log.success("raw/common/");
+  }
+  const rawPlatform = join(aiDir, "raw", "opencode");
+  if (fileExists(rawPlatform)) {
+    copyDir(rawPlatform, outDir);
+    log.success("raw/opencode/");
   }
 }

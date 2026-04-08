@@ -87,10 +87,15 @@ export function generateCursor(
   writeFile(join(outDir, "mcp.json"), JSON.stringify(output, null, 2));
   log.success("mcp.json");
 
-  // Copy raw/common files (preserve subfolder structure)
+  // Copy raw files (common first, then platform-specific to allow overrides)
   const rawCommon = join(aiDir, "raw", "common");
   if (fileExists(rawCommon)) {
     copyDir(rawCommon, outDir);
     log.success("raw/common/");
+  }
+  const rawPlatform = join(aiDir, "raw", "cursor");
+  if (fileExists(rawPlatform)) {
+    copyDir(rawPlatform, outDir);
+    log.success("raw/cursor/");
   }
 }
