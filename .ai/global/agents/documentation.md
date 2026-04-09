@@ -1,6 +1,5 @@
 ---
 description: Generate and maintain project documentation, guides, and API docs aligned with implementation
-model: haiku
 temperature: 0.2
 tools:
   read: true
@@ -11,11 +10,13 @@ tools:
 tags: [specialized, read-write]
 
 platforms:
+  claude:
+    model: claude-haiku-4-5-20251001
+  codex:
+    model: gpt-5.4-mini
   opencode:
     mode: subagent
     rate_limit_per_hour: 15
-  cursor:
-    enabled: false
 ---
 
 # Documentation Agent

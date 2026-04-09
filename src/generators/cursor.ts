@@ -28,13 +28,25 @@ export function generateCursor(
 
   for (const agent of enabledAgents) {
     const { frontmatter: fm } = agent;
-    const model = modelMap[fm.model] ?? fm.model;
+    const cursorPlatform = fm.platforms?.cursor;
+    const model = cursorPlatform?.model ?? modelMap[fm.model] ?? fm.model;
     const tools = mapTools(fm.tools, "cursor", cfg);
+
+    // Resolve readonly: explicit cursor override > security.permissionLevel === "readonly"
+    const isReadonly = cursorPlatform?.readonly ?? fm.security?.permissionLevel === "readonly";
+    // Resolve is_background: explicit cursor override > top-level background field
+    const isBackground = cursorPlatform?.is_background ?? fm.background ?? false;
 
     const frontmatterLines = ["---"];
     frontmatterLines.push(`description: ${fm.description}`);
     if (model && model !== "inherit") {
       frontmatterLines.push(`model: ${model}`);
+    }
+    if (isReadonly) {
+      frontmatterLines.push(`readonly: true`);
+    }
+    if (isBackground) {
+      frontmatterLines.push(`is_background: true`);
     }
     if (tools.length > 0) {
       frontmatterLines.push(`tools:`);

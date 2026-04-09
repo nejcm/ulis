@@ -1,6 +1,5 @@
 ---
 description: System design specialist for architecture, module boundaries, API contracts, and data flow
-model: sonnet
 temperature: 0.3
 tools:
   read: true
@@ -11,11 +10,13 @@ tools:
 tags: [core, read-only]
 
 platforms:
+  claude:
+    model: claude-opus-4-6
+  codex:
+    model: gpt-5.4
   opencode:
     mode: subagent
     rate_limit_per_hour: 10
-  cursor:
-    enabled: false
 ---
 
 # Architect Agent

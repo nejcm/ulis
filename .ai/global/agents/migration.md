@@ -1,6 +1,5 @@
 ---
 description: Database migration specialist for schema diffs, safe migrations, and dry-run validation
-model: sonnet
 temperature: 0.0
 tools:
   read: true
@@ -12,14 +11,12 @@ tags: [specialized, read-write]
 
 platforms:
   claude:
-    enabled: false
+    model: claude-sonnet-4-6
+  codex:
+    model: gpt-5.4-mini
   opencode:
     mode: subagent
     rate_limit_per_hour: 10
-  codex:
-    enabled: false
-  cursor:
-    enabled: false
 ---
 
 # Migration Agent

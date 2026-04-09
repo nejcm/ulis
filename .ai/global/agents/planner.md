@@ -1,6 +1,5 @@
 ---
 description: Read-only planning agent that decomposes tasks and creates spec artifacts
-model: sonnet
 temperature: 0.3
 tools:
   read: true
@@ -11,11 +10,13 @@ tools:
 tags: [core, read-only]
 
 platforms:
+  claude:
+    model: claude-sonnet-4-6
+  codex:
+    model: gpt-5.4-mini
   opencode:
     mode: subagent
     rate_limit_per_hour: 30
-  cursor:
-    enabled: false
 ---
 
 # Planner Agent

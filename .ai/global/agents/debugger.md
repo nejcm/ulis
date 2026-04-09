@@ -1,6 +1,5 @@
 ---
 description: Systematic debugging of high-severity issues with evidence-first root cause investigation
-model: sonnet
 temperature: 0.3
 tools:
   read: true
@@ -11,11 +10,13 @@ tools:
 tags: [core, read-only]
 
 platforms:
+  claude:
+    model: claude-sonnet-4-6
+  codex:
+    model: gpt-5.4-mini
   opencode:
     mode: subagent
     rate_limit_per_hour: 15
-  cursor:
-    enabled: false
 ---
 
 # Debugger Agent

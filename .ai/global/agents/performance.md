@@ -1,6 +1,5 @@
 ---
 description: Performance optimization specialist for profiling, bottleneck analysis, and optimization
-model: sonnet
 temperature: 0.2
 tools:
   read: true
@@ -11,11 +10,13 @@ tools:
 tags: [specialized, read-write]
 
 platforms:
+  claude:
+    model: claude-sonnet-4-6
+  codex:
+    model: gpt-5.4-mini
   opencode:
     mode: subagent
     rate_limit_per_hour: 10
-  cursor:
-    enabled: false
 ---
 
 # Performance Agent

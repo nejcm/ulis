@@ -99,8 +99,10 @@ export function generateCodex(
     agentLines.push(`"""`);
     agentLines.push("");
 
-    // Model: Codex uses its own model names; only write if there's a codex-specific override
-    // (Claude model aliases like opus/sonnet/haiku don't apply here)
+    // Model: platform-specific override only (Claude aliases like opus/sonnet/haiku don't apply to Codex)
+    if (codexPlatform?.model) {
+      agentLines.push(`model = "${codexPlatform.model}"`);
+    }
 
     // Reasoning effort: platform override > agent effort field > global
     const reasoningEffort =

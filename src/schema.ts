@@ -89,6 +89,7 @@ export const AgentFrontmatterSchema = z.object({
       claude: z
         .object({
           enabled: z.boolean().default(true),
+          model: z.string().optional(), // exact Claude model ID, overrides top-level model + modelMap
           permissionMode: z.enum(["default", "auto", "acceptEdits", "dontAsk", "bypassPermissions", "plan"]).optional(),
           disallowedTools: z.array(z.string()).optional(),
           initialPrompt: z.string().optional(),
@@ -97,6 +98,7 @@ export const AgentFrontmatterSchema = z.object({
       opencode: z
         .object({
           enabled: z.boolean().default(true),
+          model: z.string().optional(), // full OpenCode model ID, overrides top-level model + modelMap
           mode: z.enum(["primary", "subagent", "all"]).default("subagent"),
           top_p: z.number().min(0).max(1).optional(),
           rate_limit_per_hour: z.number().optional(),
@@ -113,6 +115,7 @@ export const AgentFrontmatterSchema = z.object({
       codex: z
         .object({
           enabled: z.boolean().default(true),
+          model: z.string().optional(), // Codex/OpenAI model name, e.g. "o3", "gpt-4.1", "codex-mini"
           sandbox_mode: z.string().optional(),
           model_reasoning_effort: z.string().optional(),
           nickname_candidates: z.array(z.string()).optional(),
@@ -121,6 +124,9 @@ export const AgentFrontmatterSchema = z.object({
       cursor: z
         .object({
           enabled: z.boolean().default(true),
+          model: z.string().optional(), // Cursor model ID, overrides top-level model + modelMap
+          readonly: z.boolean().optional(), // maps to Cursor `readonly: true` — agent cannot modify files
+          is_background: z.boolean().optional(), // maps to Cursor `is_background: true` — async non-blocking execution
         })
         .optional(),
     })
@@ -185,17 +191,20 @@ export const SkillFrontmatterSchema = z.object({
       claude: z
         .object({
           enabled: z.boolean().default(true),
+          model: z.string().optional(), // exact Claude model ID, overrides top-level model + modelMap
           shell: z.enum(["bash", "powershell"]).optional(),
         })
         .optional(),
       opencode: z
         .object({
           enabled: z.boolean().default(true),
+          model: z.string().optional(), // full OpenCode model ID, overrides top-level model + modelMap
         })
         .optional(),
       codex: z
         .object({
           enabled: z.boolean().default(true),
+          model: z.string().optional(), // Codex/OpenAI model name, e.g. "o3", "gpt-4.1"
           // UI/branding (maps to agents/openai.yaml `interface` block)
           displayName: z.string().optional(),
           shortDescription: z.string().optional(),
@@ -220,6 +229,7 @@ export const SkillFrontmatterSchema = z.object({
       cursor: z
         .object({
           enabled: z.boolean().default(true),
+          model: z.string().optional(), // Cursor model ID, overrides top-level model + modelMap
         })
         .optional(),
     })

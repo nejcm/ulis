@@ -1,6 +1,5 @@
 ---
 description: Read-only code review agent that validates correctness, security, and spec compliance
-model: sonnet
 temperature: 0.2
 tools:
   read: true
@@ -11,11 +10,13 @@ tools:
 tags: [core, read-only]
 
 platforms:
+  claude:
+    model: claude-sonnet-4-6
+  codex:
+    model: gpt-5.4-mini
   opencode:
     mode: subagent
     rate_limit_per_hour: 20
-  cursor:
-    enabled: false
 ---
 
 # Reviewer Agent

@@ -18,7 +18,7 @@ function generateSubagentFrontmatter(agent: ParsedAgent, cfg: BuildConfig): stri
   lines.push(`name: ${agent.name}`);
   lines.push(`description: ${fm.description}`);
 
-  const model = cfg.platforms.claude.modelMap[fm.model] ?? fm.model;
+  const model = claudePlatform?.model ?? cfg.platforms.claude.modelMap[fm.model] ?? fm.model;
   if (model && model !== "inherit") {
     lines.push(`model: ${model}`);
   }
@@ -171,7 +171,8 @@ export function generateClaude(
   // Also generate agent commands (slash commands) for backward compat
   let agentCommandCount = 0;
   for (const agent of enabledAgents) {
-    const model = cfg.platforms.claude.modelMap[agent.frontmatter.model] ?? agent.frontmatter.model;
+    const claudeAgentPlatform = agent.frontmatter.platforms?.claude;
+    const model = claudeAgentPlatform?.model ?? cfg.platforms.claude.modelMap[agent.frontmatter.model] ?? agent.frontmatter.model;
     const allowedTools = mapTools(agent.frontmatter.tools, "claude", cfg);
 
     const frontmatterLines = ["---", `description: ${agent.frontmatter.description}`, `model: ${model}`];

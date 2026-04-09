@@ -1,6 +1,5 @@
 ---
 description: Security review specialist for auth, payments, permissions, secrets, and crypto
-model: opus
 temperature: 0.0
 tools:
   read: true
@@ -11,11 +10,16 @@ tools:
 tags: [core, read-only]
 
 platforms:
+  claude:
+    model: claude-opus-4-6
+  codex:
+    model: gpt-5.4
+    model_reasoning_effort: high
   opencode:
     mode: subagent
     rate_limit_per_hour: 10
   cursor:
-    enabled: false
+    readonly: true
 ---
 
 # Security Agent

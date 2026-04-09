@@ -1,6 +1,5 @@
 ---
 description: Implementation agent that writes code strictly against specifications
-model: sonnet
 temperature: 0.1
 tools:
   read: true
@@ -11,11 +10,13 @@ tools:
 tags: [core, read-write]
 
 platforms:
+  claude:
+    model: claude-sonnet-4-6
+  codex:
+    model: gpt-5.4-mini
   opencode:
     mode: subagent
     rate_limit_per_hour: 20
-  cursor:
-    enabled: false
 ---
 
 # Builder Agent
