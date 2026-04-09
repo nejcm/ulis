@@ -94,12 +94,11 @@ Generators iterate servers via the shared `mcpServersFor(mcp, target)` helper in
 
 ```
 .ai/
-  global/           # Canonical sources (agents, skills, MCP, plugins, …)
+  global/           # Canonical sources (agents, skills, MCP, …)
     agents/           # canonical agent definitions → see agents/README.md
     skills/           # skill definitions           → see skills/README.md
     commands/         # slash commands              → see commands/README.md
     workflows/        # workflow checklists         → see workflows/README.md
-    plugins/          # TypeScript plugins          → see plugins/README.md
     mcp.json          # Canonical MCP server definitions
     plugins.json      # Claude Code marketplace plugins/skills
     guardrails.md     # Cost controls and rate limits

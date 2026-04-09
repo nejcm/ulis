@@ -198,9 +198,7 @@ describe("PluginsConfigSchema", () => {
         marketplace_plugins: [{ name: "foo", source: "official" }],
         marketplace_skills: [{ name: "bar" }],
       },
-      opencode: { plugins: ["./plugins/git-worktree.ts"] },
     });
     expect(result.claude.marketplace_plugins[0].name).toBe("foo");
-    expect(result.opencode.plugins[0]).toBe("./plugins/git-worktree.ts");
   });
 });

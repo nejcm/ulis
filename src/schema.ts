@@ -288,9 +288,6 @@ export const PluginsConfigSchema = z.object({
     marketplace_plugins: z.array(ClaudePluginSchema),
     marketplace_skills: z.array(z.object({ name: z.string() })),
   }),
-  opencode: z.object({
-    plugins: z.array(z.string()),
-  }),
 });
 
 export type AgentFrontmatter = z.infer<typeof AgentFrontmatterSchema>;

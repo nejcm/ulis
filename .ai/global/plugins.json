@@ -27,7 +27,4 @@
       }
     ]
   },
-  "opencode": {
-    "plugins": ["./plugins/git-worktree.ts", "./plugins/format-on-write.ts"]
-  }
 }

@@ -87,7 +87,7 @@ export function runBuild(options: BuildOptions = {}): readonly Platform[] {
     const outDir = join(generatedDir, target);
     switch (target) {
       case "opencode":
-        generateOpencode(agents, skills, mcp, plugins, aiDir, outDir, buildConfig);
+        generateOpencode(agents, skills, mcp, aiDir, outDir, buildConfig);
         break;
       case "claude":
         generateClaude(agents, skills, mcp, plugins, aiDir, outDir, buildConfig);

@@ -4,7 +4,7 @@ import type { BuildConfig } from "../config.js";
 import { type ParsedAgent, enabledAgentsFor } from "../parsers/agent.js";
 import { parseCommands } from "../parsers/command.js";
 import { type ParsedSkill, enabledSkillsFor } from "../parsers/skill.js";
-import type { McpConfig, PluginsConfig } from "../schema.js";
+import type { McpConfig } from "../schema.js";
 import { cleanDir, copyDir, copySkillDirs, fileExists, readFile, writeFile } from "../utils/fs.js";
 import { log } from "../utils/logger.js";
 import { mcpServersFor, translateEnvMap } from "../utils/mcp-block.js";
@@ -14,7 +14,6 @@ export function generateOpencode(
   agents: readonly ParsedAgent[],
   skills: readonly ParsedSkill[],
   mcp: McpConfig,
-  plugins: PluginsConfig,
   aiDir: string,
   outDir: string,
   buildConfig: BuildConfig,
@@ -129,7 +128,6 @@ export function generateOpencode(
     $schema: config.schema,
     model: config.defaultModel,
     small_model: config.smallModel,
-    plugin: plugins.opencode.plugins,
     agent: agentBlock,
     permission: permissionBlock,
     mcp: mcpBlock,
@@ -201,7 +199,7 @@ export function generateOpencode(
   }
 
   // Copy directories if they exist
-  const copyDirs = ["workflows", "plugins", "docs"];
+  const copyDirs = ["workflows", "docs"];
   for (const dir of copyDirs) {
     const src = join(aiDir, dir);
     if (fileExists(src)) {
