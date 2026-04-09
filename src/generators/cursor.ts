@@ -37,7 +37,7 @@ export function generateCursor(
 
     const frontmatterLines = ["---"];
     frontmatterLines.push(`description: ${fm.description}`);
-    if (model && model !== "inherit") {
+    if (model) {
       frontmatterLines.push(`model: ${model}`);
     }
     if (isReadonly) {

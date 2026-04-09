@@ -55,7 +55,7 @@ describe("Claude generator", () => {
     const content = readOut("claude", "agents", "worker.md");
     expect(content).toContain("name: worker");
     expect(content).toContain("description: A minimal test agent");
-    expect(content).toContain("model: haiku");
+    expect(content).toContain("model: claude-haiku-4-5-20251001");
   });
 
   it("applies readonly security as permissionMode: plan", () => {

@@ -3,7 +3,7 @@ name: performance-profiler
 description: CPU/memory profiling and performance benchmarking with advanced analysis
 category: performance
 version: "2.0.0"
-model: sonnet
+model: claude-sonnet-4-6
 platforms:
   codex:
     model: gpt-5.4

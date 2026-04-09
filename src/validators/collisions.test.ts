@@ -11,7 +11,7 @@ function agent(name: string): ParsedAgent {
     body: "",
     frontmatter: {
       description: "",
-      model: "sonnet",
+      model: "claude-sonnet-4-6",
       tools: { read: true, write: false, edit: false, bash: false, search: false, browser: false },
       tags: [],
     } as AgentFrontmatter,

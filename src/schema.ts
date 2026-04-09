@@ -1,6 +1,20 @@
 import { z } from "zod";
 
-import { CLAUDE_MODELS, CODEX_MODELS, CURSOR_MODELS, GENERIC_MODELS, OPENCODE_MODELS } from "./models.js";
+import {
+  AGENT_COLORS,
+  AGENT_ISOLATION_MODES,
+  APPROVAL_ACTIONS,
+  CLAUDE_PERMISSION_MODES,
+  CONTEXT_PRIORITIES,
+  EFFORT_LEVELS,
+  MEMORY_SCOPES,
+  OPENCODE_AGENT_MODES,
+  OPENCODE_PERMISSION_ACTIONS,
+  PERMISSION_LEVELS,
+  SHELL_TYPES,
+  SKILL_ISOLATION_MODES,
+} from "./constants.js";
+import { ALL_MODELS, CLAUDE_MODELS, CODEX_MODELS, CURSOR_MODELS, OPENCODE_MODELS } from "./models.js";
 
 export const ToolPermissionsSchema = z.object({
   read: z.boolean().default(true),
@@ -30,9 +44,9 @@ export const AgentFrontmatterSchema = z.object({
   description: z.string(),
 
   // MODEL CONFIG
-  model: z.enum(GENERIC_MODELS).default("sonnet"),
+  model: z.enum(ALL_MODELS).optional(),
   temperature: z.number().min(0).max(1).optional(),
-  effort: z.enum(["low", "medium", "high", "max"]).optional(),
+  effort: z.enum(EFFORT_LEVELS).optional(),
 
   // TOOL ACCESS (abstracted groups)
   tools: ToolPermissionsSchema,
@@ -40,10 +54,10 @@ export const AgentFrontmatterSchema = z.object({
   // EXECUTION CONTROLS
   maxTurns: z.number().int().positive().optional(),
   background: z.boolean().optional(),
-  isolation: z.enum(["worktree", "none"]).optional(),
+  isolation: z.enum(AGENT_ISOLATION_MODES).optional(),
 
   // MEMORY & CONTEXT
-  memory: z.enum(["user", "project", "local", "none"]).optional(),
+  memory: z.enum(MEMORY_SCOPES).optional(),
   skills: z.array(z.string()).optional(),
 
   // HOOKS
@@ -57,7 +71,7 @@ export const AgentFrontmatterSchema = z.object({
     .object({
       maxInputTokens: z.number().positive().optional(),
       excludeFromContext: z.array(z.string()).optional(),
-      priority: z.enum(["low", "normal", "high"]).default("normal"),
+      priority: z.enum(CONTEXT_PRIORITIES).default("normal"),
     })
     .optional(),
 
@@ -73,16 +87,16 @@ export const AgentFrontmatterSchema = z.object({
   // SECURITY POLICY (maps to native permission controls where supported; otherwise comments)
   security: z
     .object({
-      permissionLevel: z.enum(["readonly", "readwrite", "full"]).default("readwrite"),
+      permissionLevel: z.enum(PERMISSION_LEVELS).default("readwrite"),
       blockedCommands: z.array(z.string()).optional(),
       restrictedPaths: z.array(z.string()).optional(),
-      requireApproval: z.array(z.enum(["write", "edit", "bash", "agent", "mcp"])).optional(),
+      requireApproval: z.array(z.enum(APPROVAL_ACTIONS)).optional(),
       rateLimit: z.object({ perHour: z.number().positive() }).optional(),
     })
     .optional(),
 
   // UI
-  color: z.enum(["red", "blue", "green", "yellow", "purple", "orange", "pink", "cyan"]).optional(),
+  color: z.enum(AGENT_COLORS).optional(),
   tags: z.array(z.string()).default([]),
 
   // PLATFORM TARGETS & OVERRIDES
@@ -92,7 +106,7 @@ export const AgentFrontmatterSchema = z.object({
         .object({
           enabled: z.boolean().default(true),
           model: z.enum(CLAUDE_MODELS).optional(),
-          permissionMode: z.enum(["default", "auto", "acceptEdits", "dontAsk", "bypassPermissions", "plan"]).optional(),
+          permissionMode: z.enum(CLAUDE_PERMISSION_MODES).optional(),
           disallowedTools: z.array(z.string()).optional(),
           initialPrompt: z.string().optional(),
         })
@@ -101,13 +115,13 @@ export const AgentFrontmatterSchema = z.object({
         .object({
           enabled: z.boolean().default(true),
           model: z.enum(OPENCODE_MODELS).optional(),
-          mode: z.enum(["primary", "subagent", "all"]).default("subagent"),
+          mode: z.enum(OPENCODE_AGENT_MODES).default("subagent"),
           top_p: z.number().min(0).max(1).optional(),
           rate_limit_per_hour: z.number().optional(),
           permission: z
             .object({
-              edit: z.enum(["ask", "allow", "deny"]).optional(),
-              bash: z.enum(["ask", "allow", "deny"]).optional(),
+              edit: z.enum(OPENCODE_PERMISSION_ACTIONS).optional(),
+              bash: z.enum(OPENCODE_PERMISSION_ACTIONS).optional(),
             })
             .optional(),
           hidden: z.boolean().optional(),
@@ -169,9 +183,9 @@ export const SkillFrontmatterSchema = z.object({
   allowImplicitInvocation: z.boolean().default(true), // false = Codex explicit-only ($name)
 
   // EXECUTION
-  model: z.enum(GENERIC_MODELS).optional(),
-  effort: z.enum(["low", "medium", "high", "max"]).optional(),
-  isolation: z.enum(["fork", "none"]).optional(), // fork = Claude `context: fork`
+  model: z.enum(ALL_MODELS).optional(),
+  effort: z.enum(EFFORT_LEVELS).optional(),
+  isolation: z.enum(SKILL_ISOLATION_MODES).optional(), // fork = Claude `context: fork`
 
   // TOOL ACCESS (reuses existing ToolPermissionsSchema)
   tools: ToolPermissionsSchema.optional(),
@@ -194,7 +208,7 @@ export const SkillFrontmatterSchema = z.object({
         .object({
           enabled: z.boolean().default(true),
           model: z.enum(CLAUDE_MODELS).optional(),
-          shell: z.enum(["bash", "powershell"]).optional(),
+          shell: z.enum(SHELL_TYPES).optional(),
         })
         .optional(),
       opencode: z
@@ -241,7 +255,7 @@ export const SkillFrontmatterSchema = z.object({
 export const CommandFrontmatterSchema = z
   .object({
     description: z.string(),
-    model: z.enum(GENERIC_MODELS).optional(),
+    model: z.enum(ALL_MODELS).optional(),
     platforms: z
       .object({
         opencode: z

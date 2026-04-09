@@ -6,10 +6,6 @@
  * derived directly from these arrays.
  */
 
-// Generic tier aliases used at the top-level `model:` field (platform-agnostic)
-export const GENERIC_MODELS = ["opus", "sonnet", "haiku", "inherit"] as const;
-export type GenericModel = (typeof GENERIC_MODELS)[number];
-
 // Claude Code
 export const CLAUDE_MODELS = [
   "claude-opus-4-6",
@@ -43,3 +39,7 @@ export const CURSOR_MODELS = [
   "claude-haiku-4-5-20251001",
 ] as const;
 export type CursorModel = (typeof CURSOR_MODELS)[number];
+
+// All known model identifiers across all platforms (no duplicates — CURSOR_MODELS === CLAUDE_MODELS)
+export const ALL_MODELS = [...CLAUDE_MODELS, ...OPENCODE_MODELS, ...CODEX_MODELS] as const;
+export type AnyModel = (typeof ALL_MODELS)[number];

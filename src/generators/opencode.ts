@@ -175,7 +175,7 @@ export function generateOpencode(
 
       const { platforms: _platforms, model: _model, ...rest } = fm;
       const outData: Record<string, unknown> = { ...rest };
-      if (resolvedModel && resolvedModel !== "inherit") {
+      if (resolvedModel) {
         outData.model = resolvedModel;
       }
 

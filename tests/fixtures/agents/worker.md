@@ -1,6 +1,6 @@
 ---
 description: A minimal test agent
-model: haiku
+model: claude-haiku-4-5-20251001
 tools:
   read: true
   edit: true

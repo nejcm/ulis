@@ -1,7 +1,7 @@
 ---
 description: Create worktrees for all open PR branches
 subtask: true
-model: haiku
+model: claude-haiku-4-5-20251001
 platforms:
   opencode:
     model: claude-haiku-4-5-20251001

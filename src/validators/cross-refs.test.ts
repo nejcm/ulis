@@ -11,7 +11,7 @@ function makeAgent(name: string, fm: Partial<AgentFrontmatter> = {}): ParsedAgen
     body: "",
     frontmatter: {
       description: "test",
-      model: "sonnet",
+      model: "claude-sonnet-4-6",
       tools: { read: true, write: false, edit: false, bash: false, search: false, browser: false },
       tags: [],
       ...fm,

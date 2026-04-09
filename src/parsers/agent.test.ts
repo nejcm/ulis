@@ -13,7 +13,7 @@ describe("parseAgents", () => {
     const [worker] = agents;
     expect(worker.name).toBe("worker");
     expect(worker.frontmatter.description).toBe("A minimal test agent");
-    expect(worker.frontmatter.model).toBe("haiku");
+    expect(worker.frontmatter.model).toBe("claude-haiku-4-5-20251001");
     expect(worker.frontmatter.tools.read).toBe(true);
     expect(worker.frontmatter.tools.edit).toBe(true);
     expect(worker.frontmatter.tools.bash).toBe(false); // default

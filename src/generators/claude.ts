@@ -19,7 +19,7 @@ function generateSubagentFrontmatter(agent: ParsedAgent, cfg: BuildConfig): stri
   lines.push(`description: ${fm.description}`);
 
   const model = claudePlatform?.model ?? fm.model;
-  if (model && model !== "inherit") {
+  if (model) {
     lines.push(`model: ${model}`);
   }
 
@@ -194,7 +194,7 @@ export function generateClaude(
     const lines: string[] = ["---"];
     lines.push(`description: ${fm.description}`);
 
-    const skillModel = claudePlatform?.model ?? (fm.model && fm.model !== "inherit" ? fm.model : undefined);
+    const skillModel = claudePlatform?.model ?? fm.model;
     if (skillModel) {
       lines.push(`model: ${skillModel}`);
     }

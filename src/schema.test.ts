@@ -9,21 +9,22 @@ describe("AgentFrontmatterSchema", () => {
       tools: { read: true },
     });
     expect(result.description).toBe("A test agent");
-    expect(result.model).toBe("sonnet"); // default
+    expect(result.model).toBeUndefined();
     expect(result.tags).toEqual([]); // default
     expect(result.tools.read).toBe(true);
     expect(result.tools.bash).toBe(false); // default
   });
 
-  it("applies model default", () => {
+  it("accepts precise model id", () => {
     const result = AgentFrontmatterSchema.parse({
       description: "x",
       tools: {},
+      model: "claude-sonnet-4-6",
     });
-    expect(result.model).toBe("sonnet");
+    expect(result.model).toBe("claude-sonnet-4-6");
   });
 
-  it("rejects invalid model alias", () => {
+  it("rejects unknown model id", () => {
     expect(() => AgentFrontmatterSchema.parse({ description: "x", tools: {}, model: "gpt-4" })).toThrow();
   });
 

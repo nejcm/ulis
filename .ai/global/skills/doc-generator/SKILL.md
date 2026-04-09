@@ -3,7 +3,7 @@ name: doc-generator
 description: Auto-generates documentation from code comments, types, and structure
 category: documentation
 version: "1.0.0"
-model: haiku
+model: claude-haiku-4-5-20251001
 platforms:
   codex:
     model: gpt-5.4-mini
