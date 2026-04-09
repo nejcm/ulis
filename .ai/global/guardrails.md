@@ -140,7 +140,4 @@ Cost optimization through strategic model selection:
 These guidelines are not enforced by the OpenCode runtime (the schema rejects these keys). Enforcement options:
 
 1. **Agent prompts** — agents reference this file and self-enforce
-2. **Wrapper scripts** — `scripts/enforce-guardrails.sh` can run pre/post checks
-3. **CI/CD integration** — add budget and rate limit checks to pipelines
-
-See `scripts/` for available enforcement scripts.
+2. **CI/CD integration** — add budget and rate limit checks to pipelines

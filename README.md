@@ -99,7 +99,6 @@ Generators iterate servers via the shared `mcpServersFor(mcp, target)` helper in
     skills/           # skill definitions           → see skills/README.md
     commands/         # slash commands              → see commands/README.md
     workflows/        # workflow checklists         → see workflows/README.md
-    scripts/          # runtime utility scripts     → see scripts/README.md
     plugins/          # TypeScript plugins          → see plugins/README.md
     mcp.json          # Canonical MCP server definitions
     plugins.json      # Claude Code marketplace plugins/skills
@@ -137,13 +136,13 @@ src/
 
 ### Generator outputs
 
-| Source                                           | OpenCode                                     | Claude Code                                      | Codex                   | Cursor     |
-| ------------------------------------------------ | -------------------------------------------- | ------------------------------------------------ | ----------------------- | ---------- |
-| `agents/*.md`                                    | `opencode.json` agent blocks + `agents/` dir | `rules/common/agents.md` (generated)             | Instruction sections    | —          |
-| `guardrails.md`, `workflows/`                    | —                                            | `rules/common/guardrails.md`, `rules/workflows/` | Appended to `AGENTS.md` | —          |
-| `mcp.json`                                       | `opencode.json` mcp block                    | `settings.json` mcpServers                       | `config.toml`           | `mcp.json` |
-| `plugins.json`                                   | Plugin array                                 | `settings.json` enabledPlugins                   | —                       | —          |
-| `skills/`, `commands/`, `workflows/`, `scripts/` | Copied as-is                                 | —                                                | —                       | —          |
+| Source                               | OpenCode                                     | Claude Code                                      | Codex                   | Cursor     |
+| ------------------------------------ | -------------------------------------------- | ------------------------------------------------ | ----------------------- | ---------- |
+| `agents/*.md`                        | `opencode.json` agent blocks + `agents/` dir | `rules/common/agents.md` (generated)             | Instruction sections    | —          |
+| `guardrails.md`, `workflows/`        | —                                            | `rules/common/guardrails.md`, `rules/workflows/` | Appended to `AGENTS.md` | —          |
+| `mcp.json`                           | `opencode.json` mcp block                    | `settings.json` mcpServers                       | `config.toml`           | `mcp.json` |
+| `plugins.json`                       | Plugin array                                 | `settings.json` enabledPlugins                   | —                       | —          |
+| `skills/`, `commands/`, `workflows/` | Copied as-is                                 | —                                                | —                       | —          |
 
 ### Adding a new generator
 
@@ -199,4 +198,3 @@ When `--backup` is enabled, existing configs are backed up before overwrite (`*.
 
 - No secrets committed — all API keys use `${ENV_VAR}` references
 - Build validates this via Zod schemas
-- `scripts/health-check.sh` scans for accidental key leakage

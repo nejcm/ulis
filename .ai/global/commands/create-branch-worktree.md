@@ -1,10 +1,10 @@
 ---
 description: Create a branch and matching worktree
 subtask: true
-model: claude-haiku-4-5-20251001
+model: anthropic/claude-haiku-4-5-20251001
 platforms:
   opencode:
-    model: claude-haiku-4-5-20251001
+    model: anthropic/claude-haiku-4-5-20251001
 ---
 
 Create a new branch worktree at `./tree/<branch>`.

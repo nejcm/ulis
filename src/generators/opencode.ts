@@ -5,7 +5,7 @@ import { type ParsedAgent, enabledAgentsFor } from "../parsers/agent.js";
 import { parseCommands } from "../parsers/command.js";
 import { type ParsedSkill, enabledSkillsFor } from "../parsers/skill.js";
 import type { McpConfig, PluginsConfig } from "../schema.js";
-import { writeFile, copyDir, cleanDir, copySkillDirs, fileExists, readFile } from "../utils/fs.js";
+import { cleanDir, copyDir, copySkillDirs, fileExists, readFile, writeFile } from "../utils/fs.js";
 import { log } from "../utils/logger.js";
 import { mcpServersFor, translateEnvMap } from "../utils/mcp-block.js";
 import { buildPolicyCommentBlock } from "../utils/policy-comments.js";
@@ -172,12 +172,14 @@ export function generateOpencode(
         | Record<string, unknown>
         | undefined;
       const resolvedModel = (ocPlatform?.model ?? fm.model) as string | undefined;
+      const resolvedAgent = (ocPlatform?.agent ?? fm.agent) as string | undefined;
+      const resolvedSubtask = (ocPlatform?.subtask ?? fm.subtask) as boolean | undefined;
 
-      const { platforms: _platforms, model: _model, ...rest } = fm;
+      const { platforms: _platforms, model: _model, agent: _agent, subtask: _subtask, ...rest } = fm;
       const outData: Record<string, unknown> = { ...rest };
-      if (resolvedModel) {
-        outData.model = resolvedModel;
-      }
+      if (resolvedModel) outData.model = resolvedModel;
+      if (resolvedAgent) outData.agent = resolvedAgent;
+      if (resolvedSubtask !== undefined) outData.subtask = resolvedSubtask;
 
       const lines = ["---"];
       for (const [k, v] of Object.entries(outData)) {
@@ -199,7 +201,7 @@ export function generateOpencode(
   }
 
   // Copy directories if they exist
-  const copyDirs = ["workflows", "scripts", "plugins", "docs"];
+  const copyDirs = ["workflows", "plugins", "docs"];
   for (const dir of copyDirs) {
     const src = join(aiDir, dir);
     if (fileExists(src)) {

@@ -517,7 +517,9 @@ Query: SELECT * FROM users WHERE id = 3;
 // Bad: N+1 queries
 const posts = await db.query("SELECT * FROM posts");
 for (const post of posts) {
-  post.author = await db.query("SELECT * FROM users WHERE id = ?", [post.user_id]);
+  post.author = await db.query("SELECT * FROM users WHERE id = ?", [
+    post.user_id,
+  ]);
 }
 
 // Good: Single JOIN query
@@ -779,30 +781,9 @@ jobs:
 ```json
 {
   "scripts": {
-    "benchmark": "autocannon -c 100 -d 30 http://localhost:3000",
-    "perf:check": "node scripts/check-performance-budget.js"
+    "benchmark": "autocannon -c 100 -d 30 http://localhost:3000"
   }
 }
-```
-
-**scripts/check-performance-budget.js:**
-
-```javascript
-const budget = {
-  responseTime: 200, // ms
-  throughput: 5000, // req/s
-  memory: 512, // MB
-};
-
-// Run benchmark and compare
-const results = runBenchmark();
-
-if (results.responseTime > budget.responseTime) {
-  console.error(`❌ Response time ${results.responseTime}ms exceeds budget ${budget.responseTime}ms`);
-  process.exit(1);
-}
-
-console.log("✅ Performance budget met");
 ```
 
 ---

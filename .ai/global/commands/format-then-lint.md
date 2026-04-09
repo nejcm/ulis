@@ -1,10 +1,10 @@
 ---
 description: Detect and run formatting then linting commands
 subtask: true
-model: claude-haiku-4-5-20251001
+model: anthropic/claude-haiku-4-5-20251001
 platforms:
   opencode:
-    model: claude-haiku-4-5-20251001
+    model: anthropic/claude-haiku-4-5-20251001
 ---
 
 Run the following steps to format and lint the code:
