@@ -1,8 +1,8 @@
 # ⚠️ WORK IN PROGRESS
 
-# ai-configs
+# ULIS
 
-> 💡 **ULIS**: Unified LLM Interface Specification
+> Unified LLM Interface Specification
 
 Single source of truth for AI tool configurations across [OpenCode](https://opencode.ai), [Claude Code](https://claude.ai/code), [Codex](https://github.com/openai/codex), and [Cursor](https://cursor.com).
 

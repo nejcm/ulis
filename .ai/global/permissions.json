@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/nejcm/ai-configs/main/schema/permissions.json",
+  "$schema": "https://raw.githubusercontent.com/nejcm/ulis/main/schema/permissions.json",
   "claude": {
     "defaultMode": "default",
     "allow": [],
@@ -43,7 +43,15 @@
     "sandbox": "elevated"
   },
   "cursor": {
-    "mcpAllowlist": ["*:*"],
-    "terminalAllowlist": ["git", "npm", "bun", "find", "ls"]
+    "mcpAllowlist": [
+      "*:*"
+    ],
+    "terminalAllowlist": [
+      "git",
+      "npm",
+      "bun",
+      "find",
+      "ls"
+    ]
   }
 }

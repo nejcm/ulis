@@ -17,11 +17,6 @@ export interface Diagnostic {
 
 /**
  * Validate cross-entity references in the parsed bundle.
- *
- * Ported from `ai-configs_2/src/validators/cross-refs.ts` lines 14-57; the
- * pipeline and command checks were dropped because those entities do not
- * exist in this codebase.
- *
  * Checks:
  *   - agent.skills[]   → must reference a parsed skill   (warning)
  *   - agent.mcpServers → must reference an mcp.json key  (error)
