@@ -94,6 +94,35 @@ Generators iterate servers via the shared `mcpServersFor(mcp, target)` helper in
 4. For remote servers that Codex needs to access, provide a `localFallback` (Codex only supports local command-based MCPs).
 5. Run `bun run build` to regenerate all tool configs.
 
+## Skills
+
+Skills are reusable, invocable capabilities (each a `SKILL.md` file) stored in `.ai/global/skills/`. The build system copies them as-is into `generated/opencode/skills/`.
+
+### Installing skills from a registry
+
+The [Vercel Skills CLI](https://github.com/vercel-labs/skills) (`npx skills@latest`) installs only into known agent directories and has no `--dir` flag. Use the wrapper script instead:
+
+```bash
+# Install all skills from a package
+bun run install:skill vercel-labs/agent-skills --yes
+
+# Install a specific skill
+bun run install:skill vercel-labs/agent-skills --skill deploy-to-vercel --yes
+
+# Install from a GitHub URL
+bun run install:skill https://github.com/org/skills-repo --yes
+```
+
+The script installs via the `universal` agent into a temporary `.agents/` directory, moves the result to `.ai/global/skills/`, then removes the staging directory.
+
+After installing, run `bun run build` to include the new skill in generated configs.
+
+### Adding a skill manually
+
+1. Create `.ai/global/skills/<name>/SKILL.md` with the skill instructions.
+2. Optionally add a `config/` or `references/` subdirectory.
+3. Run `bun run build` — the skill is included automatically.
+
 ## Repository Structure
 
 ```
@@ -179,6 +208,7 @@ bun run lint               # Type-check the build system
 bun run clean              # Delete generated/
 bun run install:deps       # Install build dependencies
 bun run install:configs    # Deploy to home directory
+bun run install:skill      # Install a skill from npx skills@latest into .ai/global/skills/
 bun run rebuild            # Force rebuild
 bun run format             # Format with [Oxfmt](https://oxc.rs/docs/guide/usage/formatter.html)
 bun run format:check       # Check formatting (CI-friendly)

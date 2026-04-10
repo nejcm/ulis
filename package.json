@@ -18,6 +18,7 @@
     "gen:reference": "tsx src/tools/gen-reference.ts",
     "gen:schemas": "tsx src/tools/gen-json-schema.ts",
     "install:configs": "bun scripts/install.js",
+    "install:skill": "bun scripts/install-skill.js",
     "install:deps": "bun install",
     "lint": "tsc --noEmit",
     "rebuild": "bun run build",
