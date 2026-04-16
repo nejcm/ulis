@@ -1,6 +1,29 @@
 {
+  "*": {
+    "skills": [
+      {
+        "name": "https://skills.sh/vercel-labs/skills",
+        "args": ["--skill find-skills"]
+      },
+      {
+        "name": "mattpocock/skills/write-a-prd"
+      },
+      {
+        "name": "mattpocock/skills/prd-to-plan"
+      },
+      {
+        "name": "mattpocock/skills/grill-me"
+      },
+      {
+        "name": "mattpocock/skills/design-an-interface"
+      },
+      {
+        "name": "mattpocock/skills/request-refactor-plan"
+      }
+    ]
+  },
   "claude": {
-    "marketplace_plugins": [
+    "plugins": [
       {
         "name": "everything-claude-code",
         "source": "github",
@@ -15,16 +38,6 @@
         "source": "official"
       }
     ],
-    "marketplace_skills": [
-      {
-        "name": "find-skills"
-      },
-      {
-        "name": "grill-me"
-      },
-      {
-        "name": "improve-codebase-architecture"
-      }
-    ]
+    "skills": []
   }
 }

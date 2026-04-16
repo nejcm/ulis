@@ -85,15 +85,7 @@
     "sandbox": "elevated"
   },
   "cursor": {
-    "mcpAllowlist": [
-      "*:*"
-    ],
-    "terminalAllowlist": [
-      "git",
-      "npm",
-      "bun",
-      "find",
-      "ls"
-    ]
+    "mcpAllowlist": ["*:*"],
+    "terminalAllowlist": ["git", "npm", "bun", "find", "ls"]
   }
 }

@@ -290,11 +290,22 @@ export const ClaudePluginSchema = z.object({
   repo: z.string().optional(),
 });
 
+export const GlobalSkillSchema = z.object({
+  name: z.string(),
+  args: z.array(z.string()).optional(),
+});
+
+const sharedPluginsSchema = z.object({
+  plugins: z.array(ClaudePluginSchema),
+  skills: z.array(GlobalSkillSchema).default([]),
+});
+
 export const PluginsConfigSchema = z.object({
-  claude: z.object({
-    marketplace_plugins: z.array(ClaudePluginSchema),
-    marketplace_skills: z.array(z.object({ name: z.string() })),
-  }),
+  "*": sharedPluginsSchema.optional(),
+  claude: sharedPluginsSchema.optional(),
+  opencode: sharedPluginsSchema.optional(),
+  codex: sharedPluginsSchema.optional(),
+  cursor: sharedPluginsSchema.optional(),
 });
 
 // ─── Permissions Config ────────────────────────────────────────────────────
@@ -372,6 +383,7 @@ export type SkillFrontmatter = z.infer<typeof SkillFrontmatterSchema>;
 export type McpConfig = z.infer<typeof McpConfigSchema>;
 export type McpServer = z.infer<typeof McpServerSchema>;
 export type PluginsConfig = z.infer<typeof PluginsConfigSchema>;
+export type GlobalSkill = z.infer<typeof GlobalSkillSchema>;
 export type ToolPermissions = z.infer<typeof ToolPermissionsSchema>;
 export type ContextHints = NonNullable<AgentFrontmatter["contextHints"]>;
 export type ToolPolicy = NonNullable<AgentFrontmatter["toolPolicy"]>;

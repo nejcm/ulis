@@ -92,7 +92,10 @@ function generateSubagentFrontmatter(agent: ParsedAgent, cfg: BuildConfig): stri
     for (const [event, entries] of Object.entries(mergedHooks)) {
       if (!entries || (entries as unknown[]).length === 0) continue;
       lines.push(`  ${event}:`);
-      for (const entry of entries as Array<{ matcher?: string; command: string }>) {
+      for (const entry of entries as Array<{
+        matcher?: string;
+        command: string;
+      }>) {
         if (entry.matcher) {
           lines.push(`    - matcher: "${entry.matcher}"`);
           lines.push(`      hooks:`);
@@ -224,7 +227,10 @@ export function generateClaude(
       for (const [event, entries] of Object.entries(fm.hooks)) {
         if (!entries || (entries as unknown[]).length === 0) continue;
         lines.push(`  ${event}:`);
-        for (const entry of entries as Array<{ matcher?: string; command: string }>) {
+        for (const entry of entries as Array<{
+          matcher?: string;
+          command: string;
+        }>) {
           if (entry.matcher) {
             lines.push(`    - matcher: "${entry.matcher}"`);
             lines.push(`      hooks:`);
@@ -260,7 +266,10 @@ export function generateClaude(
       log.dim(`  mcp: ${name} (local)`);
     } else if (server.url) {
       const transportType = server.transport ?? "http";
-      const entry: Record<string, unknown> = { type: transportType, url: server.url };
+      const entry: Record<string, unknown> = {
+        type: transportType,
+        url: server.url,
+      };
       const headers = translateEnvMap(server.headers, "claude");
       if (headers) entry.headers = headers;
       mcpServers[name] = entry;
@@ -272,7 +281,7 @@ export function generateClaude(
   const enabledPlugins: Record<string, boolean> = {};
   const extraKnownMarketplaces: Record<string, unknown> = {};
 
-  for (const plugin of plugins.claude.marketplace_plugins) {
+  for (const plugin of plugins.claude?.plugins ?? []) {
     if (plugin.source === "github" && plugin.repo) {
       const key = `${plugin.name}@${plugin.name}`;
       enabledPlugins[key] = true;

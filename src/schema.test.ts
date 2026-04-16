@@ -1,6 +1,6 @@
-import { describe, it, expect } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
-import { AgentFrontmatterSchema, SkillFrontmatterSchema, McpConfigSchema, PluginsConfigSchema } from "./schema.js";
+import { AgentFrontmatterSchema, McpConfigSchema, PluginsConfigSchema, SkillFrontmatterSchema } from "./schema.js";
 
 describe("AgentFrontmatterSchema", () => {
   it("parses minimal valid agent", () => {
@@ -25,7 +25,13 @@ describe("AgentFrontmatterSchema", () => {
   });
 
   it("rejects unknown model id", () => {
-    expect(() => AgentFrontmatterSchema.parse({ description: "x", tools: {}, model: "gpt-4" })).toThrow();
+    expect(() =>
+      AgentFrontmatterSchema.parse({
+        description: "x",
+        tools: {},
+        model: "gpt-4",
+      }),
+    ).toThrow();
   });
 
   it("rejects missing description", () => {
@@ -36,7 +42,11 @@ describe("AgentFrontmatterSchema", () => {
     const result = AgentFrontmatterSchema.parse({
       description: "x",
       tools: {},
-      contextHints: { maxInputTokens: 50000, priority: "high", excludeFromContext: ["*.log"] },
+      contextHints: {
+        maxInputTokens: 50000,
+        priority: "high",
+        excludeFromContext: ["*.log"],
+      },
     });
     expect(result.contextHints?.maxInputTokens).toBe(50000);
     expect(result.contextHints?.priority).toBe("high");
@@ -56,7 +66,11 @@ describe("AgentFrontmatterSchema", () => {
     const result = AgentFrontmatterSchema.parse({
       description: "x",
       tools: {},
-      toolPolicy: { prefer: ["Read"], avoid: ["Bash"], requireConfirmation: ["Write"] },
+      toolPolicy: {
+        prefer: ["Read"],
+        avoid: ["Bash"],
+        requireConfirmation: ["Write"],
+      },
     });
     expect(result.toolPolicy?.prefer).toEqual(["Read"]);
     expect(result.toolPolicy?.avoid).toEqual(["Bash"]);
@@ -144,10 +158,16 @@ describe("SkillFrontmatterSchema", () => {
   });
 
   it("parses paths as string or array", () => {
-    const single = SkillFrontmatterSchema.parse({ description: "x", paths: "src/**" });
+    const single = SkillFrontmatterSchema.parse({
+      description: "x",
+      paths: "src/**",
+    });
     expect(single.paths).toBe("src/**");
 
-    const multi = SkillFrontmatterSchema.parse({ description: "x", paths: ["src/**", "tests/**"] });
+    const multi = SkillFrontmatterSchema.parse({
+      description: "x",
+      paths: ["src/**", "tests/**"],
+    });
     expect(multi.paths).toEqual(["src/**", "tests/**"]);
   });
 });
@@ -192,13 +212,60 @@ describe("McpConfigSchema", () => {
 });
 
 describe("PluginsConfigSchema", () => {
-  it("parses valid plugins config", () => {
+  it("parses valid plugins config with claude section", () => {
     const result = PluginsConfigSchema.parse({
       claude: {
-        marketplace_plugins: [{ name: "foo", source: "official" }],
-        marketplace_skills: [{ name: "bar" }],
+        plugins: [{ name: "foo", source: "official" }],
+        skills: [{ name: "bar" }],
       },
     });
-    expect(result.claude.marketplace_plugins[0].name).toBe("foo");
+    expect(result.claude?.plugins[0].name).toBe("foo");
+  });
+
+  it("parses wildcard skills with optional args", () => {
+    const result = PluginsConfigSchema.parse({
+      "*": {
+        plugins: [],
+        skills: [
+          { name: "mattpocock/skills/write-a-prd" },
+          { name: "https://skills.sh/vercel-labs/skills", args: ["--skill", "find-skills"] },
+        ],
+      },
+    });
+    expect(result["*"]?.skills).toHaveLength(2);
+    expect(result["*"]?.skills[1].args).toEqual(["--skill", "find-skills"]);
+  });
+
+  it("parses config with both wildcard and claude sections", () => {
+    const result = PluginsConfigSchema.parse({
+      "*": { plugins: [], skills: [{ name: "mattpocock/skills/grill-me" }] },
+      claude: {
+        plugins: [{ name: "frontend-design", source: "official" }],
+        skills: [],
+      },
+    });
+    expect(result["*"]?.skills[0].name).toBe("mattpocock/skills/grill-me");
+    expect(result.claude?.plugins[0].source).toBe("official");
+  });
+
+  it("parses per-platform sections for opencode, codex, and cursor", () => {
+    const result = PluginsConfigSchema.parse({
+      opencode: {
+        plugins: [{ name: "oc-plugin", source: "official" }],
+        skills: [{ name: "opencode-skill" }],
+      },
+      codex: {
+        plugins: [],
+        skills: [{ name: "codex-skill", args: ["--yes"] }],
+      },
+      cursor: {
+        plugins: [],
+        skills: [],
+      },
+    });
+    expect(result.opencode?.plugins[0].name).toBe("oc-plugin");
+    expect(result.opencode?.skills[0].name).toBe("opencode-skill");
+    expect(result.codex?.skills[0].args).toEqual(["--yes"]);
+    expect(result.cursor?.skills).toHaveLength(0);
   });
 });

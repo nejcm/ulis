@@ -3,8 +3,10 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, write
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 
+import pluginsJson from "../.ai/global/plugins.json" with { type: "json" };
 import { runBuild, type Logger } from "./build.js";
-import { PLATFORMS, PLATFORM_LABELS, type Platform, uniquePlatforms } from "./platforms.js";
+import { PLATFORM_LABELS, PLATFORMS, uniquePlatforms, type Platform } from "./platforms.js";
+import { type PluginsConfig } from "./schema.js";
 import { deepMerge } from "./utils/build-config.js";
 
 export interface InstallOptions {
@@ -77,22 +79,30 @@ export function runInstall(options: InstallOptions = {}): readonly Platform[] {
     });
   }
 
+  const plugins = pluginsJson as unknown as PluginsConfig;
+
   const timestamp = makeTimestamp();
   for (const platform of platforms) {
     switch (platform) {
       case "opencode":
-        installOpencode({ generatedDir, backup, timestamp, logger });
+        installOpencode({ generatedDir, rootDir, backup, timestamp, plugins, logger });
         break;
       case "claude":
-        installClaude({ generatedDir, backup, timestamp, logger });
+        installClaude({ generatedDir, rootDir, backup, timestamp, plugins, logger });
         break;
       case "codex":
-        installCodex({ generatedDir, backup, timestamp, logger });
+        installCodex({ generatedDir, rootDir, backup, timestamp, plugins, logger });
         break;
       case "cursor":
-        installCursor({ generatedDir, backup, timestamp, logger });
+        installCursor({ generatedDir, rootDir, backup, timestamp, plugins, logger });
         break;
     }
+  }
+
+  const globalSkills = plugins["*"]?.skills ?? [];
+  if (globalSkills.length > 0) {
+    logHeader(logger, "Installing Global Skills");
+    installSkills(globalSkills, "*", logger);
   }
 
   logHeader(logger, "Installation Complete");
@@ -105,19 +115,26 @@ export function runInstall(options: InstallOptions = {}): readonly Platform[] {
 
 interface InstallContext {
   readonly generatedDir: string;
+  readonly rootDir: string;
   readonly backup: boolean;
   readonly timestamp: string;
+  readonly plugins: PluginsConfig;
   readonly logger?: Logger;
 }
 
 function installOpencode(context: InstallContext): void {
-  const targetDir = process.env.OPENCODE_CONFIG || join(homedir(), ".opencode");
+  const targetDir = platformConfigDir("opencode");
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.opencode}`);
   backupDirectory(targetDir, context);
 
   rmSync(targetDir, { recursive: true, force: true });
   cpSync(join(context.generatedDir, "opencode"), targetDir, { recursive: true });
   logSuccess(context.logger, `OpenCode -> ${targetDir}`);
+
+  const skills = context.plugins.opencode?.skills ?? [];
+  if (skills.length > 0) {
+    installSkills(skills, "opencode", context.logger);
+  }
 }
 
 function installClaude(context: InstallContext): void {
@@ -142,19 +159,29 @@ function installClaude(context: InstallContext): void {
   }
 
   copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["settings.json"]));
-  installClaudeMarketplacePlugin(context.logger);
+  installClaudePlugins(context.plugins, context.logger);
+
+  const claudeSkills = context.plugins.claude?.skills ?? [];
+  if (claudeSkills.length > 0) {
+    installSkills(claudeSkills, "claude", context.logger);
+  }
 }
 
 function installCodex(context: InstallContext): void {
-  const targetDir = join(homedir(), ".codex");
+  const targetDir = platformConfigDir("codex");
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.codex}`);
   backupDirectory(targetDir, context);
   ensureDir(targetDir);
   copyPlatformContents(join(context.generatedDir, "codex"), targetDir, context.logger);
+
+  const skills = context.plugins.codex?.skills ?? [];
+  if (skills.length > 0) {
+    installSkills(skills, "codex", context.logger);
+  }
 }
 
 function installCursor(context: InstallContext): void {
-  const targetDir = join(homedir(), ".cursor");
+  const targetDir = platformConfigDir("cursor");
   const sourceDir = join(context.generatedDir, "cursor");
   const generatedMcp = join(sourceDir, "mcp.json");
   const targetMcp = join(targetDir, "mcp.json");
@@ -175,6 +202,24 @@ function installCursor(context: InstallContext): void {
   }
 
   copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["mcp.json"]));
+
+  const skills = context.plugins.cursor?.skills ?? [];
+  if (skills.length > 0) {
+    installSkills(skills, "cursor", context.logger);
+  }
+}
+
+function platformConfigDir(platform: Platform): string {
+  switch (platform) {
+    case "claude":
+      return join(homedir(), ".claude");
+    case "opencode":
+      return process.env.OPENCODE_CONFIG ?? join(homedir(), ".opencode");
+    case "codex":
+      return join(homedir(), ".codex");
+    case "cursor":
+      return join(homedir(), ".cursor");
+  }
 }
 
 function copyPlatformContents(
@@ -237,20 +282,54 @@ function backupDirectory(targetDir: string, context: InstallContext): void {
   logInfo(context.logger, `[backup] ${targetDir} -> ${backupPath}`);
 }
 
-function installClaudeMarketplacePlugin(logger?: Logger): void {
+function installClaudePlugins(plugins: PluginsConfig, logger?: Logger): void {
+  const claudePlugins = plugins.claude?.plugins ?? [];
+  if (claudePlugins.length === 0) return;
+
   if (!commandExists("claude")) {
     logWarn(logger, "claude CLI not found - install marketplace plugins manually.");
     return;
   }
 
-  const result = spawnSync("claude", ["plugin", "add", "--from", "affaan-m/everything-claude-code"], {
-    stdio: "ignore",
-  });
+  for (const plugin of claudePlugins) {
+    const source = plugin.source === "github" && plugin.repo ? plugin.repo : plugin.name;
+    const result = spawnSync("claude", ["plugin", "add", "--from", source], { stdio: "ignore" });
+    if (result.status === 0) {
+      logSuccess(logger, `Plugin: ${plugin.name}`);
+    } else {
+      logWarn(logger, `Failed to install plugin: ${plugin.name}`);
+    }
+  }
+}
 
-  if (result.status === 0) {
-    logSuccess(logger, "Marketplace plugins");
-  } else {
-    logWarn(logger, "Failed to install everything-claude-code marketplace plugin.");
+// map platform key to skills argument agent name
+const PLATFORM_AGENT_NAMES: Record<Platform, string> = {
+  claude: "claude-code",
+  opencode: "opencode",
+  codex: "codex",
+  cursor: "cursor",
+};
+
+function installSkills(
+  skills: readonly { name: string; args?: readonly string[] }[],
+  platform: Platform | "*",
+  logger?: Logger,
+): void {
+  if (skills.length === 0) return;
+
+  const agentFlags =
+    platform === "*"
+      ? Object.values(PLATFORM_AGENT_NAMES).map((name) => ["-a", name]).flat()
+      : ["-a", PLATFORM_AGENT_NAMES[platform] ?? platform];
+
+  for (const skill of skills) {
+    const npxArgs = ["skills@latest", "add", skill.name, ...agentFlags, "--yes", ...(skill.args ?? [])];
+    const result = spawnSync("npx", npxArgs, { stdio: "ignore" });
+    if (result.status !== 0) {
+      logWarn(logger, `Failed to install ${platform} skill: ${skill.name}`);
+      continue;
+    }
+    logSuccess(logger, `${platform} skill: ${skill.name}`);
   }
 }
 

@@ -1,6 +1,22 @@
 {
+  "*": {
+    "skills": [],
+    "plugins": []
+  },
   "claude": {
-    "marketplace_plugins": [],
-    "marketplace_skills": []
+    "plugins": [],
+    "skills": []
+  },
+  "opencode": {
+    "plugins": [],
+    "skills": []
+  },
+  "codex": {
+    "plugins": [],
+    "skills": []
+  },
+  "cursor": {
+    "plugins": [],
+    "skills": []
   }
 }
