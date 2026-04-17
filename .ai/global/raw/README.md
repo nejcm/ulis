@@ -17,13 +17,13 @@ raw/
 
 During `bun run build`, the build system reads each subdirectory and copies its contents into the corresponding platform's generated output directory:
 
-| Source dir      | Destination                        |
-| --------------- | ---------------------------------- |
-| `raw/common/`   | All platform outputs               |
-| `raw/claude/`   | `generated/claude/`                |
-| `raw/codex/`    | `generated/codex/`                 |
-| `raw/cursor/`   | `generated/cursor/`                |
-| `raw/opencode/` | `generated/opencode/`              |
+| Source dir      | Destination           |
+| --------------- | --------------------- |
+| `raw/common/`   | All platform outputs  |
+| `raw/claude/`   | `generated/claude/`   |
+| `raw/codex/`    | `generated/codex/`    |
+| `raw/cursor/`   | `generated/cursor/`   |
+| `raw/opencode/` | `generated/opencode/` |
 
 Files in `raw/common/` are copied to **every** platform's generated directory.
 
@@ -32,6 +32,7 @@ Files in `raw/common/` are copied to **every** platform's generated directory.
 ### `common/AGENTS.md`
 
 Cross-platform agent instructions injected into every tool's config. Contains:
+
 - **Communication style** — be concise, no filler phrases, no unsolicited summaries
 - **Honesty policy** — never lie, never omit, ask for clarification when unsure
 - **Efficiency rules** — minimize tokens, search before reading, use quiet flags, show diffs not full files
@@ -39,13 +40,13 @@ Cross-platform agent instructions injected into every tool's config. Contains:
 
 ## When to Use `raw/` vs Other Directories
 
-| Use case | Where to put it |
-| -------- | --------------- |
-| New agent with cross-platform support | `agents/` |
-| New OpenCode slash command | `commands/` |
-| New reusable skill | `skills/` |
+| Use case                                              | Where to put it   |
+| ----------------------------------------------------- | ----------------- |
+| New agent with cross-platform support                 | `agents/`         |
+| New OpenCode slash command                            | `commands/`       |
+| New reusable skill                                    | `skills/`         |
 | Platform-specific config block with no transformation | `raw/<platform>/` |
-| Shared instruction text injected into all platforms | `raw/common/` |
+| Shared instruction text injected into all platforms   | `raw/common/`     |
 
 ## Adding a Raw Fragment
 

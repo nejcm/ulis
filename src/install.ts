@@ -319,7 +319,9 @@ function installSkills(
 
   const agentFlags =
     platform === "*"
-      ? Object.values(PLATFORM_AGENT_NAMES).map((name) => ["-a", name]).flat()
+      ? Object.values(PLATFORM_AGENT_NAMES)
+          .map((name) => ["-a", name])
+          .flat()
       : ["-a", PLATFORM_AGENT_NAMES[platform] ?? platform];
 
   for (const skill of skills) {

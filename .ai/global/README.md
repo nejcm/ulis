@@ -29,14 +29,14 @@ Deep-merged on top of build defaults (`src/config.ts`). Only specify leaves you 
 
 MCP server definitions. Each entry specifies `type` (`local` or `remote`), connection details, and optional `targets` to restrict a server to specific platforms.
 
-| Server              | Type   | Purpose                                  |
-| ------------------- | ------ | ---------------------------------------- |
-| `context7`          | remote | Up-to-date library docs (Context7)       |
-| `github`            | local  | GitHub API access via `gh` token         |
-| `gh_grep`           | remote | Code search across public GitHub repos   |
-| `memory`            | local  | Persistent key-value memory across turns |
-| `sequential-thinking` | local | Structured multi-step reasoning        |
-| `linear`            | remote | Linear issue tracker (OpenCode only)     |
+| Server                | Type   | Purpose                                  |
+| --------------------- | ------ | ---------------------------------------- |
+| `context7`            | remote | Up-to-date library docs (Context7)       |
+| `github`              | local  | GitHub API access via `gh` token         |
+| `gh_grep`             | remote | Code search across public GitHub repos   |
+| `memory`              | local  | Persistent key-value memory across turns |
+| `sequential-thinking` | local  | Structured multi-step reasoning          |
+| `linear`              | remote | Linear issue tracker (OpenCode only)     |
 
 Environment variables required: `CONTEXT7_API_KEY`, `GITHUB_PAT`, `LINEAR_API_KEY`.
 
@@ -46,7 +46,7 @@ Access control per platform. See [permissions.json schema](../../schema/permissi
 
 | Platform   | Key settings                                                                 |
 | ---------- | ---------------------------------------------------------------------------- |
-| `claude`   | `allow` / `deny` / `ask` lists for Bash commands                            |
+| `claude`   | `allow` / `deny` / `ask` lists for Bash commands                             |
 | `opencode` | Granular `read/edit/bash/skill` permission rules with glob-pattern overrides |
 | `codex`    | `approvalMode` (`suggest`) and `sandbox` level                               |
 | `cursor`   | `mcpAllowlist` and `terminalAllowlist`                                       |
@@ -56,6 +56,7 @@ Access control per platform. See [permissions.json schema](../../schema/permissi
 External skill and plugin registrations. Top-level `"*"` key applies to all platforms; platform keys (`claude`, etc.) apply only to that tool.
 
 Current registrations:
+
 - **Vercel Labs** — `find-skills`
 - **Matt Pocock** — `write-a-prd`, `prd-to-plan`, `grill-me`, `design-an-interface`, `request-refactor-plan`
 - **Claude plugins** — `everything-claude-code`, `frontend-design`, `ralph-loop`
@@ -63,6 +64,7 @@ Current registrations:
 ### `guardrails.md`
 
 Documented operational policies for agents. **Not machine-enforced** — agents read this file and self-enforce. Covers:
+
 - Operational limits (max 100 tool calls, 150k context tokens, max 2 retries)
 - Cost controls (daily $100, per-session $10)
 - Rate limits per agent type

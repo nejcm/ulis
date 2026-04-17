@@ -3,21 +3,15 @@
     "skills": [
       {
         "name": "https://skills.sh/vercel-labs/skills",
-        "args": [
-          "--skill find-skills"
-        ]
+        "args": ["--skill find-skills"]
       },
       {
         "name": "https://github.com/anthropics/skills",
-        "args": [
-          "--skill mcp-builder"
-        ]
+        "args": ["--skill mcp-builder"]
       },
       {
         "name": "https://skills.sh/microsoft/playwright-cli/playwright-cli",
-        "args": [
-          "--skill playwright-cli"
-        ]
+        "args": ["--skill playwright-cli"]
       },
       {
         "name": "mattpocock/skills/write-a-prd"

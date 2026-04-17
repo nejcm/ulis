@@ -59,33 +59,33 @@ The build system reads these files and generates:
 
 ## Temperature Strategy
 
-| Range     | Agents                                                                              | Rationale                        |
-| --------- | ----------------------------------------------------------------------------------- | -------------------------------- |
-| `0.0`     | migration, security, tester, penetration-tester                                     | Deterministic — no guessing      |
+| Range     | Agents                                                                                                                          | Rationale                        |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `0.0`     | migration, security, tester, penetration-tester                                                                                 | Deterministic — no guessing      |
 | `0.1–0.2` | builder, refactor, devops, documentation, performance, reviewer, golang-pro, database-optimizer, ai-engineer, security-engineer | Consistent but slightly adaptive |
-| `0.3`     | architect, planner, debugger, market-researcher, project-idea-validator, competitive-analyst | Exploratory analysis   |
+| `0.3`     | architect, planner, debugger, market-researcher, project-idea-validator, competitive-analyst                                    | Exploratory analysis             |
 
 ## Agent Catalog
 
-| Agent | Description | Model |
-|-------|-------------|-------|
-| architect | System design and architectural decisions | opus |
-| builder | Feature implementation | sonnet |
-| debugger | Root cause analysis and bug fixes | sonnet |
-| devops | CI/CD, infrastructure, platform engineering | sonnet |
-| documentation | Docs and code documentation | sonnet |
-| migration | Database and API migration safety | sonnet |
-| performance | Profiling and optimization | sonnet |
-| planner | Feature planning and task breakdown | opus |
-| refactor | Code quality and dead code cleanup | sonnet |
-| reviewer | Code review and quality checks | sonnet |
-| security | Code security review (read-only) | opus |
-| tester | Test strategy and coverage | sonnet |
-| **ai-engineer** | End-to-end AI systems, MLOps, ethical AI | opus |
-| **competitive-analyst** | Competitive intelligence and benchmarking | sonnet |
-| **database-optimizer** | Query tuning, indexing, schema analysis | sonnet |
-| **golang-pro** | Idiomatic Go, concurrency, microservices | sonnet |
-| **market-researcher** | Market sizing, consumer research, strategy | sonnet |
-| **penetration-tester** | Authorized security testing and exploitation | opus |
+| Agent                      | Description                                    | Model  |
+| -------------------------- | ---------------------------------------------- | ------ |
+| architect                  | System design and architectural decisions      | opus   |
+| builder                    | Feature implementation                         | sonnet |
+| debugger                   | Root cause analysis and bug fixes              | sonnet |
+| devops                     | CI/CD, infrastructure, platform engineering    | sonnet |
+| documentation              | Docs and code documentation                    | sonnet |
+| migration                  | Database and API migration safety              | sonnet |
+| performance                | Profiling and optimization                     | sonnet |
+| planner                    | Feature planning and task breakdown            | opus   |
+| refactor                   | Code quality and dead code cleanup             | sonnet |
+| reviewer                   | Code review and quality checks                 | sonnet |
+| security                   | Code security review (read-only)               | opus   |
+| tester                     | Test strategy and coverage                     | sonnet |
+| **ai-engineer**            | End-to-end AI systems, MLOps, ethical AI       | opus   |
+| **competitive-analyst**    | Competitive intelligence and benchmarking      | sonnet |
+| **database-optimizer**     | Query tuning, indexing, schema analysis        | sonnet |
+| **golang-pro**             | Idiomatic Go, concurrency, microservices       | sonnet |
+| **market-researcher**      | Market sizing, consumer research, strategy     | sonnet |
+| **penetration-tester**     | Authorized security testing and exploitation   | opus   |
 | **project-idea-validator** | Idea validation, competitor teardown, go/no-go | sonnet |
-| **security-engineer** | DevSecOps, zero-trust, compliance automation | opus |
+| **security-engineer**      | DevSecOps, zero-trust, compliance automation   | opus   |

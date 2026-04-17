@@ -20,11 +20,11 @@ match:
 
 ### Events
 
-| Event        | Fires                                        | Common uses                                     |
-| ------------ | -------------------------------------------- | ----------------------------------------------- |
-| `PreToolUse` | Before a tool call executes                  | Validation, blocking dangerous commands, logging |
-| `PostToolUse` | After a tool call completes                 | Auto-formatting, follow-up checks, metrics       |
-| `Stop`       | When the agent finishes its turn             | Final verification, summaries, notifications     |
+| Event         | Fires                            | Common uses                                      |
+| ------------- | -------------------------------- | ------------------------------------------------ |
+| `PreToolUse`  | Before a tool call executes      | Validation, blocking dangerous commands, logging |
+| `PostToolUse` | After a tool call completes      | Auto-formatting, follow-up checks, metrics       |
+| `Stop`        | When the agent finishes its turn | Final verification, summaries, notifications     |
 
 ### `match` Fields
 

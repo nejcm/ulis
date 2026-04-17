@@ -1,5 +1,5 @@
 {
-  "name": "@nejcm/ulis",
+  "name": "@nejcm/agent-ulis",
   "version": "0.0.1-alpha.1",
   "description": "AI ULIS for configuration management",
   "license": "ISC",

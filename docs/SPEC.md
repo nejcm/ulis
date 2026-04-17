@@ -314,40 +314,10 @@ const skills = parseSkills(join(aiDir, "skills"));
 const mcp = parseMcpConfig(join(aiDir, "mcp.json"));
 const plugins = parsePluginsConfig(join(aiDir, "plugins.json"));
 
-generateClaude(
-  agents,
-  skills,
-  mcp,
-  plugins,
-  aiDir,
-  join(generatedDir, "claude"),
-  buildConfig,
-);
-generateOpencode(
-  agents,
-  skills,
-  mcp,
-  plugins,
-  aiDir,
-  join(generatedDir, "opencode"),
-  buildConfig,
-);
-generateCodex(
-  agents,
-  skills,
-  mcp,
-  aiDir,
-  join(generatedDir, "codex"),
-  buildConfig,
-);
-generateCursor(
-  agents,
-  skills,
-  mcp,
-  aiDir,
-  join(generatedDir, "cursor"),
-  buildConfig,
-);
+generateClaude(agents, skills, mcp, plugins, aiDir, join(generatedDir, "claude"), buildConfig);
+generateOpencode(agents, skills, mcp, plugins, aiDir, join(generatedDir, "opencode"), buildConfig);
+generateCodex(agents, skills, mcp, aiDir, join(generatedDir, "codex"), buildConfig);
+generateCursor(agents, skills, mcp, aiDir, join(generatedDir, "cursor"), buildConfig);
 ```
 
 Parsing validates against Zod schemas and fails fast with a descriptive error if a field is invalid.

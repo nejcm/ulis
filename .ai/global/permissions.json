@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/nejcm/ulis/main/schema/permissions.json",
+  "$schema": "https://raw.githubusercontent.com/nejcm/agent-ulis/main/schema/permissions.json",
   "claude": {
     "defaultMode": "default",
     "allow": [
