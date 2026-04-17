@@ -1,8 +1,9 @@
 ---
 description: Update implementation and project documentation
 subtask: true
-model: anthropic/claude-haiku-4-5-20251001
 platforms:
+  claude:
+    model: anthropic/claude-haiku-4-5-20251001
   opencode:
     model: anthropic/claude-haiku-4-5-20251001
 ---
@@ -10,10 +11,6 @@ platforms:
 # Documentation Analysis
 
 1. Review current documentation status:
-   - Check `specs/implementation_status.md` for overall project status.
-   - Review the implemented phase document (`specs/phase{N}_implementation_plan.md`).
-   - Review `specs/flutter_structurizr_implementation_spec.md` and `specs/flutter_structurizr_implementation_spec_updated.md`.
-   - Review `specs/testing_plan.md` to ensure it is current given recent test passes, failures, and changes.
    - Examine `CLAUDE.md` and `README.md` for project-wide documentation.
    - Check for and document any new lessons learned or best practices in `CLAUDE.md`.
 
@@ -78,7 +75,7 @@ platforms:
 # Guidelines
 
 - Do not create new specification files.
-- Update existing files in the `specs/` directory.
+- Update existing README and other doc files.
 - Maintain consistent documentation style.
 - Include practical examples where appropriate.
 - Cross-reference related documentation sections.

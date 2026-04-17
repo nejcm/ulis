@@ -96,11 +96,54 @@ Generators iterate servers via the shared `mcpServersFor(mcp, target)` helper in
 
 ## Skills
 
-Skills are reusable, invocable capabilities (each a `SKILL.md` file) stored in `.ai/global/skills/`. The build system copies them as-is into `generated/opencode/skills/`.
+Skills are reusable, invocable capabilities (each a `SKILL.md` file) stored in `.ai/global/skills/`. The build system copies them into the generated output for each supported platform.
 
-### Installing skills from a registry
+### Declarative skill installation via `plugins.json`
 
-The [Vercel Skills CLI](https://github.com/vercel-labs/skills) (`npx skills@latest`) installs only into known agent directories and has no `--dir` flag. Use the wrapper script instead:
+The preferred way to install skills from external registries is to declare them in `.ai/global/plugins.json`. During `bun run install:configs` the installer calls `npx skills@latest add <name>` with the appropriate `-a <agent>` flags — no files are staged in this repo.
+
+```json
+{
+  "*": {
+    "skills": [
+      {
+        "name": "vercel-labs/agent-skills",
+        "args": ["--skill", "find-skills"]
+      },
+      { "name": "mattpocock/skills/grill-me" }
+    ]
+  },
+  "claude": {
+    "plugins": [
+      {
+        "name": "everything-claude-code",
+        "source": "github",
+        "repo": "affaan-m/everything-claude-code"
+      }
+    ],
+    "skills": []
+  },
+  "opencode": {
+    "skills": [{ "name": "some-opencode-only-skill" }]
+  }
+}
+```
+
+| Key          | Meaning                                                                          |
+| ------------ | -------------------------------------------------------------------------------- |
+| `"*"`        | Installed globally — `npx skills@latest add` targets **all** supported platforms |
+| `"claude"`   | Installed only for Claude Code (`-a claude-code`)                                |
+| `"opencode"` | Installed only for OpenCode (`-a opencode`)                                      |
+| `"codex"`    | Installed only for Codex (`-a codex`)                                            |
+| `"cursor"`   | Installed only for Cursor (`-a cursor`)                                          |
+
+Each entry under `skills` takes a `name` (package, `owner/repo/skill`, or URL) and an optional `args` array forwarded verbatim to the CLI. Skills are installed system-globally — no files are copied into this repo.
+
+Claude Code platform entries also support a `plugins` array for marketplace plugins installed via `claude plugin add`.
+
+### Installing a skill into `.ai/global/skills/` (local source)
+
+Use the wrapper script to pull a skill from a registry into the canonical source tree so the build includes it:
 
 ```bash
 # Install all skills from a package
@@ -113,9 +156,7 @@ bun run install:skill vercel-labs/agent-skills --skill deploy-to-vercel --yes
 bun run install:skill https://github.com/org/skills-repo --yes
 ```
 
-The script installs via the `universal` agent into a temporary `.agents/` directory, moves the result to `.ai/global/skills/`, then removes the staging directory.
-
-After installing, run `bun run build` to include the new skill in generated configs.
+The script installs via the `universal` agent into a temporary `.agents/` directory, moves the result to `.ai/global/skills/`, then removes the staging directory. Run `bun run build` afterwards to include the skill in generated configs.
 
 ### Adding a skill manually
 
@@ -132,7 +173,7 @@ After installing, run `bun run build` to include the new skill in generated conf
     skills/           # skill definitions           → see skills/README.md
     commands/         # slash commands              → see commands/README.md
     mcp.json          # Canonical MCP server definitions
-    plugins.json      # Claude Code marketplace plugins/skills
+    plugins.json      # Plugins and skills per platform (global and per-tool)
     guardrails.md     # Cost controls and rate limits
 src/                # TypeScript build system (see below)
 generated/          # Built output — committed, ready to install without building
@@ -167,13 +208,13 @@ src/
 
 ### Generator outputs
 
-| Source                 | OpenCode                                     | Claude Code                          | Codex                   | Cursor     |
-| ---------------------- | -------------------------------------------- | ------------------------------------ | ----------------------- | ---------- |
-| `agents/*.md`          | `opencode.json` agent blocks + `agents/` dir | `rules/common/agents.md` (generated) | Instruction sections    | —          |
-| `guardrails.md`        | —                                            | `rules/common/guardrails.md`         | Appended to `AGENTS.md` | —          |
-| `mcp.json`             | `opencode.json` mcp block                    | `settings.json` mcpServers           | `config.toml`           | `mcp.json` |
-| `plugins.json`         | Plugin array                                 | `settings.json` enabledPlugins       | —                       | —          |
-| `skills/`, `commands/` | Copied as-is                                 | —                                    | —                       | —          |
+| Source                 | OpenCode                                     | Claude Code                                                  | Codex                   | Cursor     |
+| ---------------------- | -------------------------------------------- | ------------------------------------------------------------ | ----------------------- | ---------- |
+| `agents/*.md`          | `opencode.json` agent blocks + `agents/` dir | `rules/common/agents.md` (generated)                         | Instruction sections    | —          |
+| `guardrails.md`        | —                                            | `rules/common/guardrails.md`                                 | Appended to `AGENTS.md` | —          |
+| `mcp.json`             | `opencode.json` mcp block                    | `settings.json` mcpServers                                   | `config.toml`           | `mcp.json` |
+| `plugins.json`         | Plugin array + per-platform skills install   | `settings.json` enabledPlugins + per-platform skills install | —                       | —          |
+| `skills/`, `commands/` | Copied as-is                                 | —                                                            | —                       | —          |
 
 ### Adding a new generator
 
@@ -225,6 +266,14 @@ bun run tui                # Launch the interactive generator/install UI
 | Cursor               | Merge (additive) | `~/.cursor/mcp.json`      |
 
 When `--backup` is enabled, existing configs are backed up before overwrite (`*.backup.YYYYMMDD_HHMMSS`).
+
+### Skills and plugins installed during `install:configs`
+
+After deploying config files, the installer processes `.ai/global/plugins.json`:
+
+1. **Per-platform skills** — For each platform being installed, any `skills` declared under that platform key are installed via `npx skills@latest add <name> -a <agent> --yes [extra-args]`. Skills are written directly into the agent's system config directory; no files are staged here.
+2. **Global skills** (`"*"` key) — After all platform installs, any skills under `"*"` are installed for every supported agent (`-a claude-code -a opencode -a codex -a cursor`).
+3. **Claude plugins** — `plugins` under the `"claude"` key are installed via `claude plugin add --from <source>` (requires the `claude` CLI).
 
 ## Security
 

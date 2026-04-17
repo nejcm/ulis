@@ -205,12 +205,59 @@ Defined once in `.ai/global/mcp.json`. Each server may declare a `targets` list 
 
 Environment variables use `${VAR}` syntax everywhere. The build translates to platform-specific syntax (OpenCode headers use `{env:VAR}`).
 
-### 3.4 Plugin
+### 3.4 Plugin / Skill registry entry
 
-Defined in `.ai/global/plugins.json`. Two categories:
+Defined in `.ai/global/plugins.json`. The file is keyed by platform name or the special `"*"` wildcard:
 
-- **Claude marketplace plugins**: Official or GitHub-sourced plugins installed into `settings.json`
-- **OpenCode plugins**: TypeScript files in `.ai/global/plugins/` referenced in `opencode.json`
+```json
+{
+  "*": {
+    "skills": [
+      { "name": "mattpocock/skills/grill-me" },
+      { "name": "vercel-labs/agent-skills", "args": ["--skill", "find-skills"] }
+    ]
+  },
+  "claude": {
+    "plugins": [
+      {
+        "name": "everything-claude-code",
+        "source": "github",
+        "repo": "affaan-m/everything-claude-code"
+      },
+      { "name": "frontend-design", "source": "official" }
+    ],
+    "skills": []
+  },
+  "opencode": {
+    "skills": [{ "name": "some-opencode-skill" }]
+  }
+}
+```
+
+**Key semantics:**
+
+| Key            | Effect during `install:configs`                                                          |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| `"*"`          | `skills` are installed for **all** platforms via `npx skills@latest add -a <each-agent>` |
+| `"<platform>"` | `skills` are installed for that platform only (`-a <agent-name>`)                        |
+| `"claude"`     | `plugins` are installed via `claude plugin add --from <source>`                          |
+
+Skills are installed **system-globally** — `npx skills@latest add` writes directly into each agent's known config directory. No files are staged in this repo.
+
+Each `skills` entry supports:
+
+| Field  | Required | Description                                                            |
+| ------ | -------- | ---------------------------------------------------------------------- |
+| `name` | yes      | Package name, `owner/repo/skill`, or full URL                          |
+| `args` | no       | Additional CLI arguments forwarded verbatim to `npx skills@latest add` |
+
+Each `plugins` entry (Claude only) supports:
+
+| Field    | Required | Description                                     |
+| -------- | -------- | ----------------------------------------------- |
+| `name`   | yes      | Plugin identifier                               |
+| `source` | yes      | `"official"` or `"github"`                      |
+| `repo`   | no       | `"owner/repo"` — required when `source: github` |
 
 ### 3.5 Hook
 
@@ -267,10 +314,40 @@ const skills = parseSkills(join(aiDir, "skills"));
 const mcp = parseMcpConfig(join(aiDir, "mcp.json"));
 const plugins = parsePluginsConfig(join(aiDir, "plugins.json"));
 
-generateClaude(agents, skills, mcp, plugins, aiDir, join(generatedDir, "claude"), buildConfig);
-generateOpencode(agents, skills, mcp, plugins, aiDir, join(generatedDir, "opencode"), buildConfig);
-generateCodex(agents, skills, mcp, aiDir, join(generatedDir, "codex"), buildConfig);
-generateCursor(agents, skills, mcp, aiDir, join(generatedDir, "cursor"), buildConfig);
+generateClaude(
+  agents,
+  skills,
+  mcp,
+  plugins,
+  aiDir,
+  join(generatedDir, "claude"),
+  buildConfig,
+);
+generateOpencode(
+  agents,
+  skills,
+  mcp,
+  plugins,
+  aiDir,
+  join(generatedDir, "opencode"),
+  buildConfig,
+);
+generateCodex(
+  agents,
+  skills,
+  mcp,
+  aiDir,
+  join(generatedDir, "codex"),
+  buildConfig,
+);
+generateCursor(
+  agents,
+  skills,
+  mcp,
+  aiDir,
+  join(generatedDir, "cursor"),
+  buildConfig,
+);
 ```
 
 Parsing validates against Zod schemas and fails fast with a descriptive error if a field is invalid.
