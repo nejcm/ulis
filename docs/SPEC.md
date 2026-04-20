@@ -1,23 +1,26 @@
 # ULIS — Unified LLM Interface Specification
 
-Version `1.0.0` · Source: `src/schema.ts` · Targets: Claude Code, OpenCode, Codex, Cursor
+Version `1.0.0` · Source: `src/schema/` · Targets: Claude Code, OpenCode, Codex, Cursor · CLI: `@nejcm/ulis`
 
 ---
 
 ## 1. Overview
 
-ULIS is a build system that lets you define AI agent configurations **once** and compile them into the native format expected by each supported tool. You write canonical entity definitions in `.ai/global/`, run `bun run build`, and get ready-to-deploy configs in `generated/`.
+ULIS is a CLI (`ulis`) that lets you define AI agent configurations **once** and compile them into the native format expected by each supported tool. You write canonical entity definitions in `.ulis/` (project) or `~/.ulis/` (global), run `ulis build` (or `ulis install` to also deploy), and get ready-to-deploy configs under `<source>/generated/`.
 
 ```
-.ai/global/                   generated/
+.ulis/                        .ulis/generated/
 ├── agents/*.md       ─────►  ├── claude/   (agents/, commands/, settings.json, rules/)
 ├── skills/*/         ─────►  ├── opencode/ (opencode.json, agents/, skills/)
 │   SKILL.md                  ├── codex/    (config.toml, agents/*.toml, AGENTS.md)
-├── mcp.json          ─────►  └── cursor/   (agents/*.mdc, skills/, mcp.json)
-├── plugins.json
+├── mcp.yaml          ─────►  └── cursor/   (agents/*.mdc, skills/, mcp.json)
+├── plugins.yaml
+├── permissions.yaml
 ├── guardrails.md
-└── build.config.json   ◄─── optional: per-platform overrides over BUILD_CONFIG defaults
+└── config.yaml          ◄─── minimal: version + name (room to grow)
 ```
+
+The generated tree is then copied to the per-platform destination (`./.claude/` or `~/.claude/` depending on mode) by `ulis install`.
 
 **Why it exists:** Claude Code, OpenCode, Codex, and Cursor all have incompatible config formats. Without ULIS you maintain four separate, drift-prone config trees. ULIS keeps one source of truth and compiles it.
 
@@ -27,8 +30,8 @@ ULIS is a build system that lets you define AI agent configurations **once** and
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  Source: .ai/global/                                    │
-│  agents/*.md  skills/*/SKILL.md  mcp.json  plugins.json │
+│  Source: .ulis/  (or ~/.ulis/)                          │
+│  agents/*.md  skills/*/SKILL.md  mcp.yaml  plugins.yaml │
 └────────────────────────┬────────────────────────────────┘
                          │ gray-matter + Zod parse
                          ▼
@@ -56,9 +59,13 @@ Between parsing and generation the orchestrator runs **validators** (`src/valida
 
 Errors abort the build (exit code 1, no files written). Warnings print and the build proceeds.
 
-## 2.1 Build Configuration (`.ai/global/build.config.json`)
+## 2.1 Build configuration
 
-All machine-specific or platform-tunable constants live in `src/config.ts` under `BUILD_CONFIG.platforms.<tool>`. To override any leaf field for your repo, create `.ai/global/build.config.json` with the same shape — it is **deep-merged** on top of the defaults at build time, so you only specify what you want to change.
+`config.yaml` holds the minimum the CLI needs (`version`, `name`). All machine-specific defaults live in `src/config.ts` under `BUILD_CONFIG.platforms.<tool>`.
+
+> **Legacy note:** earlier versions read a `build.config.json` file for deep-merged overrides. That file is no longer loaded automatically; the example block below is kept as a reference for the override surface that will re-land on `config.yaml` in a future release.
+
+All machine-specific or platform-tunable constants live in `src/config.ts` under `BUILD_CONFIG.platforms.<tool>`. To override any leaf field for your repo, create `.ulis/build.config.json` with the same shape — it is **deep-merged** on top of the defaults at build time, so you only specify what you want to change.
 
 Example:
 
@@ -98,10 +105,10 @@ Capability mismatches are handled with **best-effort + comments**: if a target l
 
 ### 3.1 Agent
 
-An autonomous task executor. Defined in `.ai/global/agents/{name}.md` with YAML frontmatter + a Markdown prompt body.
+An autonomous task executor. Defined in `.ulis/agents/{name}.md` with YAML frontmatter + a Markdown prompt body.
 
 ```yaml
-# .ai/global/agents/builder.md
+# .ulis/agents/builder.md
 ---
 description: Implements features from specs
 model: sonnet
@@ -143,10 +150,10 @@ You are a focused implementation agent. Read specs carefully before writing code
 
 ### 3.2 Skill
 
-A composable, invocable capability. Defined as a directory `.ai/global/skills/{name}/SKILL.md`. Both the prompt and associated files (scripts, templates) live in the same directory.
+A composable, invocable capability. Defined as a directory `.ulis/skills/{name}/SKILL.md`. Both the prompt and associated files (scripts, templates) live in the same directory.
 
 ```yaml
-# .ai/global/skills/code-quality/SKILL.md
+# .ulis/skills/code-quality/SKILL.md
 ---
 description: Run code quality checks on the current file
 argumentHint: "[file-path]"
@@ -167,7 +174,7 @@ Skills become:
 
 ### 3.3 MCP Server
 
-Defined once in `.ai/global/mcp.json`. Each server may declare a `targets` list to restrict it to specific platforms.
+Defined once in `.ulis/mcp.yaml` (JSON is also accepted for backwards compatibility). Each server may declare a `targets` list to restrict it to specific platforms.
 
 **Semantics:**
 
@@ -207,7 +214,7 @@ Environment variables use `${VAR}` syntax everywhere. The build translates to pl
 
 ### 3.4 Plugin / Skill registry entry
 
-Defined in `.ai/global/plugins.json`. The file is keyed by platform name or the special `"*"` wildcard:
+Defined in `.ulis/plugins.yaml` (JSON also accepted). The file is keyed by platform name or the special `"*"` wildcard:
 
 ```json
 {
@@ -301,23 +308,25 @@ Hooks are native to Claude Code only. On other targets they are silently dropped
 ## 5. Build Pipeline
 
 ```
-bun run build                  # all targets
-bun run build:claude           # single target
-bun run build --target cursor  # same via flag
+ulis build                     # all targets
+ulis build --target claude     # single target
+ulis build --target claude,cursor
+ulis install --yes             # build + deploy (project mode)
+ulis install --global --yes    # build + deploy from ~/.ulis/
 ```
 
-**Internal flow** (`src/build.ts`): `aiDir` is `join(repoRoot, ".ai", "global")`.
+**Internal flow** (`src/build.ts`): `sourceDir` is resolved per invocation (see `src/utils/resolve-source.ts`).
 
 ```typescript
-const agents = parseAgents(join(aiDir, "agents"));
-const skills = parseSkills(join(aiDir, "skills"));
-const mcp = parseMcpConfig(join(aiDir, "mcp.json"));
-const plugins = parsePluginsConfig(join(aiDir, "plugins.json"));
+const agents = parseAgents(join(sourceDir, "agents"));
+const skills = parseSkills(join(sourceDir, "skills"));
+const mcp = loadMcp(sourceDir);
+const plugins = loadPlugins(sourceDir);
 
-generateClaude(agents, skills, mcp, plugins, aiDir, join(generatedDir, "claude"), buildConfig);
-generateOpencode(agents, skills, mcp, plugins, aiDir, join(generatedDir, "opencode"), buildConfig);
-generateCodex(agents, skills, mcp, aiDir, join(generatedDir, "codex"), buildConfig);
-generateCursor(agents, skills, mcp, aiDir, join(generatedDir, "cursor"), buildConfig);
+generateClaude(agents, skills, mcp, plugins, sourceDir, join(generatedDir, "claude"), buildConfig);
+generateOpencode(agents, skills, mcp, plugins, sourceDir, join(generatedDir, "opencode"), buildConfig);
+generateCodex(agents, skills, mcp, sourceDir, join(generatedDir, "codex"), buildConfig);
+generateCursor(agents, skills, mcp, sourceDir, join(generatedDir, "cursor"), buildConfig);
 ```
 
 Parsing validates against Zod schemas and fails fast with a descriptive error if a field is invalid.
@@ -374,10 +383,10 @@ For capability mismatches, use `buildPolicyCommentBlock(agent.frontmatter, "md" 
 
 ## 8. Examples
 
-**Source:** `.ai/global/agents/` — canonical agent definitions
-**Generated:** `generated/claude/agents/`, `generated/opencode/opencode.json`, etc.
+**Source:** `.ulis/agents/` — canonical agent definitions
+**Generated:** `.ulis/generated/claude/agents/`, `.ulis/generated/opencode/opencode.json`, etc.
 
-Run `bun run build` to see a full end-to-end example using the project's own agents.
+Run `ulis build --source tests/fixtures/example-ulis` from a checkout of this repo (or `bun run dev`) to see a full end-to-end example.
 
 **Field reference:** [REFERENCE.md](./REFERENCE.md) — auto-generated from Zod schemas.
 
@@ -385,13 +394,24 @@ Run `bun run build` to see a full end-to-end example using the project's own age
 
 ## 9. Tooling
 
-| Script                                            | Purpose                                     |
-| ------------------------------------------------- | ------------------------------------------- |
-| `bun run build`                                   | Build all targets                           |
-| `bun run build:{claude\|opencode\|codex\|cursor}` | Build single target                         |
-| `bun run test`                                    | Run test suite (54 tests)                   |
-| `bun run gen:schemas`                             | Regenerate `schemas/*.json` from Zod        |
-| `bun run gen:reference`                           | Regenerate `docs/REFERENCE.md` from Zod     |
-| `bun run lint`                                    | TypeScript type check                       |
-| `bun run clean`                                   | Delete `generated/`                         |
-| `bun run install:configs`                         | Deploy `generated/` to platform config dirs |
+End-user CLI (see [CLI.md](./CLI.md) for the full surface):
+
+| Command                           | Purpose                                      |
+| --------------------------------- | -------------------------------------------- |
+| `ulis init [--global]`            | Scaffold `.ulis/` (or `~/.ulis/`)            |
+| `ulis build [--target ...]`       | Generate configs under `<source>/generated/` |
+| `ulis install [--global] [--yes]` | Build and deploy to platform config dirs     |
+| `ulis tui`                        | Interactive TUI                              |
+
+Repo dev scripts:
+
+| Script                  | Purpose                                           |
+| ----------------------- | ------------------------------------------------- |
+| `bun run build`         | Bundle `dist/cli.js` + regenerate `dist/schemas/` |
+| `bun run dev`           | `ulis build --source tests/fixtures/example-ulis` |
+| `bun run test`          | Run test suite                                    |
+| `bun run lint`          | `tsc --noEmit`                                    |
+| `bun run format`        | Format with oxfmt                                 |
+| `bun run gen:schemas`   | Regenerate `dist/schemas/*.schema.json`           |
+| `bun run gen:reference` | Regenerate `docs/REFERENCE.md`                    |
+| `bun run clean`         | Delete `dist/`                                    |

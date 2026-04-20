@@ -1,0 +1,27 @@
+# yaml-language-server: $schema={{schemaBase}}/permissions.schema.json
+
+# Per-platform permission rules (allow/deny/ask patterns, approval modes, etc.)
+# Each section is optional — omitted platforms use their own defaults.
+#
+# Example:
+#
+# claude:
+#   defaultMode: default
+#   allow:
+#     - "Bash(git status)"
+#     - "Bash(git diff*)"
+#   deny:
+#     - "Bash(rm -rf *)"
+#
+# opencode:
+#   permission:
+#     edit: ask
+#     bash: ask
+#
+# codex:
+#   approvalMode: on-request
+#   sandbox: workspace-write
+#
+# cursor:
+#   mcpAllowlist: []
+#   terminalAllowlist: []

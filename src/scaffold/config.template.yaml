@@ -1,0 +1,4 @@
+# yaml-language-server: $schema={{schemaBase}}/config.schema.json
+
+version: 1
+name: { { name } }

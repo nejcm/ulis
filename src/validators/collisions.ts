@@ -1,4 +1,3 @@
-import { AI_GLOBAL_SOURCES_DIR } from "../config.js";
 import type { ParsedAgent } from "../parsers/agent.js";
 import type { ParsedSkill } from "../parsers/skill.js";
 import type { Diagnostic } from "./cross-refs.js";
@@ -20,7 +19,7 @@ export function validateCollisions(
       agents.map((a) => a.name),
       "agent",
       "Duplicate agent name",
-      `Rename one of the colliding files in .ai/${AI_GLOBAL_SOURCES_DIR}/agents/`,
+      `Rename one of the colliding files in the ulis agents/ folder`,
     ),
   );
 
@@ -29,7 +28,7 @@ export function validateCollisions(
       skills.map((s) => s.frontmatter.name ?? s.name),
       "skill",
       "Duplicate skill name",
-      `Rename one of the colliding directories in .ai/${AI_GLOBAL_SOURCES_DIR}/skills/ (or its \`name:\` frontmatter)`,
+      `Rename one of the colliding directories in the ulis skills/ folder (or its \`name:\` frontmatter)`,
     ),
   );
 

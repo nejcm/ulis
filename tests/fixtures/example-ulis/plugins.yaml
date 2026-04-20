@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=./node_modules/@nejcm/ulis/dist/schemas/plugins.schema.json
+
+"*":
+  skills:
+    - name: vercel-labs/skills
+      args:
+        - --skill
+        - find-skills
+    - name: https://github.com/anthropics/skills
+      args:
+        - --skill
+        - mcp-builder
+    - name: microsoft/playwright-cli
+      args:
+        - --skill
+        - playwright-cli
+    - name: mattpocock/skills/write-a-prd
+    - name: mattpocock/skills/prd-to-plan
+    - name: mattpocock/skills/grill-me
+    - name: mattpocock/skills/design-an-interface
+    - name: mattpocock/skills/request-refactor-plan
+claude:
+  plugins:
+    - name: frontend-design
+      source: official
+    - name: ralph-loop
+      source: official
+  skills: []

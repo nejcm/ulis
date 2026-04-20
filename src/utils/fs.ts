@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, readFileSync, existsSync, cpSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export function ensureDir(dirPath: string): void {
@@ -28,6 +28,24 @@ export function cleanDir(dirPath: string): void {
     rmSync(dirPath, { recursive: true, force: true });
   }
   ensureDir(dirPath);
+}
+
+/**
+ * If `outDir/AGENTS.md` exists, write alias files (e.g. CLAUDE.md) alongside
+ * it that reference AGENTS.md. Existing files at those paths are left
+ * untouched so platform-specific overrides win.
+ */
+export function writeAgentsAliases(outDir: string, aliases: readonly string[]): readonly string[] {
+  const agentsPath = join(outDir, "AGENTS.md");
+  if (!existsSync(agentsPath)) return [];
+  const written: string[] = [];
+  for (const alias of aliases) {
+    const aliasPath = join(outDir, alias);
+    if (existsSync(aliasPath)) continue;
+    writeFile(aliasPath, `See [AGENTS.md](./AGENTS.md) for instructions.\n`);
+    written.push(alias);
+  }
+  return written;
 }
 
 /**

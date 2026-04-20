@@ -1,18 +1,18 @@
 import { join, resolve } from "node:path";
 
-import { AI_GLOBAL_SOURCES_DIR } from "./config.js";
+import { ULIS_GENERATED_DIRNAME } from "./config.js";
 import { generateClaude } from "./generators/claude.js";
 import { generateCodex } from "./generators/codex.js";
 import { generateCursor } from "./generators/cursor.js";
 import { generateOpencode } from "./generators/opencode.js";
 import { parseAgents } from "./parsers/agent.js";
+import { loadMcp } from "./parsers/mcp.js";
 import { loadPermissions } from "./parsers/permissions.js";
+import { loadPlugins } from "./parsers/plugins.js";
 import { parseSkills } from "./parsers/skill.js";
 import type { Platform } from "./platforms.js";
 import { PLATFORMS, uniquePlatforms } from "./platforms.js";
-import { McpConfigSchema, PluginsConfigSchema } from "./schema.js";
 import { loadBuildConfig } from "./utils/build-config.js";
-import { readFile } from "./utils/fs.js";
 import { log } from "./utils/logger.js";
 import { validateCollisions } from "./validators/collisions.js";
 import { validateCrossRefs, type Diagnostic } from "./validators/cross-refs.js";
@@ -28,39 +28,53 @@ export interface Logger {
 
 export interface BuildOptions {
   readonly targets?: readonly Platform[];
-  readonly rootDir?: string;
+  /**
+   * Path to the ulis source tree (e.g. `./.ulis/` or `~/.ulis/` or a fixture path).
+   * Required.
+   */
+  readonly sourceDir: string;
+  /**
+   * Directory to write generated per-platform subtrees into.
+   * Defaults to `<sourceDir>/generated`.
+   */
+  readonly outputDir?: string;
   readonly logger?: Logger;
 }
 
-export function runBuild(options: BuildOptions = {}): readonly Platform[] {
+export interface BuildResult {
+  readonly targets: readonly Platform[];
+  readonly sourceDir: string;
+  readonly outputDir: string;
+}
+
+export function runBuild(options: BuildOptions): BuildResult {
   const logger = options.logger ?? log;
-  const rootDir = options.rootDir ?? resolve(join(import.meta.dirname, ".."));
-  const aiDir = resolve(join(rootDir, ".ai", AI_GLOBAL_SOURCES_DIR));
-  const generatedDir = resolve(join(rootDir, "generated"));
+  const sourceDir = resolve(options.sourceDir);
+  const outputDir = resolve(options.outputDir ?? join(sourceDir, ULIS_GENERATED_DIRNAME));
   const activeTargets = options.targets ? uniquePlatforms(options.targets) : [...PLATFORMS];
 
-  logger.header("AI Config Build System");
-  logger.info(`Source: ${aiDir}`);
-  logger.info(`Output: ${generatedDir}`);
+  logger.header("ULIS Build");
+  logger.info(`Source: ${sourceDir}`);
+  logger.info(`Output: ${outputDir}`);
   logger.info(`Targets: ${activeTargets.join(", ")}`);
 
   logger.header("Parsing");
-  const agents = parseAgents(join(aiDir, "agents"));
+  const agents = parseAgents(join(sourceDir, "agents"));
   logger.success(`Parsed ${agents.length} agents`);
 
-  const skills = parseSkills(join(aiDir, "skills"));
+  const skills = parseSkills(join(sourceDir, "skills"));
   logger.success(`Parsed ${skills.length} skills`);
 
-  const mcp = McpConfigSchema.parse(JSON.parse(readFile(join(aiDir, "mcp.json"))));
+  const mcp = loadMcp(sourceDir);
   logger.success(`Parsed ${Object.keys(mcp.servers).length} MCP servers`);
 
-  const plugins = PluginsConfigSchema.parse(JSON.parse(readFile(join(aiDir, "plugins.json"))));
+  const plugins = loadPlugins(sourceDir);
   logger.success(`Parsed plugins config`);
 
-  const buildConfig = loadBuildConfig(aiDir);
+  const buildConfig = loadBuildConfig(sourceDir);
   logger.success(`Loaded build config`);
 
-  const permissions = loadPermissions(aiDir);
+  const permissions = loadPermissions(sourceDir);
   logger.success(`Loaded permissions config`);
 
   logger.header("Validation");
@@ -88,24 +102,24 @@ export function runBuild(options: BuildOptions = {}): readonly Platform[] {
   logger.success(`Validation passed (${warningCount} warning(s))`);
 
   for (const target of activeTargets) {
-    const outDir = join(generatedDir, target);
+    const outDir = join(outputDir, target);
     switch (target) {
       case "opencode":
-        generateOpencode(agents, skills, mcp, aiDir, outDir, buildConfig, permissions);
+        generateOpencode(agents, skills, mcp, sourceDir, outDir, buildConfig, permissions);
         break;
       case "claude":
-        generateClaude(agents, skills, mcp, plugins, aiDir, outDir, buildConfig, permissions);
+        generateClaude(agents, skills, mcp, plugins, sourceDir, outDir, buildConfig, permissions);
         break;
       case "codex":
-        generateCodex(agents, skills, mcp, aiDir, outDir, buildConfig, permissions);
+        generateCodex(agents, skills, mcp, sourceDir, outDir, buildConfig, permissions);
         break;
       case "cursor":
-        generateCursor(agents, skills, mcp, aiDir, outDir, buildConfig, permissions);
+        generateCursor(agents, skills, mcp, sourceDir, outDir, buildConfig, permissions);
         break;
     }
   }
 
   logger.header("Build Complete");
   logger.success(`Generated configs for: ${activeTargets.join(", ")}`);
-  return activeTargets;
+  return { targets: activeTargets, sourceDir, outputDir };
 }

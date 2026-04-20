@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=./node_modules/@nejcm/ulis/dist/schemas/mcp.schema.json
+
+servers:
+  context7:
+    type: remote
+    url: https://mcp.context7.com/mcp
+    headers:
+      CONTEXT7_API_KEY: ${CONTEXT7_API_KEY}
+    localFallback:
+      command: npx
+      args:
+        - -y
+        - "@upstash/context7-mcp"
+        - --api-key
+        - ${CONTEXT7_API_KEY}
+  github:
+    type: local
+    command: npx
+    args:
+      - -y
+      - "@modelcontextprotocol/server-github"
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_PAT}
+  gh_grep:
+    type: remote
+    url: https://mcp.grep.app
+  memory:
+    type: local
+    command: npx
+    args:
+      - -y
+      - "@modelcontextprotocol/server-memory"
+  sequential-thinking:
+    type: local
+    command: npx
+    args:
+      - -y
+      - "@modelcontextprotocol/server-sequential-thinking"
+  context-mode:
+    type: local
+    command: npx
+    args:
+      - -y
+      - context-mode
+  linear:
+    type: remote
+    url: https://mcp.linear.app/mcp
+    headers:
+      Authorization: Bearer ${LINEAR_API_KEY}
+    targets:
+      - opencode

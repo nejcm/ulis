@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 
-import { parseInstallCliArgs } from "./install-cli.js";
 import { parsePlatformList } from "./platforms.js";
 import { resolveWorkflowPlan, toggleAllPlatformSelections, togglePlatformSelection } from "./workflow.js";
 
@@ -11,16 +10,6 @@ describe("parsePlatformList", () => {
 
   it("throws for unknown platforms", () => {
     expect(() => parsePlatformList(["claude,unknown"])).toThrow("Unknown platform");
-  });
-});
-
-describe("parseInstallCliArgs", () => {
-  it("supports repeated platform flags with backup and rebuild options", () => {
-    expect(parseInstallCliArgs(["--platform", "claude", "--platform", "cursor", "--backup", "--rebuild"])).toEqual({
-      platforms: ["claude", "cursor"],
-      backup: true,
-      rebuild: true,
-    });
   });
 });
 

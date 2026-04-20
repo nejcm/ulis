@@ -4,12 +4,12 @@
  *
  * Usage: bun run gen:reference
  */
-import { writeFileSync, mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { zodToJsonSchema } from "zod-to-json-schema";
 
-import { AgentFrontmatterSchema, SkillFrontmatterSchema, McpConfigSchema, PluginsConfigSchema } from "../schema.js";
+import { AgentFrontmatterSchema, McpConfigSchema, PluginsConfigSchema, SkillFrontmatterSchema } from "../schema.js";
 
 const outDir = resolve(join(import.meta.dirname, "../..", "docs"));
 mkdirSync(outDir, { recursive: true });

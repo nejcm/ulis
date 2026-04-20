@@ -1,7 +1,0 @@
-{
-  "$ref": "#/definitions/mcp",
-  "definitions": {
-    "mcp": {}
-  },
-  "$schema": "http://json-schema.org/draft-07/schema#"
-}

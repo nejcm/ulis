@@ -1,14 +1,12 @@
-import { join } from "node:path";
-
 import { PermissionsConfigSchema, type PermissionsConfig } from "../schema.js";
-import { fileExists, readFile } from "../utils/fs.js";
+import { loadConfigFile } from "../utils/config-loader.js";
 
 /**
- * Load and validate `.ai/global/permissions.json`.
- * Returns an empty object if the file does not exist.
+ * Load and validate the permissions config (yaml or json) from `sourceDir`.
+ * Returns an empty object if no permissions file exists.
  */
-export function loadPermissions(aiDir: string): PermissionsConfig {
-  const file = join(aiDir, "permissions.json");
-  if (!fileExists(file)) return {};
-  return PermissionsConfigSchema.parse(JSON.parse(readFile(file)));
+export function loadPermissions(sourceDir: string): PermissionsConfig {
+  const raw = loadConfigFile(sourceDir, "permissions");
+  if (raw === undefined) return {};
+  return PermissionsConfigSchema.parse(raw);
 }

@@ -3,17 +3,29 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, write
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 
-import pluginsJson from "../.ai/global/plugins.json" with { type: "json" };
 import { runBuild, type Logger } from "./build.js";
+import { ULIS_GENERATED_DIRNAME } from "./config.js";
+import { loadPlugins } from "./parsers/plugins.js";
 import { PLATFORM_LABELS, PLATFORMS, uniquePlatforms, type Platform } from "./platforms.js";
 import { type PluginsConfig } from "./schema.js";
 import { deepMerge } from "./utils/build-config.js";
 
 export interface InstallOptions {
   readonly platforms?: readonly Platform[];
+  /**
+   * ulis source tree (e.g. `./.ulis/` or `~/.ulis/`).
+   */
+  readonly sourceDir: string;
+  /**
+   * Where the per-platform configs land — typically `~` for global, CWD for project.
+   */
+  readonly destBase: string;
+  /**
+   * Where the intermediate build output lives. Defaults to `<sourceDir>/generated/`.
+   */
+  readonly outputDir?: string;
   readonly backup?: boolean;
   readonly rebuild?: boolean;
-  readonly rootDir?: string;
   readonly logger?: Logger;
 }
 
@@ -45,20 +57,22 @@ export function loadDotEnv(rootDir: string, env: NodeJS.ProcessEnv = process.env
   }
 }
 
-export function runInstall(options: InstallOptions = {}): readonly Platform[] {
+export function runInstall(options: InstallOptions): readonly Platform[] {
   const logger = options.logger;
-  const rootDir = options.rootDir ?? resolve(join(import.meta.dirname, ".."));
-  const generatedDir = join(rootDir, "generated");
+  const sourceDir = resolve(options.sourceDir);
+  const destBase = resolve(options.destBase);
+  const outputDir = resolve(options.outputDir ?? join(sourceDir, ULIS_GENERATED_DIRNAME));
   const platforms = options.platforms ? uniquePlatforms(options.platforms) : [...PLATFORMS];
   const backup = options.backup ?? false;
   const rebuild = options.rebuild ?? false;
 
-  loadDotEnv(rootDir);
-  ensurePrerequisite("bun", "bun is required (https://bun.sh)");
-  ensurePrerequisite("git", "git is required");
+  loadDotEnv(destBase);
+  loadDotEnv(sourceDir);
 
-  logHeader(logger, `AI Config Installer (${process.platform === "win32" ? "Windows" : "Linux/macOS"})`);
-  logInfo(logger, `Source: ${generatedDir}`);
+  logHeader(logger, `ULIS Install (${process.platform === "win32" ? "Windows" : "Linux/macOS"})`);
+  logInfo(logger, `Source: ${sourceDir}`);
+  logInfo(logger, `Output (generated): ${outputDir}`);
+  logInfo(logger, `Destination base: ${destBase}`);
   logInfo(logger, `Platforms: ${platforms.join(", ")}`);
 
   if (platforms.length === 0) {
@@ -66,35 +80,32 @@ export function runInstall(options: InstallOptions = {}): readonly Platform[] {
     return [];
   }
 
-  const missingBuildOutputs = platforms.some((platform) => !existsSync(join(generatedDir, platform)));
+  const missingBuildOutputs = platforms.some((platform) => !existsSync(join(outputDir, platform)));
   if (rebuild || missingBuildOutputs) {
     logWarn(
       logger,
       rebuild ? "Rebuilding generated configs before install." : "Missing generated output. Running build.",
     );
-    runBuild({
-      targets: platforms,
-      rootDir,
-      logger,
-    });
+    runBuild({ targets: platforms, sourceDir, outputDir, logger });
   }
 
-  const plugins = pluginsJson as unknown as PluginsConfig;
+  const plugins = loadPlugins(sourceDir);
 
   const timestamp = makeTimestamp();
   for (const platform of platforms) {
+    const context: InstallContext = { outputDir, destBase, backup, timestamp, plugins, logger };
     switch (platform) {
       case "opencode":
-        installOpencode({ generatedDir, rootDir, backup, timestamp, plugins, logger });
+        installOpencode(context);
         break;
       case "claude":
-        installClaude({ generatedDir, rootDir, backup, timestamp, plugins, logger });
+        installClaude(context);
         break;
       case "codex":
-        installCodex({ generatedDir, rootDir, backup, timestamp, plugins, logger });
+        installCodex(context);
         break;
       case "cursor":
-        installCursor({ generatedDir, rootDir, backup, timestamp, plugins, logger });
+        installCursor(context);
         break;
     }
   }
@@ -106,16 +117,12 @@ export function runInstall(options: InstallOptions = {}): readonly Platform[] {
   }
 
   logHeader(logger, "Installation Complete");
-  logInfo(logger, "Required environment variables:");
-  logInfo(logger, "  GITHUB_PAT       GitHub Personal Access Token");
-  logInfo(logger, "  CONTEXT7_API_KEY Context7 API Key");
-  logInfo(logger, "  LINEAR_API_KEY   Linear API Key");
   return platforms;
 }
 
 interface InstallContext {
-  readonly generatedDir: string;
-  readonly rootDir: string;
+  readonly outputDir: string;
+  readonly destBase: string;
   readonly backup: boolean;
   readonly timestamp: string;
   readonly plugins: PluginsConfig;
@@ -123,12 +130,12 @@ interface InstallContext {
 }
 
 function installOpencode(context: InstallContext): void {
-  const targetDir = platformConfigDir("opencode");
+  const targetDir = platformConfigDir("opencode", context.destBase);
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.opencode}`);
   backupDirectory(targetDir, context);
 
   rmSync(targetDir, { recursive: true, force: true });
-  cpSync(join(context.generatedDir, "opencode"), targetDir, { recursive: true });
+  cpSync(join(context.outputDir, "opencode"), targetDir, { recursive: true });
   logSuccess(context.logger, `OpenCode -> ${targetDir}`);
 
   const skills = context.plugins.opencode?.skills ?? [];
@@ -138,8 +145,8 @@ function installOpencode(context: InstallContext): void {
 }
 
 function installClaude(context: InstallContext): void {
-  const targetDir = join(homedir(), ".claude");
-  const sourceDir = join(context.generatedDir, "claude");
+  const targetDir = platformConfigDir("claude", context.destBase);
+  const sourceDir = join(context.outputDir, "claude");
   const generatedSettings = join(sourceDir, "settings.json");
   const targetSettings = join(targetDir, "settings.json");
 
@@ -168,11 +175,11 @@ function installClaude(context: InstallContext): void {
 }
 
 function installCodex(context: InstallContext): void {
-  const targetDir = platformConfigDir("codex");
+  const targetDir = platformConfigDir("codex", context.destBase);
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.codex}`);
   backupDirectory(targetDir, context);
   ensureDir(targetDir);
-  copyPlatformContents(join(context.generatedDir, "codex"), targetDir, context.logger);
+  copyPlatformContents(join(context.outputDir, "codex"), targetDir, context.logger);
 
   const skills = context.plugins.codex?.skills ?? [];
   if (skills.length > 0) {
@@ -181,8 +188,8 @@ function installCodex(context: InstallContext): void {
 }
 
 function installCursor(context: InstallContext): void {
-  const targetDir = platformConfigDir("cursor");
-  const sourceDir = join(context.generatedDir, "cursor");
+  const targetDir = platformConfigDir("cursor", context.destBase);
+  const sourceDir = join(context.outputDir, "cursor");
   const generatedMcp = join(sourceDir, "mcp.json");
   const targetMcp = join(targetDir, "mcp.json");
 
@@ -209,16 +216,23 @@ function installCursor(context: InstallContext): void {
   }
 }
 
-function platformConfigDir(platform: Platform): string {
+/**
+ * Resolve the per-platform dot-folder under `destBase`.
+ * - `destBase = homedir()` → `~/.claude`, `~/.codex`, etc.
+ * - `destBase = cwd()`     → `./.claude`, `./.codex`, etc.
+ */
+function platformConfigDir(platform: Platform, destBase: string): string {
   switch (platform) {
     case "claude":
-      return join(homedir(), ".claude");
+      return join(destBase, ".claude");
     case "opencode":
-      return process.env.OPENCODE_CONFIG ?? join(homedir(), ".opencode");
+      return destBase === homedir()
+        ? (process.env.OPENCODE_CONFIG ?? join(destBase, ".opencode"))
+        : join(destBase, ".opencode");
     case "codex":
-      return join(homedir(), ".codex");
+      return join(destBase, ".codex");
     case "cursor":
-      return join(homedir(), ".cursor");
+      return join(destBase, ".cursor");
   }
 }
 
@@ -332,12 +346,6 @@ function installSkills(
       continue;
     }
     logSuccess(logger, `${platform} skill: ${skill.name}`);
-  }
-}
-
-function ensurePrerequisite(command: string, message: string): void {
-  if (!commandExists(command)) {
-    throw new Error(message);
   }
 }
 

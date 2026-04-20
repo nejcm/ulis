@@ -1,7 +1,8 @@
 /**
- * Canonical AI source tree lives under `.ai/<AI_GLOBAL_SOURCES_DIR>/` (e.g. `.ai/global/`).
+ * Default names for user-controlled source and output directories.
  */
-export const AI_GLOBAL_SOURCES_DIR = "global" as const;
+export const ULIS_SOURCE_DIRNAME = ".ulis" as const;
+export const ULIS_GENERATED_DIRNAME = "generated" as const;
 
 /**
  * Default build configuration.

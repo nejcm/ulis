@@ -1,31 +1,54 @@
 {
-  "name": "@nejcm/agent-ulis",
+  "name": "@nejcm/ulis",
   "version": "0.0.1-alpha.1",
-  "description": "AI ULIS for configuration management",
+  "description": "ULIS - Unified LLM Interface Specification CLI. Generate agent/skill/mcp configs for Claude Code, Codex, Cursor, and OpenCode from a single source of truth.",
   "license": "ISC",
   "author": "nejcm",
-  "private": true,
   "type": "module",
+  "bin": {
+    "ulis": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nejcm/ulis.git"
+  },
+  "keywords": [
+    "ai",
+    "claude",
+    "codex",
+    "cursor",
+    "opencode",
+    "cli",
+    "agents",
+    "mcp",
+    "skills",
+    "config"
+  ],
   "scripts": {
-    "build:claude": "tsx src/index.ts --target claude",
-    "build:codex": "tsx src/index.ts --target codex",
-    "build:cursor": "tsx src/index.ts --target cursor",
-    "build:opencode": "tsx src/index.ts --target opencode",
-    "build": "tsx src/index.ts",
-    "clean": "rimraf generated",
+    "build": "tsup && bun run gen:schemas",
+    "dev": "tsx src/cli.ts build --source tests/fixtures/example-ulis",
+    "clean": "rimraf dist",
     "format:check": "oxfmt --check .",
     "format": "oxfmt .",
     "gen:reference": "tsx src/tools/gen-reference.ts",
     "gen:schemas": "tsx src/tools/gen-json-schema.ts",
-    "install:configs": "bun scripts/install.js",
     "lint": "tsc --noEmit",
     "test:update": "bun test --update-snapshots",
     "test": "bun test",
-    "tui": "bun run src/tui.ts"
+    "tui": "tsx src/cli.ts tui",
+    "ulis": "tsx src/cli.ts"
   },
   "dependencies": {
     "@cel-tui/core": "~0.4.1",
+    "cac": "~6.7.14",
     "gray-matter": "~4.0.3",
+    "yaml": "~2.8.3",
     "zod": "~4.3.6"
   },
   "devDependencies": {
@@ -33,6 +56,7 @@
     "@types/node": "~24.12.2",
     "oxfmt": "~0.43.0",
     "rimraf": "~6.1.3",
+    "tsup": "~8.5.1",
     "tsx": "~4.21.0",
     "typescript": "~5.9.3",
     "zod-to-json-schema": "~3.25.2"

@@ -5,7 +5,7 @@ import { type ParsedAgent, enabledAgentsFor } from "../parsers/agent.js";
 import { parseCommands } from "../parsers/command.js";
 import type { ParsedSkill } from "../parsers/skill.js";
 import type { McpConfig, PermissionsConfig, PluginsConfig } from "../schema.js";
-import { cleanDir, copyDir, fileExists, readFile, writeFile } from "../utils/fs.js";
+import { cleanDir, copyDir, fileExists, readFile, writeAgentsAliases, writeFile } from "../utils/fs.js";
 import { log } from "../utils/logger.js";
 import { mcpServersFor, translateEnvMap } from "../utils/mcp-block.js";
 import { buildPolicyCommentBlock } from "../utils/policy-comments.js";
@@ -267,4 +267,7 @@ export function generateClaude(
     copyDir(rawPlatform, outDir);
     log.success("raw/claude/");
   }
+
+  const aliases = writeAgentsAliases(outDir, ["CLAUDE.md"]);
+  for (const alias of aliases) log.success(alias);
 }

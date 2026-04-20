@@ -461,14 +461,19 @@ function handleOptionsKey(key: string): void {
 async function executeWorkflow(plan: ReturnType<typeof resolveWorkflowPlan>): Promise<void> {
   try {
     const logger = createUiLogger();
+    const { resolveSource } = await import("./utils/resolve-source.js");
+    const { sourceDir, destBase } = resolveSource({ global: true });
+
     if (plan.buildTargets.length > 0) {
-      runBuild({ targets: plan.buildTargets, logger });
+      runBuild({ targets: plan.buildTargets, sourceDir, logger });
     }
 
     if (plan.installTargets.length > 0) {
       runInstall({
         platforms: plan.installTargets,
         backup: state.backup,
+        sourceDir,
+        destBase,
         logger,
       });
     }
@@ -525,6 +530,10 @@ function isDownKey(key: string): boolean {
 function exitApp(code: number): void {
   cel.stop();
   process.exit(code);
+}
+
+export function runTui(): void {
+  main();
 }
 
 if (import.meta.main) {

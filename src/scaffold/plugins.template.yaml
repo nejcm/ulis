@@ -1,0 +1,19 @@
+# yaml-language-server: $schema={{schemaBase}}/plugins.schema.json
+
+# Declarative skill and plugin installs per platform.
+# - "*"      applies to every platform
+# - "claude" applies to Claude Code only (can also install marketplace plugins)
+# - "codex", "cursor", "opencode" apply to their respective tools
+#
+# Example:
+#
+# "*":
+#   skills:
+#     - name: mattpocock/skills/grill-me
+#
+# claude:
+#   plugins:
+#     - name: frontend-design
+#       source: official
+#   skills:
+#     - name: anthropics/skills/pdf

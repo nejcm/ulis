@@ -1,280 +1,281 @@
-# ⚠️ WORK IN PROGRESS
+# ulis
 
-# ULIS
+> Unified LLM Interface Specification — one config source, four AI tools.
 
-> Unified LLM Interface Specification
+`ulis` is a CLI that compiles a single canonical config tree (agents, skills, MCP servers, plugins, permissions) into native configs for [Claude Code](https://claude.ai/code), [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex), and [Cursor](https://cursor.com).
 
-Single source of truth for AI tool configurations across [OpenCode](https://opencode.ai), [Claude Code](https://claude.ai/code), [Codex](https://github.com/openai/codex), and [Cursor](https://cursor.com).
+You write the source once under `.ulis/` (per project) or `~/.ulis/` (global), and `ulis` generates and installs the native files each tool expects.
 
-A TypeScript build system reads canonical sources from `.ai/global/` and generates tool-specific configs into `generated/` at the repo root, which are then deployed by an install script.
+> **Status:** `0.0.1-alpha`. APIs and file layout may still change.
 
-## Specification
+---
 
-- **[docs/SPEC.md](./docs/SPEC.md)** — Architecture, entity model, capability matrix, versioning, and extension guide.
-- **[docs/REFERENCE.md](./docs/REFERENCE.md)** — Auto-generated field reference for every schema type (regenerate with `bun run gen:reference`).
-- **[schemas/](./schemas/)** — JSON Schema files for all entity types (regenerate with `bun run gen:schemas`).
-
-## Why
-
-Each tool uses a different config format, different MCP server syntax, different agent/rule structures, and different env var interpolation. Without a single source, configs diverge and secrets (like API keys) end up hardcoded in tool-specific files.
-
-## Prerequisites
-
-- [Bun](https://bun.sh) 1.x — installs dependencies and runs the build (`bun run …` from the repo root)
-
-## Quick Start
+## Install
 
 ```bash
-# 1. Install build dependencies (once)
-bun run install:deps
-
-# 2. Launch the interactive TUI
-bun run tui
-
-# 3. Or use the non-interactive flow
-bun run build
-bun run install:configs
+npm i -g @nejcm/ulis
+# or: bun add -g @nejcm/ulis
 ```
 
-## Interactive TUI
+Requires Node 20+. Works with both Node and Bun runtimes.
 
-Run `bun run tui` to open a full-screen terminal UI powered by `cel-tui`.
+---
 
-- Starts with a welcome screen and keyboard help
-- Lets you choose generation targets independently from install targets
-- Shows an optional backup toggle before execution
-- Streams live build/install progress in the same interface
+## Quick start — project mode
 
-**Required environment variables** — set in your shell profile or copy `.env.example` to `.env`:
-
-```
-GITHUB_PAT          GitHub Personal Access Token
-CONTEXT7_API_KEY    Context7 API Key
-LINEAR_API_KEY      Linear API Key
-```
-
-## MCP Configuration
-
-MCP servers are defined once in `.ai/global/mcp.json` and distributed per-platform using the `targets` field:
-
-| `targets` value          | Meaning                                                        |
-| ------------------------ | -------------------------------------------------------------- |
-| _omitted_                | Applies to **all** platforms (claude, opencode, codex, cursor) |
-| `["opencode", "claude"]` | Applies only to the listed platforms                           |
-| `[]` (empty array)       | **Disabled** — server is excluded from every platform          |
-
-Example — `github` applies everywhere, `linear` applies only to OpenCode:
-
-```json
-{
-  "servers": {
-    "github": {
-      "type": "local",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PAT}" }
-    },
-    "linear": {
-      "type": "remote",
-      "url": "https://mcp.linear.app/mcp",
-      "headers": { "Authorization": "Bearer ${LINEAR_API_KEY}" },
-      "targets": ["opencode"]
-    }
-  }
-}
-```
-
-Generators iterate servers via the shared `mcpServersFor(mcp, target)` helper in `src/utils/mcp-block.ts`, which centralizes the filter so every generator applies identical semantics.
-
-### Adding an MCP server
-
-1. Add an entry under `servers` in `.ai/global/mcp.json`.
-2. Omit `targets` if it should apply everywhere, or list specific platforms.
-3. Reference any secrets as `${ENV_VAR}` — never hardcode.
-4. For remote servers that Codex needs to access, provide a `localFallback` (Codex only supports local command-based MCPs).
-5. Run `bun run build` to regenerate all tool configs.
-
-## Skills
-
-Skills are reusable, invocable capabilities (each a `SKILL.md` file) stored in `.ai/global/skills/`. The build system copies them into the generated output for each supported platform.
-
-### Declarative skill installation via `plugins.json`
-
-The preferred way to install skills from external registries is to declare them in `.ai/global/plugins.json`. During `bun run install:configs` the installer calls `npx skills@latest add <name>` with the appropriate `-a <agent>` flags — no files are staged in this repo.
-
-```json
-{
-  "*": {
-    "skills": [
-      {
-        "name": "vercel-labs/agent-skills",
-        "args": ["--skill", "find-skills"]
-      },
-      { "name": "mattpocock/skills/grill-me" }
-    ]
-  },
-  "claude": {
-    "plugins": [
-      {
-        "name": "everything-claude-code",
-        "source": "github",
-        "repo": "affaan-m/everything-claude-code"
-      }
-    ],
-    "skills": []
-  },
-  "opencode": {
-    "skills": [{ "name": "some-opencode-only-skill" }]
-  }
-}
-```
-
-| Key          | Meaning                                                                          |
-| ------------ | -------------------------------------------------------------------------------- |
-| `"*"`        | Installed globally — `npx skills@latest add` targets **all** supported platforms |
-| `"claude"`   | Installed only for Claude Code (`-a claude-code`)                                |
-| `"opencode"` | Installed only for OpenCode (`-a opencode`)                                      |
-| `"codex"`    | Installed only for Codex (`-a codex`)                                            |
-| `"cursor"`   | Installed only for Cursor (`-a cursor`)                                          |
-
-Each entry under `skills` takes a `name` (package, `owner/repo/skill`, or URL) and an optional `args` array forwarded verbatim to the CLI. Skills are installed system-globally — no files are copied into this repo.
-
-Claude Code platform entries also support a `plugins` array for marketplace plugins installed via `claude plugin add`.
-
-### Installing a skill into `.ai/global/skills/` (local source)
-
-Use the wrapper script to pull a skill from a registry into the canonical source tree so the build includes it:
+Scaffold a `.ulis/` folder inside an existing project:
 
 ```bash
-# Install all skills from a package
-bun run install:skill vercel-labs/agent-skills --yes
-
-# Install a specific skill
-bun run install:skill vercel-labs/agent-skills --skill deploy-to-vercel --yes
-
-# Install from a GitHub URL
-bun run install:skill https://github.com/org/skills-repo --yes
+cd my-project
+ulis init
 ```
 
-The script installs via the `universal` agent into a temporary `.agents/` directory, moves the result to `.ai/global/skills/`, then removes the staging directory. Run `bun run build` afterwards to include the skill in generated configs.
-
-### Adding a skill manually
-
-1. Create `.ai/global/skills/<name>/SKILL.md` with the skill instructions.
-2. Optionally add a `config/` or `references/` subdirectory.
-3. Run `bun run build` — the skill is included automatically.
-
-## Repository Structure
+This creates:
 
 ```
-.ai/
-  global/           # Canonical sources (agents, skills, MCP, …)
-    agents/           # canonical agent definitions → see agents/README.md
-    skills/           # skill definitions           → see skills/README.md
-    commands/         # slash commands              → see commands/README.md
-    mcp.json          # Canonical MCP server definitions
-    plugins.json      # Plugins and skills per platform (global and per-tool)
-    guardrails.md     # Cost controls and rate limits
-src/                # TypeScript build system (see below)
-generated/          # Built output — committed, ready to install without building
-install.sh          # Linux/macOS installer
-install.ps1         # Windows installer
-install.js          # Cross-platform entry (loads .env, runs install.sh / install.ps1)
+.ulis/
+├── config.yaml          # version + project name
+├── mcp.yaml             # MCP server definitions
+├── permissions.yaml     # per-platform access rules
+├── plugins.yaml         # external skills / Claude plugins
+├── guardrails.md        # operational guidelines (freeform)
+├── agents/              # agent definitions (.md with frontmatter)
+├── skills/              # skill definitions (SKILL.md per skill)
+├── commands/            # slash commands
+└── raw/                 # platform-specific fragments copied verbatim
 ```
 
-## Build system
+It also appends `/.ulis/generated/` to `.gitignore`.
 
-The TypeScript sources under `src/` read canonical definitions from `.ai/global/` and write per-tool trees under `generated/`. Dependencies (`tsx`, `typescript`, `zod`, `gray-matter`, `oxfmt`, …) are declared in the root `package.json`.
+Add some agents/skills/MCP servers, then:
+
+```bash
+ulis install
+```
+
+This builds into `.ulis/generated/<platform>/` and then deploys to `./.claude/`, `./.codex/`, `./.cursor/`, and `./.opencode/` inside your project. Pass `-y` / `--yes` to skip confirmation prompts.
+
+---
+
+## Quick start — global mode
+
+Maintain one canonical config for every project on your machine:
+
+```bash
+ulis init --global      # creates ~/.ulis/
+# edit ~/.ulis/... to taste
+ulis install --global   # deploys to ~/.claude/, ~/.codex/, ~/.cursor/, ~/.opencode/
+```
+
+---
+
+## Commands
+
+| Command        | Purpose                                                                  |
+| -------------- | ------------------------------------------------------------------------ |
+| `ulis init`    | Scaffold `.ulis/` in the current project (or `~/.ulis/` with `--global`) |
+| `ulis build`   | Generate configs into `<source>/generated/` without installing           |
+| `ulis install` | Build, then deploy generated configs to the target platform directories  |
+| `ulis tui`     | Launch the interactive terminal UI                                       |
+
+### Common flags
+
+| Flag                  | Applies to         | Description                                                          |
+| --------------------- | ------------------ | -------------------------------------------------------------------- |
+| `-g`, `--global`      | all                | Operate on `~/.ulis/` and home-level install targets (`~/.claude/`…) |
+| `--source <path>`     | `build`, `install` | Override the source directory (takes precedence over `--global`)     |
+| `--target <platform>` | `build`, `install` | Comma-separated list: `claude`, `codex`, `cursor`, `opencode`        |
+| `-y`, `--yes`         | `install`          | Skip confirmation prompts                                            |
+| `--no-rebuild`        | `install`          | Skip the build step and deploy existing `generated/`                 |
+| `--backup`            | `install`          | Back up existing platform dirs (`<dir>.backup.YYYYMMDD_HHMMSS`)      |
+
+### Source resolution
+
+`ulis build` / `ulis install` pick the source directory in this order:
+
+1. `--source <path>` if provided — fails if missing.
+2. `--global` → `~/.ulis/` — fails with an `ulis init --global` hint if missing.
+3. Otherwise → `./.ulis/` in the current directory (**no walk-up**) — fails with an `ulis init` hint if missing.
+
+---
+
+## Source layout (`.ulis/`)
+
+### `config.yaml`
+
+```yaml
+# yaml-language-server: $schema=./node_modules/@nejcm/ulis/dist/schemas/config.schema.json
+version: 1
+name: my-project
+```
+
+### `mcp.yaml`
+
+MCP servers shared across platforms. Use the `targets` field to restrict a server.
+
+```yaml
+servers:
+  github:
+    type: local
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-github"]
+    env:
+      GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_PAT}
+  linear:
+    type: remote
+    url: https://mcp.linear.app/mcp
+    headers:
+      Authorization: Bearer ${LINEAR_API_KEY}
+    targets: ["opencode"] # only OpenCode sees this server
+```
+
+| `targets`               | Meaning                                 |
+| ----------------------- | --------------------------------------- |
+| _omitted_               | Applies to every platform               |
+| `["opencode","claude"]` | Applies only to the listed platforms    |
+| `[]`                    | Disabled — excluded from every platform |
+
+Reference secrets as `${VAR}` — the build translates to each platform's env-var syntax. Hardcoded secrets fail validation.
+
+### `agents/*.md`
+
+Each agent is a Markdown file with YAML frontmatter + a prompt body. Example:
+
+```markdown
+---
+description: Implements features from specs
+model: sonnet
+tools:
+  read: true
+  write: true
+  edit: true
+  bash: true
+security:
+  blockedCommands:
+    - git push --force
+  rateLimit:
+    perHour: 20
+---
+
+You are a focused implementation agent. Read specs carefully before writing code.
+```
+
+See [docs/REFERENCE.md](docs/REFERENCE.md) for the full frontmatter schema.
+
+### `skills/<name>/SKILL.md`
+
+Each skill is a directory containing a `SKILL.md` (frontmatter + body) plus any supporting files (scripts, templates).
+
+### `plugins.yaml`
+
+Declare skills and plugins to install from external registries during `ulis install`. Keyed by platform or `"*"` (all platforms):
+
+```yaml
+"*":
+  skills:
+    - name: mattpocock/skills/grill-me
+    - name: vercel-labs/agent-skills
+      args: ["--skill", "find-skills"]
+claude:
+  plugins:
+    - name: everything-claude-code
+      source: github
+      repo: affaan-m/everything-claude-code
+```
+
+`skills` entries run `npx skills@latest add <name> -a <agent> --yes [args...]`. Claude `plugins` entries run `claude plugin add --from <source>`.
+
+### `permissions.yaml`
+
+Per-platform read/write/bash allowlists and deny rules. See [tests/fixtures/example-ulis/permissions.yaml](tests/fixtures/example-ulis/permissions.yaml) for a working example.
+
+### `raw/` and `commands/`
+
+Copied verbatim into generated outputs. Use `raw/` for platform-specific fragments that `ulis` doesn't model directly.
+
+---
+
+## Install behaviour
+
+| Tool        | Strategy         | Target (project mode) | Target (global mode) |
+| ----------- | ---------------- | --------------------- | -------------------- |
+| OpenCode    | Overwrite        | `./.opencode/`        | `~/.opencode/`       |
+| Claude Code | Merge (additive) | `./.claude/`          | `~/.claude/`         |
+| Codex       | Overwrite        | `./.codex/`           | `~/.codex/`          |
+| Cursor      | Merge (additive) | `./.cursor/`          | `~/.cursor/`         |
+
+`settings.json` and `mcp.json` top-level files are deep-merged so user content outside `ulis`-managed keys is preserved. With `--backup`, the existing platform directory is copied aside before overwriting.
+
+---
+
+## Schema autocomplete
+
+Scaffolded YAML files include a `# yaml-language-server: $schema=…` header pointing at `./node_modules/@nejcm/ulis/dist/schemas/*.schema.json`. VS Code's YAML extension picks these up automatically when the package is installed.
+
+Schemas are also regenerated on every `npm run build` via `bun run gen:schemas`.
+
+---
+
+## Development
+
+Clone the repo:
+
+```bash
+bun install
+bun run dev        # builds against tests/fixtures/example-ulis
+bun test           # runs the suite (~96 tests)
+bun run build      # bundles dist/cli.js + regenerates dist/schemas
+```
+
+### Dev scripts
+
+| Script                  | Purpose                                                             |
+| ----------------------- | ------------------------------------------------------------------- |
+| `bun run build`         | Bundle CLI (`tsup`) and regenerate JSON schemas                     |
+| `bun run dev`           | Run `ulis build` against the `example-ulis` fixture                 |
+| `bun run ulis <args>`   | Run the CLI from source (`tsx src/cli.ts …`)                        |
+| `bun run tui`           | Launch the interactive TUI from source                              |
+| `bun run test`          | Run the unit + integration suite                                    |
+| `bun run lint`          | `tsc --noEmit`                                                      |
+| `bun run format`        | Format with [oxfmt](https://oxc.rs/docs/guide/usage/formatter.html) |
+| `bun run gen:schemas`   | Regenerate `dist/schemas/*.schema.json` from Zod                    |
+| `bun run gen:reference` | Regenerate `docs/REFERENCE.md`                                      |
+
+### Repo layout
 
 ```
 src/
-  index.ts            # CLI entry — parse → validate → generate
-  schema.ts           # Zod schemas for all config types
-  config.ts           # Model name maps, build constants
-  parsers/
-    agent.ts            # Parse agents/*.md (gray-matter + body)
-    mcp.ts              # Parse mcp.json
-    plugins.ts          # Parse plugins.json
-  generators/
-    opencode.ts         # → generated/opencode/
-    claude.ts           # → generated/claude/
-    codex.ts            # → generated/codex/
-    cursor.ts           # → generated/cursor/
-  utils/
-    env-var.ts          # Translate ${VAR} to tool-specific syntax
-    fs.ts               # File I/O helpers
-    logger.ts           # Colored build output
+  cli.ts                   # cac entry point (compiled to dist/cli.js)
+  commands/                # init, install, build, tui
+  parsers/                 # agent, skill, mcp, plugins, permissions loaders
+  generators/              # claude, opencode, codex, cursor
+  schema/                  # Zod schemas (ulis-config, agent, mcp, …)
+  scaffold/                # inline templates used by `ulis init`
+  utils/                   # config-loader, resolve-source, fs, logger, …
+  validators/              # cross-ref + collision checks
+  tui.ts                   # interactive UI
+  tools/                   # gen-json-schema, gen-reference
+tests/
+  fixtures/example-ulis/   # dev/test fixture (the author's personal config)
+docs/
+  SPEC.md                  # architecture + entity model
+  REFERENCE.md             # auto-generated field reference
 ```
 
-### Generator outputs
+### Testing
 
-| Source                 | OpenCode                                     | Claude Code                                                  | Codex                   | Cursor     |
-| ---------------------- | -------------------------------------------- | ------------------------------------------------------------ | ----------------------- | ---------- |
-| `agents/*.md`          | `opencode.json` agent blocks + `agents/` dir | `rules/common/agents.md` (generated)                         | Instruction sections    | —          |
-| `guardrails.md`        | —                                            | `rules/common/guardrails.md`                                 | Appended to `AGENTS.md` | —          |
-| `mcp.json`             | `opencode.json` mcp block                    | `settings.json` mcpServers                                   | `config.toml`           | `mcp.json` |
-| `plugins.json`         | Plugin array + per-platform skills install   | `settings.json` enabledPlugins + per-platform skills install | —                       | —          |
-| `skills/`, `commands/` | Copied as-is                                 | —                                                            | —                       | —          |
+Fixtures under `tests/fixtures/example-ulis/` are used by the snapshot + e2e tests. The `bun run dev` command builds against this fixture so the CLI works without any `.ulis/` in the current directory.
 
-### Adding a new generator
+---
 
-1. Create `src/generators/<tool>.ts` implementing the generator.
-2. Import and call it from `src/index.ts`.
-3. Add a matching script in `package.json` if you want a `build:<tool>` shortcut.
+## Docs
 
-### Validation
+- [docs/SPEC.md](docs/SPEC.md) — architecture, entity model, capability matrix, versioning, extension guide.
+- [docs/REFERENCE.md](docs/REFERENCE.md) — auto-generated field reference for every schema.
+- [docs/CLI.md](docs/CLI.md) — full CLI reference (commands, flags, exit codes, examples).
 
-Schemas in `schema.ts` validate canonical sources at build time with Zod. The build fails if frontmatter is invalid, MCP targets are unknown, or env vars are hardcoded instead of `${VAR}` syntax.
+---
 
-### Dependency roles
+## License
 
-| Package       | Purpose                                          |
-| ------------- | ------------------------------------------------ |
-| `tsx`         | Run TypeScript directly (no compile step)        |
-| `typescript`  | Type checking via `bun run lint`                 |
-| `zod`         | Schema validation for all config types           |
-| `gray-matter` | Parse YAML frontmatter from agent Markdown files |
-| `oxfmt`       | Formatting (`format` / `format:check`)           |
-| `@types/node` | Node.js type definitions                         |
-
-## Bun scripts
-
-```bash
-bun run build              # Build all 4 tool configs
-bun run build:opencode     # Build OpenCode only
-bun run build:claude       # Build Claude Code only
-bun run build:codex        # Build Codex only
-bun run build:cursor       # Build Cursor only
-bun run lint               # Type-check the build system
-bun run clean              # Delete generated/
-bun run install:deps       # Install build dependencies
-bun run install:configs    # Deploy to home directory
-bun run install:skill      # Install a skill from npx skills@latest into .ai/global/skills/
-bun run format             # Format with [Oxfmt](https://oxc.rs/docs/guide/usage/formatter.html)
-bun run format:check       # Check formatting (CI-friendly)
-bun run tui                # Launch the interactive generator/install UI
-```
-
-## Install Behavior
-
-| Tool                 | Strategy         | Target                    |
-| -------------------- | ---------------- | ------------------------- |
-| OpenCode             | Overwrite        | `~/.opencode/`            |
-| Claude Code settings | Merge (additive) | `~/.claude/settings.json` |
-| Codex                | Overwrite        | `~/.codex/config.toml`    |
-| Cursor               | Merge (additive) | `~/.cursor/mcp.json`      |
-
-When `--backup` is enabled, existing configs are backed up before overwrite (`*.backup.YYYYMMDD_HHMMSS`).
-
-### Skills and plugins installed during `install:configs`
-
-After deploying config files, the installer processes `.ai/global/plugins.json`:
-
-1. **Per-platform skills** — For each platform being installed, any `skills` declared under that platform key are installed via `npx skills@latest add <name> -a <agent> --yes [extra-args]`. Skills are written directly into the agent's system config directory; no files are staged here.
-2. **Global skills** (`"*"` key) — After all platform installs, any skills under `"*"` are installed for every supported agent (`-a claude-code -a opencode -a codex -a cursor`).
-3. **Claude plugins** — `plugins` under the `"claude"` key are installed via `claude plugin add --from <source>` (requires the `claude` CLI).
-
-## Security
-
-- No secrets committed — all API keys use `${ENV_VAR}` references
-- Build validates this via Zod schemas
+ISC
