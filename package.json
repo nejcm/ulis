@@ -1,6 +1,6 @@
 {
   "name": "@nejcm/ulis",
-  "version": "0.0.1-alpha.3",
+  "version": "0.0.1-beta.1",
   "description": "ULIS - Unified LLM Interface Specification CLI. Generate agent/skill/mcp configs for Claude Code, Codex, Cursor, and OpenCode from a single source of truth.",
   "license": "ISC",
   "author": "nejcm",
