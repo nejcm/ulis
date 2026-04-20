@@ -32,7 +32,7 @@
   ],
   "scripts": {
     "build": "tsup && bun run gen:schemas",
-    "dev": "tsx src/cli.ts build --source tests/fixtures/example-ulis",
+    "dev": "tsx src/cli.ts build --source example",
     "dev:install": "tsx src/cli.ts install --global --yes",
     "clean": "rimraf dist",
     "format:check": "oxfmt --check .",

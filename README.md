@@ -207,7 +207,7 @@ Each entry runs `npx skills@latest add <name> -a <agent> --yes [args...]` per ta
 
 ### `permissions.yaml`
 
-Per-platform read/write/bash allowlists and deny rules. See [tests/fixtures/example-ulis/permissions.yaml](tests/fixtures/example-ulis/permissions.yaml) for a working example.
+Per-platform read/write/bash allowlists and deny rules. See [example/permissions.yaml](example/permissions.yaml) for a working example.
 
 ### `raw/` and `commands/`
 
@@ -242,7 +242,7 @@ Clone the repo:
 
 ```bash
 bun install
-bun run dev        # builds against tests/fixtures/example-ulis
+bun run dev        # builds against example/
 bun test           # runs the suite (~96 tests)
 bun run build      # bundles dist/cli.js + regenerates dist/schemas
 ```
@@ -252,7 +252,7 @@ bun run build      # bundles dist/cli.js + regenerates dist/schemas
 | Script                  | Purpose                                                             |
 | ----------------------- | ------------------------------------------------------------------- |
 | `bun run build`         | Bundle CLI (`tsup`) and regenerate JSON schemas                     |
-| `bun run dev`           | Run `ulis build` against the `example-ulis` fixture                 |
+| `bun run dev`           | Run `ulis build` against the `example/` directory                   |
 | `bun run ulis <args>`   | Run the CLI from source (`tsx src/cli.ts …`)                        |
 | `bun run tui`           | Launch the interactive TUI from source                              |
 | `bun run test`          | Run the unit + integration suite                                    |
@@ -275,8 +275,8 @@ src/
   validators/              # cross-ref + collision checks
   tui.ts                   # interactive UI
   tools/                   # gen-json-schema, gen-reference
+example/                   # reference example config
 tests/
-  fixtures/example-ulis/   # dev/test fixture (the author's personal config)
 docs/
   SPEC.md                  # architecture + entity model
   REFERENCE.md             # auto-generated field reference
@@ -284,7 +284,7 @@ docs/
 
 ### Testing
 
-Fixtures under `tests/fixtures/example-ulis/` are used by the snapshot + e2e tests. The `bun run dev` command builds against this fixture so the CLI works without any `.ulis/` in the current directory.
+The `bun run dev` command builds against `example/` so the CLI works without any `.ulis/` in the current directory.
 
 ---
 

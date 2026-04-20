@@ -397,7 +397,7 @@ For capability mismatches, use `buildPolicyCommentBlock(agent.frontmatter, "md" 
 **Source:** `.ulis/agents/` — canonical agent definitions
 **Generated:** `.ulis/generated/claude/agents/`, `.ulis/generated/opencode/opencode.json`, etc.
 
-Run `ulis build --source tests/fixtures/example-ulis` from a checkout of this repo (or `bun run dev`) to see a full end-to-end example.
+Run `ulis build --source example` from a checkout of this repo (or `bun run dev`) to see a full end-to-end example.
 
 **Field reference:** [REFERENCE.md](./REFERENCE.md) — auto-generated from Zod schemas.
 
@@ -419,7 +419,7 @@ Repo dev scripts:
 | Script                  | Purpose                                           |
 | ----------------------- | ------------------------------------------------- |
 | `bun run build`         | Bundle `dist/cli.js` + regenerate `dist/schemas/` |
-| `bun run dev`           | `ulis build --source tests/fixtures/example-ulis` |
+| `bun run dev`           | `ulis build --source example`                     |
 | `bun run test`          | Run test suite                                    |
 | `bun run lint`          | `tsc --noEmit`                                    |
 | `bun run format`        | Format with oxfmt                                 |

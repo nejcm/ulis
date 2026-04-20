@@ -4,7 +4,7 @@
 
 This repo is the source for the `@nejcm/ulis` CLI — a single source of truth for AI tool configs (Claude Code, Codex, OpenCode, Cursor). The CLI reads a user-owned `.ulis/` tree (project-local) or `~/.ulis/` (global) and generates native configs for each platform.
 
-The package ships **no bundled canonical content**. The tree under [`tests/fixtures/example-ulis/`](tests/fixtures/example-ulis/) is a dev/test fixture, not a default config.
+The package ships **no bundled canonical content**. The tree under [`example/`](example/) is a reference example config.
 
 Stack: TypeScript bundled with `tsup` (Node 20+, ESM). Dev runtime: Bun. CLI framework: `cac`. Validation: `zod` v4. See [`docs/SPEC.md`](docs/SPEC.md) for architecture, [`docs/CLI.md`](docs/CLI.md) for the CLI surface, [`docs/REFERENCE.md`](docs/REFERENCE.md) for field-level schema docs.
 
@@ -40,7 +40,7 @@ src/
   utils/                # config-loader, resolve-source, fs, logger, …
   tui.ts                # interactive UI
   tools/                # gen-json-schema, gen-reference
-tests/fixtures/example-ulis/   # dev/test fixture
+example/                       # reference example config
 dist/                   # tsup output (cli.js + schemas/) — gitignored
 ```
 
@@ -55,8 +55,8 @@ Run from the repo root (in order):
 If you changed generators, parsers, schemas, or CLI wiring, also:
 
 4. `bun run build` — rebuild `dist/cli.js` and `dist/schemas/`.
-5. `node dist/cli.js build --source tests/fixtures/example-ulis` — smoke the bundled CLI end-to-end.
+5. `node dist/cli.js build --source example` — smoke the bundled CLI end-to-end.
 
 If you changed Zod schemas specifically, also run `bun run gen:reference` to refresh [`docs/REFERENCE.md`](docs/REFERENCE.md).
 
-Never commit `dist/` or `tests/fixtures/example-ulis/generated/` — both are build artifacts.
+Never commit `dist/` or `example/generated/` — both are build artifacts.

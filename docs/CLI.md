@@ -124,7 +124,7 @@ ulis install --global --yes --backup
 Dry-run against a fixture without touching home:
 
 ```bash
-ulis build --source ./tests/fixtures/example-ulis
+ulis build --source ./example
 ```
 
 Reinstall from an existing build without regenerating:
