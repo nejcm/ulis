@@ -13,6 +13,7 @@ describe("parseSkills", () => {
     const [skill] = skills;
     expect(skill.name).toBe("my-skill");
     expect(skill.frontmatter.description).toBe("A minimal test skill");
+    expect(skill.frontmatter.name).toBe("my-skill");
     expect(skill.frontmatter.userInvocable).toBe(true);
     expect(skill.body).toContain("Do the minimal test skill task");
   });

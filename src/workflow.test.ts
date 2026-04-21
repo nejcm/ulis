@@ -27,7 +27,7 @@ describe("workflow helpers", () => {
   });
 
   it("toggles all platforms on and off", () => {
-    expect(toggleAllPlatformSelections(["claude"])).toEqual(["opencode", "claude", "codex", "cursor"]);
-    expect(toggleAllPlatformSelections(["opencode", "claude", "codex", "cursor"])).toEqual([]);
+    expect(toggleAllPlatformSelections(["claude"])).toEqual(["opencode", "claude", "codex", "cursor", "forgecode"]);
+    expect(toggleAllPlatformSelections(["opencode", "claude", "codex", "cursor", "forgecode"])).toEqual([]);
   });
 });

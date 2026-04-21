@@ -4,6 +4,7 @@ import { ULIS_GENERATED_DIRNAME } from "./config.js";
 import { generateClaude } from "./generators/claude.js";
 import { generateCodex } from "./generators/codex.js";
 import { generateCursor } from "./generators/cursor.js";
+import { generateForgecode } from "./generators/forgecode.js";
 import { generateOpencode } from "./generators/opencode.js";
 import { parseAgents } from "./parsers/agent.js";
 import { loadMcp } from "./parsers/mcp.js";
@@ -115,6 +116,9 @@ export function runBuild(options: BuildOptions): BuildResult {
         break;
       case "cursor":
         generateCursor(agents, skills, mcp, sourceDir, outDir, buildConfig, permissions);
+        break;
+      case "forgecode":
+        generateForgecode(agents, skills, mcp, sourceDir, outDir, buildConfig);
         break;
     }
   }

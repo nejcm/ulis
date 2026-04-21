@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: "ulis"
-  text: "One config source, four AI tools."
-  tagline: "Define agents, skills, MCP servers, plugins, and permissions once, then generate native configs for Claude Code, Codex, Cursor, and OpenCode."
+  text: "One config source, five AI tools."
+  tagline: "Define agents, skills, MCP servers, plugins, and permissions once, then generate native configs for Claude Code, Codex, Cursor, OpenCode, and ForgeCode."
   actions:
     - theme: brand
       text: Get Started
@@ -65,3 +65,4 @@ Every AI coding tool has different file formats and feature naming. `ulis` gives
 - Codex
 - Cursor
 - OpenCode
+- ForgeCode

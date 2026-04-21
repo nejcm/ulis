@@ -15,6 +15,7 @@ export const SkillsConfigSchema = z.object({
   opencode: perPlatformSkillsSchema.optional(),
   codex: perPlatformSkillsSchema.optional(),
   cursor: perPlatformSkillsSchema.optional(),
+  forgecode: perPlatformSkillsSchema.optional(),
 });
 
 export type SkillsConfig = z.infer<typeof SkillsConfigSchema>;

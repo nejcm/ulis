@@ -15,6 +15,7 @@ import { BUILD_CONFIG } from "../src/config.js";
 import { generateClaude } from "../src/generators/claude.js";
 import { generateCodex } from "../src/generators/codex.js";
 import { generateCursor } from "../src/generators/cursor.js";
+import { generateForgecode } from "../src/generators/forgecode.js";
 import { generateOpencode } from "../src/generators/opencode.js";
 import { parseAgents } from "../src/parsers/agent.js";
 import { parseSkills } from "../src/parsers/skill.js";
@@ -42,6 +43,7 @@ beforeAll(() => {
   generateOpencode(agents, skills, mcp, fixturesDir, join(outDir, "opencode"), BUILD_CONFIG);
   generateCodex(agents, skills, mcp, fixturesDir, join(outDir, "codex"), BUILD_CONFIG);
   generateCursor(agents, skills, mcp, fixturesDir, join(outDir, "cursor"), BUILD_CONFIG);
+  generateForgecode(agents, skills, mcp, fixturesDir, join(outDir, "forgecode"), BUILD_CONFIG);
 });
 
 afterAll(() => {
@@ -164,6 +166,32 @@ describe("Cursor generator", () => {
     const mcp = JSON.parse(readOut("cursor", "mcp.json"));
     expect(mcp.mcpServers).toHaveProperty("test-local");
     expect(mcp.mcpServers).toHaveProperty("test-remote");
+  });
+});
+
+// ─── ForgeCode ───────────────────────────────────────────────────────────────
+
+describe("ForgeCode generator", () => {
+  it("generates agent markdown with Forge frontmatter", () => {
+    const content = readOut("forgecode", ".forge", "agents", "worker.md");
+    expect(content).toContain("id: worker");
+    expect(content).toContain("description: A minimal test agent");
+    expect(content).toContain("tools:");
+  });
+
+  it("generates .mcp.json with all targeted servers", () => {
+    const mcp = JSON.parse(readOut("forgecode", ".mcp.json"));
+    expect(mcp.mcpServers).toHaveProperty("test-local");
+    expect(mcp.mcpServers).toHaveProperty("test-remote");
+  });
+
+  it("copies skill directories under .forge/skills", () => {
+    const content = readOut("forgecode", ".forge", "skills", "my-skill", "SKILL.md");
+    expect(content).toContain("A minimal test skill");
+  });
+
+  it("copies raw/common and raw/forgecode payloads", () => {
+    expect(readOut("forgecode", "AGENTS.md")).toContain("fixture common guidance");
   });
 });
 

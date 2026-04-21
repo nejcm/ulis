@@ -143,7 +143,8 @@ describe("AgentFrontmatterSchema", () => {
 
 describe("SkillFrontmatterSchema", () => {
   it("parses minimal valid skill", () => {
-    const result = SkillFrontmatterSchema.parse({ description: "A skill" });
+    const result = SkillFrontmatterSchema.parse({ name: "a-skill", description: "A skill" });
+    expect(result.name).toBe("a-skill");
     expect(result.description).toBe("A skill");
     expect(result.userInvocable).toBe(true); // default
     expect(result.allowModelInvocation).toBe(true); // default
@@ -152,11 +153,51 @@ describe("SkillFrontmatterSchema", () => {
   });
 
   it("rejects missing description", () => {
-    expect(() => SkillFrontmatterSchema.parse({})).toThrow();
+    expect(() => SkillFrontmatterSchema.parse({ name: "a-skill" })).toThrow();
+  });
+
+  it("rejects missing name", () => {
+    expect(() => SkillFrontmatterSchema.parse({ description: "x" })).toThrow();
+  });
+
+  it("enforces Agent Skills naming rules", () => {
+    expect(() => SkillFrontmatterSchema.parse({ name: "Bad-Name", description: "x" })).toThrow();
+    expect(() => SkillFrontmatterSchema.parse({ name: "-bad", description: "x" })).toThrow();
+    expect(() => SkillFrontmatterSchema.parse({ name: "bad--name", description: "x" })).toThrow();
+    expect(() => SkillFrontmatterSchema.parse({ name: "bad-", description: "x" })).toThrow();
+  });
+
+  it("enforces spec lengths and optional metadata fields", () => {
+    const result = SkillFrontmatterSchema.parse({
+      name: "skill-name",
+      description: "x".repeat(1024),
+      compatibility: "Designed for local CLI workflows",
+      metadata: { author: "example-org", version: "1.0" },
+      "allowed-tools": "Bash(git:*) Read",
+    });
+    expect(result.compatibility).toContain("local CLI");
+    expect(result.metadata?.author).toBe("example-org");
+    expect(result["allowed-tools"]).toContain("Read");
+
+    expect(() =>
+      SkillFrontmatterSchema.parse({
+        name: "skill-name",
+        description: "x",
+        compatibility: "x".repeat(501),
+      }),
+    ).toThrow();
+
+    expect(() =>
+      SkillFrontmatterSchema.parse({
+        name: "skill-name",
+        description: "",
+      }),
+    ).toThrow();
   });
 
   it("parses isolation fork", () => {
     const result = SkillFrontmatterSchema.parse({
+      name: "x-skill",
       description: "x",
       isolation: "fork",
     });
@@ -165,12 +206,14 @@ describe("SkillFrontmatterSchema", () => {
 
   it("parses paths as string or array", () => {
     const single = SkillFrontmatterSchema.parse({
+      name: "x-skill",
       description: "x",
       paths: "src/**",
     });
     expect(single.paths).toBe("src/**");
 
     const multi = SkillFrontmatterSchema.parse({
+      name: "x-skill",
       description: "x",
       paths: ["src/**", "tests/**"],
     });
@@ -266,9 +309,11 @@ describe("SkillsConfigSchema", () => {
       opencode: { skills: [{ name: "opencode-skill" }] },
       codex: { skills: [{ name: "codex-skill", args: ["--yes"] }] },
       cursor: { skills: [] },
+      forgecode: { skills: [{ name: "forgecode-skill" }] },
     });
     expect(result.opencode?.skills[0].name).toBe("opencode-skill");
     expect(result.codex?.skills[0].args).toEqual(["--yes"]);
     expect(result.cursor?.skills).toHaveLength(0);
+    expect(result.forgecode?.skills[0].name).toBe("forgecode-skill");
   });
 });

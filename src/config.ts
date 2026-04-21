@@ -52,6 +52,16 @@ export interface BuildConfig {
         readonly browser: readonly string[];
       };
     };
+    readonly forgecode: {
+      readonly toolNames: {
+        readonly read: readonly string[];
+        readonly write: readonly string[];
+        readonly edit: readonly string[];
+        readonly bash: readonly string[];
+        readonly search: readonly string[];
+        readonly browser: readonly string[];
+      };
+    };
   };
 }
 
@@ -92,6 +102,16 @@ export const BUILD_CONFIG: BuildConfig = {
         bash: ["run_terminal_command"],
         search: ["web_search"],
         browser: ["browser_action"],
+      },
+    },
+    forgecode: {
+      toolNames: {
+        read: ["read"],
+        write: ["write"],
+        edit: ["patch"],
+        bash: ["shell"],
+        search: ["search", "fetch"],
+        browser: ["mcp_*"],
       },
     },
   },

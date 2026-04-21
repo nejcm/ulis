@@ -12,7 +12,7 @@ export interface ParsedAgent {
   body: string;
 }
 
-export type AgentPlatform = "claude" | "opencode" | "codex" | "cursor";
+export type AgentPlatform = "claude" | "opencode" | "codex" | "cursor" | "forgecode";
 
 /** Filter agents that are not explicitly disabled for the given platform. */
 export function enabledAgentsFor(agents: readonly ParsedAgent[], platform: AgentPlatform): readonly ParsedAgent[] {

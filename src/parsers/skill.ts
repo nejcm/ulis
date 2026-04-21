@@ -13,7 +13,7 @@ export interface ParsedSkill {
   body: string; // SKILL.md content after frontmatter
 }
 
-export type SkillPlatform = "claude" | "opencode" | "codex" | "cursor";
+export type SkillPlatform = "claude" | "opencode" | "codex" | "cursor" | "forgecode";
 
 /** Filter skills that are not explicitly disabled for the given platform. */
 export function enabledSkillsFor(skills: readonly ParsedSkill[], platform: SkillPlatform): readonly ParsedSkill[] {
@@ -31,6 +31,11 @@ export function parseSkills(skillsDir: string): readonly ParsedSkill[] {
     const raw = readFile(skillFile);
     const { data, content } = matter(raw);
     const frontmatter = SkillFrontmatterSchema.parse(data);
+    if (frontmatter.name !== entry.name) {
+      throw new Error(
+        `Skill name mismatch in ${skillFile}: frontmatter name '${frontmatter.name}' must match directory '${entry.name}'`,
+      );
+    }
     skills.push({
       name: entry.name,
       dir: skillDir,

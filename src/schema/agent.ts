@@ -123,6 +123,12 @@ export const AgentFrontmatterSchema = z.object({
           is_background: z.boolean().optional(), // maps to Cursor `is_background: true` — async non-blocking execution
         })
         .optional(),
+      forgecode: z
+        .object({
+          enabled: z.boolean().default(true),
+          model: z.string().optional(),
+        })
+        .optional(),
     })
     .optional(),
 });

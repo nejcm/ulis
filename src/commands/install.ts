@@ -4,7 +4,7 @@ import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 
 import { runInstall } from "../install.js";
-import { PLATFORMS, type Platform } from "../platforms.js";
+import { PLATFORMS, platformConfigDir, type Platform } from "../platforms.js";
 import { log } from "../utils/logger.js";
 import { resolveSource } from "../utils/resolve-source.js";
 import { parseTargets, type BuildCmdOptions } from "./build.js";
@@ -45,10 +45,26 @@ export async function installCmd(options: InstallCmdOptions = {}): Promise<void>
 function detectCollisions(destBase: string, targets: readonly Platform[]): string[] {
   const paths: string[] = [];
   for (const platform of targets) {
-    const dir = join(destBase, `.${platform}`);
-    if (existsSync(dir)) {
+    if (platform === "forgecode") {
+      const forgeDir = platformConfigDir(platform, destBase);
+      if (existsSync(forgeDir)) {
+        try {
+          if (readdirSync(forgeDir).length > 0) paths.push(forgeDir);
+        } catch {
+          // ignore
+        }
+      }
+      const mcpPath = join(destBase, ".mcp.json");
+      if (existsSync(mcpPath)) {
+        paths.push(mcpPath);
+      }
+      continue;
+    }
+
+    const platformDir = platformConfigDir(platform, destBase);
+    if (existsSync(platformDir)) {
       try {
-        if (readdirSync(dir).length > 0) paths.push(dir);
+        if (readdirSync(platformDir).length > 0) paths.push(platformDir);
       } catch {
         // ignore
       }

@@ -2,7 +2,7 @@ import { defineConfig } from "vitepress";
 
 export default defineConfig({
   title: "ulis",
-  description: "Unified LLM Interface Specification CLI for Claude Code, Codex, Cursor, and OpenCode.",
+  description: "Unified LLM Interface Specification CLI for Claude Code, Codex, Cursor, OpenCode, and ForgeCode.",
   base: "/ulis/",
   cleanUrls: false,
   themeConfig: {

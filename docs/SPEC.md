@@ -4,7 +4,7 @@ title: Specification
 
 # ULIS — Unified LLM Interface Specification
 
-Version `1.0.0` · Source: `src/schema/` · Targets: Claude Code, OpenCode, Codex, Cursor · CLI: `@nejcm/ulis`
+Version `1.0.0` · Source: `src/schema/` · Targets: Claude Code, OpenCode, Codex, Cursor, ForgeCode · CLI: `@nejcm/ulis`
 
 ---
 
@@ -17,7 +17,8 @@ ULIS is a CLI (`ulis`) that lets you define AI agent configurations **once** and
 ├── agents/*.md       ─────►  ├── claude/   (agents/, commands/, settings.json, rules/)
 ├── skills/*/         ─────►  ├── opencode/ (opencode.json, agents/, skills/)
 │   SKILL.md                  ├── codex/    (config.toml, agents/*.toml, AGENTS.md)
-├── mcp.yaml          ─────►  └── cursor/   (agents/*.mdc, skills/, mcp.json)
+├── mcp.yaml          ─────►  ├── cursor/   (agents/*.mdc, skills/, mcp.json)
+│                             └── forgecode/ (.forge/agents, .forge/skills, .mcp.json)
 ├── plugins.yaml         (Claude marketplace plugins)
 ├── skills.yaml          (external skill installs)
 ├── permissions.yaml
@@ -25,9 +26,9 @@ ULIS is a CLI (`ulis`) that lets you define AI agent configurations **once** and
 └── config.yaml          ◄─── minimal: version + name (room to grow)
 ```
 
-The generated tree is then copied to the per-platform destination (`./.claude/` or `~/.claude/` depending on mode) by `ulis install`.
+The generated tree is then copied to the per-platform destination (`./.claude/`, `./.forge/`, etc.) by `ulis install`.
 
-**Why it exists:** Claude Code, OpenCode, Codex, and Cursor all have incompatible config formats. Without ULIS you maintain four separate, drift-prone config trees. ULIS keeps one source of truth and compiles it.
+**Why it exists:** Claude Code, OpenCode, Codex, Cursor, and ForgeCode all have incompatible config formats. Without ULIS you maintain separate, drift-prone config trees. ULIS keeps one source of truth and compiles it.
 
 ---
 
@@ -45,10 +46,10 @@ The generated tree is then copied to the per-platform destination (`./.claude/` 
 │  ParsedAgent[]  ParsedSkill[]  McpConfig  PluginsConfig │
 └──────────┬──────────┬──────────┬──────────┬────────────┘
            │          │          │          │
-    generateClaude  generateOpencode  generateCodex  generateCursor
-           │          │          │          │
-           ▼          ▼          ▼          ▼
-     generated/claude  opencode  codex    cursor
+    generateClaude  generateOpencode  generateCodex  generateCursor  generateForgecode
+           │          │          │          │               │
+           ▼          ▼          ▼          ▼               ▼
+     generated/claude  opencode  codex    cursor        forgecode
 ```
 
 Each `generate*` function:
@@ -93,12 +94,13 @@ Example:
 
 Per-platform sections supported:
 
-| Platform   | Override-friendly fields                                                                                                                                      |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `claude`   | `modelMap`, `toolNames`                                                                                                                                       |
-| `cursor`   | `modelMap`, `toolNames`                                                                                                                                       |
-| `codex`    | `model`, `modelReasoningEffort`, `sandbox`, `trustedProjects`, `mcpStartupTimeoutSec`                                                                         |
-| `opencode` | `defaultModel`, `smallModel`, `modelMap`, `agentNameMap`, `bashAllowlist`, `skillAllowlist`, `toolPermissions`, `readAllowlist`, `externalDirectoryAllowlist` |
+| Platform    | Override-friendly fields                                                                                                                                      |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `claude`    | `modelMap`, `toolNames`                                                                                                                                       |
+| `cursor`    | `modelMap`, `toolNames`                                                                                                                                       |
+| `codex`     | `model`, `modelReasoningEffort`, `sandbox`, `trustedProjects`, `mcpStartupTimeoutSec`                                                                         |
+| `opencode`  | `defaultModel`, `smallModel`, `modelMap`, `agentNameMap`, `bashAllowlist`, `skillAllowlist`, `toolPermissions`, `readAllowlist`, `externalDirectoryAllowlist` |
+| `forgecode` | `toolNames`                                                                                                                                                   |
 
 The file is optional. Without it, code defaults from `src/config.ts` are used unchanged.
 
@@ -176,6 +178,7 @@ Skills become:
 - **OpenCode**: skill directories in `generated/opencode/skills/`
 - **Codex**: skill directories in `generated/codex/skills/`
 - **Cursor**: skill directories in `generated/cursor/skills/`
+- **ForgeCode**: skill directories in `generated/forgecode/.forge/skills/`
 
 ### 3.3 MCP Server
 
@@ -293,24 +296,24 @@ Hooks are native to Claude Code only. On other targets they are silently dropped
 
 ## 4. Capability Matrix
 
-| Feature                              |   Claude Code   |       OpenCode       |     Codex     | Cursor  |
-| ------------------------------------ | :-------------: | :------------------: | :-----------: | :-----: |
-| Native agents                        |        ✓        |          ✓           |       ✓       |    ✓    |
-| Native skills/commands               |        ✓        |          ✓           |       ✓       |    ✓    |
-| Hooks (PreToolUse/PostToolUse/Stop)  |        ✓        |          —           |       —       |    —    |
-| Subagent spawning                    |        ✓        |          ✓           |    comment    |    —    |
-| Background execution                 |        ✓        |          —           |       —       |    —    |
-| Git worktree isolation               |        ✓        |          —           |       —       |    —    |
-| Local MCP servers                    |        ✓        |          ✓           |       ✓       |    ✓    |
-| Remote MCP servers                   |        ✓        |          ✓           | localFallback |    ✓    |
-| Marketplace plugins                  |        ✓        |    ✓ (TS plugins)    |       —       |    —    |
-| Fine-grained tool permissions        |        ✓        |          ✓           |       —       |    —    |
-| `contextHints` enforcement           |     comment     |       comment        |    comment    | comment |
-| `toolPolicy.avoid`                   | disallowedTools |       comment        |    comment    | comment |
-| `toolPolicy.requireConfirmation`     | permissionMode  | permission.edit/bash |    comment    | comment |
-| `security.permissionLevel: readonly` |    plan mode    |      deny perms      |    comment    | comment |
-| `security.blockedCommands`           | PreToolUse hook |       comment        |    comment    | comment |
-| `security.rateLimit`                 |     comment     | rate_limit_per_hour  |    comment    | comment |
+| Feature                              |   Claude Code   |       OpenCode       |     Codex     | Cursor  | ForgeCode  |
+| ------------------------------------ | :-------------: | :------------------: | :-----------: | :-----: | :--------: |
+| Native agents                        |        ✓        |          ✓           |       ✓       |    ✓    |     ✓      |
+| Native skills/commands               |        ✓        |          ✓           |       ✓       |    ✓    |     ✓      |
+| Hooks (PreToolUse/PostToolUse/Stop)  |        ✓        |          —           |       —       |    —    |     —      |
+| Subagent spawning                    |        ✓        |          ✓           |    comment    |    —    |     —      |
+| Background execution                 |        ✓        |          —           |       —       |    —    |     —      |
+| Git worktree isolation               |        ✓        |          —           |       —       |    —    |     —      |
+| Local MCP servers                    |        ✓        |          ✓           |       ✓       |    ✓    |     ✓      |
+| Remote MCP servers                   |        ✓        |          ✓           | localFallback |    ✓    |     ✓      |
+| Marketplace plugins                  |        ✓        |    ✓ (TS plugins)    |       —       |    —    |     —      |
+| Fine-grained tool permissions        |        ✓        |          ✓           |       —       |    —    | tools list |
+| `contextHints` enforcement           |     comment     |       comment        |    comment    | comment |  comment   |
+| `toolPolicy.avoid`                   | disallowedTools |       comment        |    comment    | comment |  comment   |
+| `toolPolicy.requireConfirmation`     | permissionMode  | permission.edit/bash |    comment    | comment |  comment   |
+| `security.permissionLevel: readonly` |    plan mode    |      deny perms      |    comment    | comment |  comment   |
+| `security.blockedCommands`           | PreToolUse hook |       comment        |    comment    | comment |  comment   |
+| `security.rateLimit`                 |     comment     | rate_limit_per_hour  |    comment    | comment |  comment   |
 
 **Legend:** ✓ native · comment = emitted as comment in output file · — = not emitted
 
@@ -338,6 +341,7 @@ generateClaude(agents, skills, mcp, plugins, sourceDir, join(generatedDir, "clau
 generateOpencode(agents, skills, mcp, plugins, sourceDir, join(generatedDir, "opencode"), buildConfig);
 generateCodex(agents, skills, mcp, sourceDir, join(generatedDir, "codex"), buildConfig);
 generateCursor(agents, skills, mcp, sourceDir, join(generatedDir, "cursor"), buildConfig);
+generateForgecode(agents, skills, mcp, sourceDir, join(generatedDir, "forgecode"), buildConfig);
 ```
 
 Parsing validates against Zod schemas and fails fast with a descriptive error if a field is invalid.

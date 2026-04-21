@@ -37,7 +37,7 @@ async function main(): Promise<void> {
 
   cli
     .command("install", "Build configs from the ulis source tree and install them")
-    .option("-g, --global", "Read ~/.ulis/ and install to ~/.claude/, ~/.codex/, etc.")
+    .option("-g, --global", "Read ~/.ulis/ and install to ~/.claude/, ~/.codex/, ~/forge/, etc.")
     .option("-y, --yes", "Skip confirmation prompts (useful for CI)")
     .option("--source <path>", "Override the ulis source directory")
     .option("--target <platform>", "Only build/install the given platform(s) (comma-separated)")

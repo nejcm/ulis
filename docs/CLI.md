@@ -27,7 +27,7 @@ ulis init [-g | --global]
 1. Creates `./.ulis/` with `config.yaml`, `mcp.yaml`, `permissions.yaml`, `plugins.yaml`, `skills.yaml`, `guardrails.md`, and empty `agents/`, `skills/`, `commands/`, `raw/` subfolders.
 2. Reads the project name from `./package.json` (falls back to the directory name).
 3. Appends `/.ulis/generated/` to `.gitignore` (creating the file if missing).
-4. Prints a hint suggesting you also gitignore `./.claude/`, `./.cursor/`, `./.codex/`, `./.opencode/` if you don't want to commit generated configs.
+4. Prints a hint suggesting you also gitignore `./.claude/`, `./.cursor/`, `./.codex/`, `./.opencode/`, and `./.forge/` if you don't want to commit generated configs.
 
 Fails if `.ulis/` (or `~/.ulis/` in global mode) already exists.
 
@@ -41,11 +41,11 @@ Parse, validate, and generate configs into `<source>/generated/<platform>/` with
 ulis build [-g | --global] [--source <path>] [--target <platforms>]
 ```
 
-| Flag                   | Effect                                                                  |
-| ---------------------- | ----------------------------------------------------------------------- |
-| `-g`, `--global`       | Read from `~/.ulis/` instead of `./.ulis/`.                             |
-| `--source <path>`      | Explicit source path. Takes precedence over `--global`.                 |
-| `--target <platforms>` | Comma-separated subset of `claude,codex,cursor,opencode`. Default: all. |
+| Flag                   | Effect                                                                            |
+| ---------------------- | --------------------------------------------------------------------------------- |
+| `-g`, `--global`       | Read from `~/.ulis/` instead of `./.ulis/`.                                       |
+| `--source <path>`      | Explicit source path. Takes precedence over `--global`.                           |
+| `--target <platforms>` | Comma-separated subset of `claude,codex,cursor,opencode,forgecode`. Default: all. |
 
 Output is always written under `<source>/generated/<platform>/`. Existing contents there are cleared before each build.
 
@@ -60,25 +60,26 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
              [-y | --yes] [--no-rebuild] [--backup]
 ```
 
-| Flag                   | Effect                                                                                |
-| ---------------------- | ------------------------------------------------------------------------------------- |
-| `-g`, `--global`       | Read `~/.ulis/` and write to `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.opencode/`. |
-| `--source <path>`      | Override source (still writes to CWD or home depending on `--global`).                |
-| `--target <platforms>` | Only build/install the listed platforms.                                              |
-| `-y`, `--yes`          | Skip the "about to overwrite" confirmation prompt.                                    |
-| `--no-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`.              |
-| `--backup`             | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.     |
+| Flag                   | Effect                                                                                                               |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `-g`, `--global`       | Read `~/.ulis/` and write to `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.opencode/`, `~/forge/`, and `~/.mcp.json`. |
+| `--source <path>`      | Override source (still writes to CWD or home depending on `--global`).                                               |
+| `--target <platforms>` | Only build/install the listed platforms.                                                                             |
+| `-y`, `--yes`          | Skip the "about to overwrite" confirmation prompt.                                                                   |
+| `--no-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`.                                             |
+| `--backup`             | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.                                    |
 
 **Install strategy per platform:**
 
-| Platform | Managed dirs (replaced)                       | Merged files                         |
-| -------- | --------------------------------------------- | ------------------------------------ |
-| Claude   | `agents/`, `commands/`, `rules/`, `hooks/`, … | `settings.json`, `.claude.json` keys |
-| OpenCode | `agents/`, `skills/`, `commands/`             | `opencode.json`                      |
-| Codex    | `agents/`, `AGENTS.md`                        | `config.toml` (sectional)            |
-| Cursor   | `agents/` (`.mdc` files)                      | `mcp.json`                           |
+| Platform  | Managed dirs (replaced)                       | Merged files                         |
+| --------- | --------------------------------------------- | ------------------------------------ |
+| Claude    | `agents/`, `commands/`, `rules/`, `hooks/`, … | `settings.json`, `.claude.json` keys |
+| OpenCode  | `agents/`, `skills/`, `commands/`             | `opencode.json`                      |
+| Codex     | `agents/`, `AGENTS.md`                        | `config.toml` (sectional)            |
+| Cursor    | `agents/` (`.mdc` files)                      | `mcp.json`                           |
+| ForgeCode | `.forge/agents`, `.forge/skills`              | `.mcp.json`                          |
 
-Deep-merge preserves user-owned keys in `settings.json` / `mcp.json` / `opencode.json` that `ulis` doesn't touch.
+Deep-merge preserves user-owned keys in `settings.json` / `mcp.json` / `.mcp.json` / `opencode.json` that `ulis` doesn't touch.
 
 ---
 

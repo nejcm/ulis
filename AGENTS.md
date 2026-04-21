@@ -2,7 +2,7 @@
 
 ## About this repository
 
-This repo is the source for the `@nejcm/ulis` CLI — a single source of truth for AI tool configs (Claude Code, Codex, OpenCode, Cursor). The CLI reads a user-owned `.ulis/` tree (project-local) or `~/.ulis/` (global) and generates native configs for each platform.
+This repo is the source for the `@nejcm/ulis` CLI — a single source of truth for AI tool configs (Claude Code, Codex, OpenCode, Cursor, ForgeCode). The CLI reads a user-owned `.ulis/` tree (project-local) or `~/.ulis/` (global) and generates native configs for each platform.
 
 The package ships **no bundled canonical content**. The tree under [`example/`](example/) is a reference example config.
 
@@ -33,7 +33,7 @@ src/
   cli.ts                # cac entry point (bundled to dist/cli.js)
   commands/             # init, install, build, tui
   parsers/              # agent, skill, mcp, plugins, permissions
-  generators/           # claude, opencode, codex, cursor
+  generators/           # claude, opencode, codex, cursor, forgecode
   schema/               # Zod schemas
   scaffold/             # `ulis init` templates (inlined strings)
   validators/           # cross-ref + collision checks

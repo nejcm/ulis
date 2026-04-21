@@ -1,0 +1,1 @@
+fixture common guidance

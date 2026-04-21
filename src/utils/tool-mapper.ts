@@ -1,7 +1,7 @@
 import type { BuildConfig } from "../config.js";
 import type { ToolPermissions } from "../schema.js";
 
-export type ToolPlatform = "claude" | "cursor" | "opencode" | "codex";
+export type ToolPlatform = "claude" | "cursor" | "opencode" | "codex" | "forgecode";
 
 /**
  * Map canonical `ToolPermissions` to a flat list of platform-specific tool

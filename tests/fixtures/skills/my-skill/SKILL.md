@@ -1,4 +1,5 @@
 ---
+name: my-skill
 description: A minimal test skill
 ---
 

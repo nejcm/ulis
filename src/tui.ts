@@ -66,7 +66,7 @@ function renderScreen() {
         { text: "This flow reuses the repo's native build and install logic under the hood." },
         { text: "" },
         { text: "Features", fgColor: "color06", bold: true },
-        { text: "  - Multi-platform generation for OpenCode, Claude Code, Codex, and Cursor" },
+        { text: "  - Multi-platform generation for OpenCode, Claude Code, Codex, Cursor, and ForgeCode" },
         { text: "  - Independent install selection, with optional backup protection" },
         { text: "  - Live progress log while the workflow runs" },
         { text: "" },

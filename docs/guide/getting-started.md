@@ -4,7 +4,7 @@ title: Getting Started
 
 # Getting Started
 
-`ulis` compiles one canonical config tree into native configuration for Claude Code, Codex, Cursor, and OpenCode.
+`ulis` compiles one canonical config tree into native configuration for Claude Code, Codex, Cursor, OpenCode, and ForgeCode.
 
 ## Install
 
@@ -37,7 +37,7 @@ After editing `.ulis/`:
 ulis install --yes
 ```
 
-This builds generated output and installs into local tool folders like `./.claude/`, `./.cursor/`, `./.codex/`, and `./.opencode/`.
+This builds generated output and installs into local tool folders like `./.claude/`, `./.cursor/`, `./.codex/`, `./.opencode/`, and `./.forge/` (plus `./.mcp.json`).
 
 ## Next reads
 

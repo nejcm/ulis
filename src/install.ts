@@ -7,7 +7,7 @@ import { runBuild, type Logger } from "./build.js";
 import { ULIS_GENERATED_DIRNAME } from "./config.js";
 import { loadPlugins } from "./parsers/plugins.js";
 import { loadSkills } from "./parsers/skills.js";
-import { PLATFORM_LABELS, PLATFORMS, uniquePlatforms, type Platform } from "./platforms.js";
+import { PLATFORM_DIRS, PLATFORM_LABELS, PLATFORMS, platformConfigDir, uniquePlatforms, type Platform } from "./platforms.js";
 import { type PluginsConfig, type SkillsConfig } from "./schema.js";
 import { deepMerge } from "./utils/build-config.js";
 
@@ -108,6 +108,9 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
         break;
       case "cursor":
         installCursor(context);
+        break;
+      case "forgecode":
+        installForgecode(context);
         break;
     }
   }
@@ -219,23 +222,36 @@ function installCursor(context: InstallContext): void {
   }
 }
 
-/**
- * Resolve the per-platform dot-folder under `destBase`.
- * - `destBase = homedir()` → `~/.claude`, `~/.codex`, etc.
- * - `destBase = cwd()`     → `./.claude`, `./.codex`, etc.
- */
-function platformConfigDir(platform: Platform, destBase: string): string {
-  switch (platform) {
-    case "claude":
-      return join(destBase, ".claude");
-    case "opencode":
-      return destBase === homedir()
-        ? (process.env.OPENCODE_CONFIG ?? join(destBase, ".opencode"))
-        : join(destBase, ".opencode");
-    case "codex":
-      return join(destBase, ".codex");
-    case "cursor":
-      return join(destBase, ".cursor");
+function installForgecode(context: InstallContext): void {
+  const sourceDir = join(context.outputDir, "forgecode");
+  const sourceForgeDir = join(sourceDir, PLATFORM_DIRS.forgecode.project);
+  const sourceMcp = join(sourceDir, ".mcp.json");
+  const targetForgeDir = platformConfigDir("forgecode", context.destBase);
+  const targetMcp = join(context.destBase, ".mcp.json");
+
+  logHeader(context.logger, `Installing ${PLATFORM_LABELS.forgecode}`);
+  backupDirectory(targetForgeDir, context);
+  backupFile(targetMcp, context);
+  ensureDir(targetForgeDir);
+
+  if (existsSync(sourceForgeDir)) {
+    copyPlatformContents(sourceForgeDir, targetForgeDir, context.logger);
+  }
+
+  // Project installs can place AGENTS.md and other top-level artifacts in repo root.
+  if (context.destBase !== homedir()) {
+    copyPlatformContents(sourceDir, context.destBase, context.logger, new Set([PLATFORM_DIRS.forgecode.project, ".mcp.json"]));
+  }
+
+  if (existsSync(sourceMcp)) {
+    if (existsSync(targetMcp)) {
+      const merged = mergeCursorMcpJson(targetMcp, sourceMcp);
+      writeJson(targetMcp, merged);
+      logSuccess(context.logger, ".mcp.json (merged)");
+    } else {
+      cpSync(sourceMcp, targetMcp);
+      logSuccess(context.logger, ".mcp.json (copied)");
+    }
   }
 }
 
@@ -299,6 +315,16 @@ function backupDirectory(targetDir: string, context: InstallContext): void {
   logInfo(context.logger, `[backup] ${targetDir} -> ${backupPath}`);
 }
 
+function backupFile(targetPath: string, context: InstallContext): void {
+  if (!context.backup || !existsSync(targetPath)) {
+    return;
+  }
+
+  const backupPath = `${targetPath}.${context.timestamp}.backup`;
+  cpSync(targetPath, backupPath);
+  logInfo(context.logger, `[backup] ${targetPath} -> ${backupPath}`);
+}
+
 function installClaudePlugins(plugins: PluginsConfig, logger?: Logger): void {
   const claudePlugins = plugins.claude?.plugins ?? [];
   if (claudePlugins.length === 0) return;
@@ -325,11 +351,12 @@ function installClaudePlugins(plugins: PluginsConfig, logger?: Logger): void {
 }
 
 // map platform key to skills argument agent name
-const PLATFORM_AGENT_NAMES: Record<Platform, string> = {
+const PLATFORM_AGENT_NAMES: Partial<Record<Platform, string>> = {
   claude: "claude-code",
   opencode: "opencode",
   codex: "codex",
   cursor: "cursor",
+  forgecode: "forgecode",
 };
 
 function installSkills(
@@ -338,7 +365,6 @@ function installSkills(
   logger?: Logger,
 ): void {
   if (skills.length === 0) return;
-
   const agentFlags =
     platform === "*"
       ? Object.values(PLATFORM_AGENT_NAMES)

@@ -6,8 +6,16 @@ import { HooksSchema, ToolPermissionsSchema } from "./shared.js";
 
 export const SkillFrontmatterSchema = z.object({
   // IDENTITY
-  name: z.string().optional(), // defaults to directory name
-  description: z.string(), // max 250 chars; drives auto-invocation on all platforms
+  name: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^(?!-)(?!.*--)(?!.*-$)[\p{Ll}\p{Nd}-]+$/u),
+  description: z.string().min(1).max(1024),
+  license: z.string().optional(),
+  compatibility: z.string().min(1).max(500).optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
+  "allowed-tools": z.string().optional(),
 
   // INVOCATION CONTROL
   argumentHint: z.string().optional(), // e.g., "[issue-number]" — Claude autocomplete
@@ -79,6 +87,12 @@ export const SkillFrontmatterSchema = z.object({
         .object({
           enabled: z.boolean().default(true),
           model: z.enum(CURSOR_MODELS).optional(),
+        })
+        .optional(),
+      forgecode: z
+        .object({
+          enabled: z.boolean().default(true),
+          model: z.string().optional(),
         })
         .optional(),
     })

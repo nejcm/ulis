@@ -25,6 +25,7 @@ function makeSkill(name: string): ParsedSkill {
     dir: `/fake/${name}`,
     body: "",
     frontmatter: {
+      name,
       description: "test",
       userInvocable: true,
       allowModelInvocation: true,

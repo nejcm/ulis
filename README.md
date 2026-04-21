@@ -1,8 +1,8 @@
 # ulis
 
-> Unified LLM Interface Specification — one config source, four AI tools.
+> Unified LLM Interface Specification — one config source, five AI tools.
 
-`ulis` is a CLI that compiles a single canonical config tree (agents, skills, MCP servers, plugins, permissions) into native configs for [Claude Code](https://claude.ai/code), [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex), and [Cursor](https://cursor.com).
+`ulis` is a CLI that compiles a single canonical config tree (agents, skills, MCP servers, plugins, permissions) into native configs for [Claude Code](https://claude.ai/code), [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex), [Cursor](https://cursor.com), and [ForgeCode](https://forgecode.dev/docs/).
 
 You write the source once under `.ulis/` (per project) or `~/.ulis/` (global), and `ulis` generates and installs the native files each tool expects.
 
@@ -59,7 +59,7 @@ Add some agents/skills/MCP servers, then:
 ulis install
 ```
 
-This builds into `.ulis/generated/<platform>/` and then deploys to `./.claude/`, `./.codex/`, `./.cursor/`, and `./.opencode/` inside your project. Pass `-y` / `--yes` to skip confirmation prompts.
+This builds into `.ulis/generated/<platform>/` and then deploys to `./.claude/`, `./.codex/`, `./.cursor/`, `./.opencode/`, and ForgeCode locations (`./.forge/` plus `./.mcp.json`) inside your project. Pass `-y` / `--yes` to skip confirmation prompts.
 
 ---
 
@@ -70,7 +70,7 @@ Maintain one canonical config for every project on your machine:
 ```bash
 ulis init --global      # creates ~/.ulis/
 # edit ~/.ulis/... to taste
-ulis install --global   # deploys to ~/.claude/, ~/.codex/, ~/.cursor/, ~/.opencode/
+ulis install --global   # deploys to ~/.claude/, ~/.codex/, ~/.cursor/, ~/.opencode/, ~/forge/, ~/.mcp.json
 ```
 
 ---
@@ -86,14 +86,14 @@ ulis install --global   # deploys to ~/.claude/, ~/.codex/, ~/.cursor/, ~/.openc
 
 ### Common flags
 
-| Flag                  | Applies to         | Description                                                          |
-| --------------------- | ------------------ | -------------------------------------------------------------------- |
-| `-g`, `--global`      | all                | Operate on `~/.ulis/` and home-level install targets (`~/.claude/`…) |
-| `--source <path>`     | `build`, `install` | Override the source directory (takes precedence over `--global`)     |
-| `--target <platform>` | `build`, `install` | Comma-separated list: `claude`, `codex`, `cursor`, `opencode`        |
-| `-y`, `--yes`         | `install`          | Skip confirmation prompts                                            |
-| `--no-rebuild`        | `install`          | Skip the build step and deploy existing `generated/`                 |
-| `--backup`            | `install`          | Back up existing platform dirs (`<dir>.backup.YYYYMMDD_HHMMSS`)      |
+| Flag                  | Applies to         | Description                                                                |
+| --------------------- | ------------------ | -------------------------------------------------------------------------- |
+| `-g`, `--global`      | all                | Operate on `~/.ulis/` and home-level install targets (`~/.claude/`…)       |
+| `--source <path>`     | `build`, `install` | Override the source directory (takes precedence over `--global`)           |
+| `--target <platform>` | `build`, `install` | Comma-separated list: `claude`, `codex`, `cursor`, `opencode`, `forgecode` |
+| `-y`, `--yes`         | `install`          | Skip confirmation prompts                                                  |
+| `--no-rebuild`        | `install`          | Skip the build step and deploy existing `generated/`                       |
+| `--backup`            | `install`          | Back up existing platform dirs (`<dir>.backup.YYYYMMDD_HHMMSS`)            |
 
 ### Source resolution
 
@@ -217,14 +217,15 @@ Copied verbatim into generated outputs. Use `raw/` for platform-specific fragmen
 
 ## Install behaviour
 
-| Tool        | Strategy         | Target (project mode) | Target (global mode) |
-| ----------- | ---------------- | --------------------- | -------------------- |
-| OpenCode    | Overwrite        | `./.opencode/`        | `~/.opencode/`       |
-| Claude Code | Merge (additive) | `./.claude/`          | `~/.claude/`         |
-| Codex       | Overwrite        | `./.codex/`           | `~/.codex/`          |
-| Cursor      | Merge (additive) | `./.cursor/`          | `~/.cursor/`         |
+| Tool        | Strategy         | Target (project mode)       | Target (global mode)       |
+| ----------- | ---------------- | --------------------------- | -------------------------- |
+| OpenCode    | Overwrite        | `./.opencode/`              | `~/.opencode/`             |
+| Claude Code | Merge (additive) | `./.claude/`                | `~/.claude/`               |
+| Codex       | Overwrite        | `./.codex/`                 | `~/.codex/`                |
+| Cursor      | Merge (additive) | `./.cursor/`                | `~/.cursor/`               |
+| ForgeCode   | Merge (additive) | `./.forge/` + `./.mcp.json` | `~/forge/` + `~/.mcp.json` |
 
-`settings.json` and `mcp.json` top-level files are deep-merged so user content outside `ulis`-managed keys is preserved. With `--backup`, the existing platform directory is copied aside before overwriting.
+`settings.json`, `mcp.json`, and `.mcp.json` top-level files are deep-merged so user content outside `ulis`-managed keys is preserved. With `--backup`, existing platform directories/files are copied aside before overwriting.
 
 ---
 
@@ -268,7 +269,7 @@ src/
   cli.ts                   # cac entry point (compiled to dist/cli.js)
   commands/                # init, install, build, tui
   parsers/                 # agent, skill, mcp, plugins, permissions loaders
-  generators/              # claude, opencode, codex, cursor
+  generators/              # claude, opencode, codex, cursor, forgecode
   schema/                  # Zod schemas (ulis-config, agent, mcp, …)
   scaffold/                # inline templates used by `ulis init`
   utils/                   # config-loader, resolve-source, fs, logger, …
