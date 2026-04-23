@@ -68,7 +68,7 @@ Errors abort the build (exit code 1, no files written). Warnings print and the b
 
 `config.yaml` holds the minimum CLI metadata (`version`, `name`).
 
-Platform adapter defaults are internal to ULIS. If you need platform-native output customization, place those files under `raw/` (for example `raw/opencode/opencode.json` or `raw/codex/config.toml`) to override generated files.
+Platform adapter defaults are internal to ULIS. If you need platform-native output customization, place partial config files under `raw/` (for example `raw/opencode/opencode.json` or `raw/codex/config.toml`). These are **deep-merged** into the generated output — raw values win on conflict, arrays are concatenated, and all generated keys not touched by the raw file are preserved. See [Source Layout — Raw overrides](./guide/source-layout.md#raw-overrides) for the full rules.
 
 Capability mismatches are handled with **best-effort + comments**: if a target lacks native support for a field, the value is emitted as a comment in the generated file so reviewers can see it, and the build continues (no hard failure).
 

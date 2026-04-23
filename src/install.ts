@@ -7,7 +7,14 @@ import { runBuild, type Logger } from "./build.js";
 import { ULIS_GENERATED_DIRNAME } from "./config.js";
 import { loadPlugins } from "./parsers/plugins.js";
 import { loadSkills } from "./parsers/skills.js";
-import { PLATFORM_DIRS, PLATFORM_LABELS, PLATFORMS, platformConfigDir, uniquePlatforms, type Platform } from "./platforms.js";
+import {
+  PLATFORM_DIRS,
+  PLATFORM_LABELS,
+  PLATFORMS,
+  platformConfigDir,
+  uniquePlatforms,
+  type Platform,
+} from "./platforms.js";
 import { type PluginsConfig, type SkillsConfig } from "./schema.js";
 
 export interface InstallOptions {
@@ -239,7 +246,12 @@ function installForgecode(context: InstallContext): void {
 
   // Project installs can place AGENTS.md and other top-level artifacts in repo root.
   if (context.destBase !== homedir()) {
-    copyPlatformContents(sourceDir, context.destBase, context.logger, new Set([PLATFORM_DIRS.forgecode.project, ".mcp.json"]));
+    copyPlatformContents(
+      sourceDir,
+      context.destBase,
+      context.logger,
+      new Set([PLATFORM_DIRS.forgecode.project, ".mcp.json"]),
+    );
   }
 
   if (existsSync(sourceMcp)) {

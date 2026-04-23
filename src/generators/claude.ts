@@ -4,6 +4,7 @@ import { type ParsedAgent, enabledAgentsFor } from "../parsers/agent.js";
 import { parseCommands } from "../parsers/command.js";
 import type { ParsedSkill } from "../parsers/skill.js";
 import type { McpConfig, PermissionsConfig, PluginsConfig } from "../schema.js";
+import { mergeOrCopyDir } from "../utils/config-merger.js";
 import { cleanDir, copyDir, fileExists, readFile, writeAgentsAliases, writeFile } from "../utils/fs.js";
 import { log } from "../utils/logger.js";
 import { mcpServersFor, translateEnvMap } from "../utils/mcp-block.js";
@@ -247,15 +248,15 @@ export function generateClaude(
   writeFile(join(outDir, "settings.json"), JSON.stringify(settings, null, 2));
   log.success("settings.json");
 
-  // Copy raw files (common first, then platform-specific to allow overrides)
+  // Merge raw files into output (common first, then platform-specific to allow overrides)
   const rawCommon = join(aiDir, "raw", "common");
   if (fileExists(rawCommon)) {
-    copyDir(rawCommon, outDir);
+    mergeOrCopyDir(rawCommon, outDir);
     log.success("raw/common/");
   }
   const rawPlatform = join(aiDir, "raw", "claude");
   if (fileExists(rawPlatform)) {
-    copyDir(rawPlatform, outDir);
+    mergeOrCopyDir(rawPlatform, outDir);
     log.success("raw/claude/");
   }
 

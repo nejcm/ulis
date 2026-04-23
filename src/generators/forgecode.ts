@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { type ParsedAgent, enabledAgentsFor } from "../parsers/agent.js";
 import { type ParsedSkill, enabledSkillsFor } from "../parsers/skill.js";
 import type { McpConfig } from "../schema.js";
+import { mergeOrCopyDir } from "../utils/config-merger.js";
 import { cleanDir, copyDir, copySkillDirs, fileExists, writeFile } from "../utils/fs.js";
 import { log } from "../utils/logger.js";
 import { mcpServersFor, translateEnvMap } from "../utils/mcp-block.js";
@@ -108,14 +109,15 @@ export function generateForgecode(
   writeFile(join(outDir, ".mcp.json"), JSON.stringify({ mcpServers }, null, 2));
   log.success(".mcp.json");
 
+  // Merge raw files into output (common first, then platform-specific to allow overrides)
   const rawCommon = join(aiDir, "raw", "common");
   if (fileExists(rawCommon)) {
-    copyDir(rawCommon, outDir);
+    mergeOrCopyDir(rawCommon, outDir);
     log.success("raw/common/");
   }
   const rawPlatform = join(aiDir, "raw", "forgecode");
   if (fileExists(rawPlatform)) {
-    copyDir(rawPlatform, outDir);
+    mergeOrCopyDir(rawPlatform, outDir);
     log.success("raw/forgecode/");
   }
 }
