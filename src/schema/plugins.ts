@@ -7,15 +7,15 @@ export const PLuginSchema = z.object({
 });
 
 const perPlatformPluginsSchema = z.object({
-  plugins: z.array(PLuginSchema).default([]).optional(),
-});
+  plugins: z.array(PLuginSchema).optional().nullable(),
+}).optional().nullable();
 
 export const PluginsConfigSchema = z.object({
-  "*": perPlatformPluginsSchema.optional(),
-  claude: perPlatformPluginsSchema.optional(),
-  opencode: perPlatformPluginsSchema.optional(),
-  codex: perPlatformPluginsSchema.optional(),
-  cursor: perPlatformPluginsSchema.optional(),
-}).optional();
+  "*": perPlatformPluginsSchema,
+  claude: perPlatformPluginsSchema,
+  opencode: perPlatformPluginsSchema,
+  codex: perPlatformPluginsSchema,
+  cursor: perPlatformPluginsSchema,
+}).optional().nullable();
 
 export type PluginsConfig = z.infer<typeof PluginsConfigSchema>;

@@ -267,7 +267,7 @@ describe("PluginsConfigSchema", () => {
         plugins: [{ name: "foo", source: "official" }],
       },
     });
-    expect(result.claude?.plugins[0].name).toBe("foo");
+    expect(result?.claude?.plugins?.[0]?.name).toBe("foo");
   });
 
   it("parses config with both wildcard and claude sections", () => {
@@ -277,7 +277,7 @@ describe("PluginsConfigSchema", () => {
         plugins: [{ name: "frontend-design", source: "official" }],
       },
     });
-    expect(result.claude?.plugins[0].source).toBe("official");
+    expect(result?.claude?.plugins?.[0]?.source).toBe("official");
   });
 
   it("parses per-platform plugin sections", () => {
@@ -286,7 +286,7 @@ describe("PluginsConfigSchema", () => {
       codex: { plugins: [] },
       cursor: { plugins: [] },
     });
-    expect(result.opencode?.plugins[0].name).toBe("oc-plugin");
+    expect(result?.opencode?.plugins?.[0]?.name).toBe("oc-plugin");
   });
 });
 

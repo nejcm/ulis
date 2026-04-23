@@ -10,8 +10,8 @@ import { loadSkills } from "./parsers/skills.js";
 import {
   PLATFORM_DIRS,
   PLATFORM_LABELS,
-  PLATFORMS,
   platformConfigDir,
+  PLATFORMS,
   uniquePlatforms,
   type Platform,
 } from "./platforms.js";
@@ -354,7 +354,7 @@ function backupFile(targetPath: string, context: InstallContext): void {
 }
 
 function installClaudePlugins(plugins: PluginsConfig, logger?: Logger): void {
-  const claudePlugins = plugins.claude?.plugins ?? [];
+  const claudePlugins = plugins?.claude?.plugins ?? [];
   if (claudePlugins.length === 0) return;
 
   if (!commandExists("claude")) {

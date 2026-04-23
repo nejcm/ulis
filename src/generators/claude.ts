@@ -6,7 +6,7 @@ import { type ParsedRule, enabledRulesFor } from "../parsers/rule.js";
 import type { ParsedSkill } from "../parsers/skill.js";
 import type { McpConfig, PermissionsConfig, PluginsConfig } from "../schema.js";
 import { mergeOrCopyDir } from "../utils/config-merger.js";
-import { cleanDir, copyDir, fileExists, readFile, writeAgentsAliases, writeFile } from "../utils/fs.js";
+import { cleanDir, fileExists, writeAgentsAliases, writeFile } from "../utils/fs.js";
 import { log } from "../utils/logger.js";
 import { mcpServersFor, translateEnvMap } from "../utils/mcp-block.js";
 import { buildPolicyCommentBlock } from "../utils/policy-comments.js";
@@ -232,7 +232,7 @@ export function generateClaude(
   const enabledPlugins: Record<string, boolean> = {};
   const extraKnownMarketplaces: Record<string, unknown> = {};
 
-  for (const plugin of plugins.claude?.plugins ?? []) {
+  for (const plugin of plugins?.claude?.plugins ?? []) {
     if (plugin.source === "github" && plugin.repo) {
       const key = `${plugin.name}@${plugin.name}`;
       enabledPlugins[key] = true;

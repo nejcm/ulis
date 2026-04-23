@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=./node_modules/@nejcm/ulis/dist/schemas/mcp.schema.json
+# yaml-language-server: $schema=../dist/schemas/mcp.schema.json
 
 servers:
   context7:

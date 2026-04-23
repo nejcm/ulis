@@ -1,4 +1,3 @@
 # yaml-language-server: $schema=../dist/schemas/plugins.schema.json
 
 claude:
-  plugins:
