@@ -178,10 +178,11 @@ describe("ForgeCode generator", () => {
     expect(content).toContain("tools:");
   });
 
-  it("generates .mcp.json with all targeted servers", () => {
-    const mcp = JSON.parse(readOut("forgecode", ".mcp.json"));
+  it("generates .forge/.mcp.json with all targeted servers", () => {
+    const mcp = JSON.parse(readOut("forgecode", ".forge", ".mcp.json"));
     expect(mcp.mcpServers).toHaveProperty("test-local");
     expect(mcp.mcpServers).toHaveProperty("test-remote");
+    expect(mcp.mcpServers["test-remote"].type).toBe("http");
   });
 
   it("copies skill directories under .forge/skills", () => {

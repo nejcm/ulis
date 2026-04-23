@@ -37,7 +37,7 @@ After editing `.ulis/`:
 ulis install --yes
 ```
 
-This builds generated output and installs into local tool folders like `./.claude/`, `./.cursor/`, `./.codex/`, `./.opencode/`, and `./.forge/` (plus `./.mcp.json`).
+This builds generated output and installs into local tool folders like `./.claude/`, `./.cursor/`, `./.codex/`, `./.opencode/`, and `./.forge/`.
 
 ## Next reads
 

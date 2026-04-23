@@ -231,9 +231,9 @@ function installCursor(context: InstallContext): void {
 function installForgecode(context: InstallContext): void {
   const sourceDir = join(context.outputDir, "forgecode");
   const sourceForgeDir = join(sourceDir, PLATFORM_DIRS.forgecode.project);
-  const sourceMcp = join(sourceDir, ".mcp.json");
+  const sourceMcp = join(sourceForgeDir, ".mcp.json");
   const targetForgeDir = platformConfigDir("forgecode", context.destBase);
-  const targetMcp = join(context.destBase, ".mcp.json");
+  const targetMcp = join(targetForgeDir, ".mcp.json");
 
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.forgecode}`);
   backupDirectory(targetForgeDir, context);
@@ -246,12 +246,7 @@ function installForgecode(context: InstallContext): void {
 
   // Project installs can place AGENTS.md and other top-level artifacts in repo root.
   if (context.destBase !== homedir()) {
-    copyPlatformContents(
-      sourceDir,
-      context.destBase,
-      context.logger,
-      new Set([PLATFORM_DIRS.forgecode.project, ".mcp.json"]),
-    );
+    copyPlatformContents(sourceDir, context.destBase, context.logger, new Set([PLATFORM_DIRS.forgecode.project]));
   }
 
   if (existsSync(sourceMcp)) {
@@ -388,7 +383,7 @@ const SKILL_PLATFORM_AGENT_NAMES: Partial<Record<Platform, string>> = {
 };
 
 function installSkills(
-  skills: readonly { name: string; args?: readonly string[] }[],
+  skills: readonly { key?: string; name: string; args?: readonly string[] }[],
   platform: Platform | "*",
   logger?: Logger,
 ): void {
@@ -415,10 +410,10 @@ function installSkills(
         .map((line) => line.trim())
         .filter((line) => line.length > 0);
       const detail = combined[combined.length - 1] || result.error?.message || `exit ${result.status}`;
-      logWarn(logger, `Failed to install ${platform} skill: ${skill.name} (${detail})`);
+      logWarn(logger, `Failed to install ${platform} skill: ${skill.key ?? skill.name} (${detail})`);
       continue;
     }
-    logSuccess(logger, `${platform} skill: ${skill.name}`);
+    logSuccess(logger, `${platform} skill: ${skill.key ?? skill.name}`);
   }
 }
 

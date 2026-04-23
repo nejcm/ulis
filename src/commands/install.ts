@@ -54,7 +54,7 @@ function detectCollisions(destBase: string, targets: readonly Platform[]): strin
           // ignore
         }
       }
-      const mcpPath = join(destBase, ".mcp.json");
+      const mcpPath = join(forgeDir, ".mcp.json");
       if (existsSync(mcpPath)) {
         paths.push(mcpPath);
       }

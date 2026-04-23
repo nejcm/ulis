@@ -60,14 +60,14 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
              [-y | --yes] [--no-rebuild] [--backup]
 ```
 
-| Flag                   | Effect                                                                                                               |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `-g`, `--global`       | Read `~/.ulis/` and write to `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.opencode/`, `~/forge/`, and `~/.mcp.json`. |
-| `--source <path>`      | Override source (still writes to CWD or home depending on `--global`).                                               |
-| `--target <platforms>` | Only build/install the listed platforms.                                                                             |
-| `-y`, `--yes`          | Skip the "about to overwrite" confirmation prompt.                                                                   |
-| `--no-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`.                                             |
-| `--backup`             | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.                                    |
+| Flag                   | Effect                                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------------------ |
+| `-g`, `--global`       | Read `~/.ulis/` and write to `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.opencode/`, and `~/.forge/`. |
+| `--source <path>`      | Override source (still writes to CWD or home depending on `--global`).                                 |
+| `--target <platforms>` | Only build/install the listed platforms.                                                               |
+| `-y`, `--yes`          | Skip the "about to overwrite" confirmation prompt.                                                     |
+| `--no-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`.                               |
+| `--backup`             | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.                      |
 
 **Install strategy per platform:**
 
@@ -77,9 +77,9 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 | OpenCode  | target dir contents                           | _none_                               |
 | Codex     | target dir contents                           | _none_                               |
 | Cursor    | `agents/` (`.mdc` files)                      | `mcp.json`                           |
-| ForgeCode | `.forge/agents`, `.forge/skills`              | `.mcp.json`                          |
+| ForgeCode | `.forge/agents`, `.forge/skills`              | `.forge/.mcp.json`                   |
 
-Deep-merge preserves user-owned keys in `settings.json` / `mcp.json` / `.mcp.json` only.
+Deep-merge preserves user-owned keys in `settings.json` / `mcp.json` / `.forge/.mcp.json` only.
 
 ---
 

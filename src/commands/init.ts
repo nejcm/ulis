@@ -65,7 +65,7 @@ export async function initCmd(options: InitOptions = {}): Promise<void> {
     log.dim(`  - Declare MCP servers in ${ULIS_SOURCE_DIRNAME}/mcp.yaml`);
     log.dim(`  - Run 'ulis install' to generate and install platform configs`);
     log.info("");
-    log.dim("Tip: consider adding .claude/, .cursor/, .codex/, .opencode/, .forge/, and .mcp.json to .gitignore");
+    log.dim("Tip: consider adding .claude/, .cursor/, .codex/, .opencode/, .forge/ to .gitignore");
     log.dim("     if you don't want to commit generated configs.");
   } else {
     log.info("");

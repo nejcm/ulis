@@ -58,7 +58,7 @@ Add some agents/skills/MCP servers, then:
 ulis install
 ```
 
-This builds into `.ulis/generated/<platform>/` and then deploys to `./.claude/`, `./.codex/`, `./.cursor/`, `./.opencode/`, and ForgeCode locations (`./.forge/` plus `./.mcp.json`) inside your project. Pass `-y` / `--yes` to skip confirmation prompts.
+This builds into `.ulis/generated/<platform>/` and then deploys to `./.claude/`, `./.codex/`, `./.cursor/`, `./.opencode/`, and ForgeCode locations (`./.forge/`) inside your project. Pass `-y` / `--yes` to skip confirmation prompts.
 
 ---
 
@@ -69,7 +69,7 @@ Maintain one canonical config for every project on your machine:
 ```bash
 ulis init --global      # creates ~/.ulis/
 # edit ~/.ulis/... to taste
-ulis install --global   # deploys to ~/.claude/, ~/.codex/, ~/.cursor/, ~/.opencode/, ~/forge/, ~/.mcp.json
+ulis install --global   # deploys to ~/.claude/, ~/.codex/, ~/.cursor/, ~/.opencode/, ~/.forge/
 ```
 
 ---
@@ -218,15 +218,15 @@ Copied verbatim into generated outputs. Use `raw/` for platform-specific fragmen
 
 ## Install behaviour
 
-| Tool        | Strategy         | Target (project mode)       | Target (global mode)       |
-| ----------- | ---------------- | --------------------------- | -------------------------- |
-| OpenCode    | Overwrite        | `./.opencode/`              | `~/.opencode/`             |
-| Claude Code | Merge (additive) | `./.claude/`                | `~/.claude/`               |
-| Codex       | Overwrite        | `./.codex/`                 | `~/.codex/`                |
-| Cursor      | Merge (additive) | `./.cursor/`                | `~/.cursor/`               |
-| ForgeCode   | Merge (additive) | `./.forge/` + `./.mcp.json` | `~/forge/` + `~/.mcp.json` |
+| Tool        | Strategy         | Target (project mode) | Target (global mode) |
+| ----------- | ---------------- | --------------------- | -------------------- |
+| OpenCode    | Overwrite        | `./.opencode/`        | `~/.opencode/`       |
+| Claude Code | Merge (additive) | `./.claude/`          | `~/.claude/`         |
+| Codex       | Overwrite        | `./.codex/`           | `~/.codex/`          |
+| Cursor      | Merge (additive) | `./.cursor/`          | `~/.cursor/`         |
+| ForgeCode   | Merge (additive) | `./.forge/`           | `~/.forge/`          |
 
-`settings.json`, `mcp.json`, and `.mcp.json` top-level files are deep-merged so user content outside `ulis`-managed keys is preserved. With `--backup`, existing platform directories/files are copied aside before overwriting.
+`settings.json`, `mcp.json`, and ForgeCode's `.forge/.mcp.json` are deep-merged so user content outside `ulis`-managed keys is preserved. With `--backup`, existing platform directories/files are copied aside before overwriting.
 
 ---
 

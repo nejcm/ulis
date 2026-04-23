@@ -18,7 +18,7 @@ ULIS is a CLI (`ulis`) that lets you define AI agent configurations **once** and
 ├── skills/*/         ─────►  ├── opencode/ (opencode.json, agents/, skills/)
 │   SKILL.md                  ├── codex/    (config.toml, agents/*.toml, AGENTS.md)
 ├── mcp.yaml          ─────►  ├── cursor/   (agents/*.mdc, skills/, mcp.json)
-│                             └── forgecode/ (.forge/agents, .forge/skills, .mcp.json)
+│                             └── forgecode/ (.forge/agents, .forge/skills, .forge/.mcp.json)
 ├── plugins.yaml         (Claude marketplace plugins)
 ├── skills.yaml          (external skill installs)
 ├── permissions.yaml

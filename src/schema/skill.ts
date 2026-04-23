@@ -6,6 +6,7 @@ import { HooksSchema, ToolPermissionsSchema } from "./shared.js";
 
 export const SkillFrontmatterSchema = z.object({
   // IDENTITY
+  key: z.string().optional(),
   name: z
     .string()
     .min(1)

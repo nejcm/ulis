@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const GlobalSkillSchema = z.object({
+  key: z.string().optional(),
   name: z.string(),
   args: z.array(z.string()).optional(),
 });

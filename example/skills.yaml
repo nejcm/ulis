@@ -3,14 +3,17 @@
 "*":
   skills:
     - name: vercel-labs/skills
+      key: vercel-labs/skills/find-skills
       args:
         - --skill
         - find-skills
     - name: https://github.com/anthropics/skills
+      key: anthropics/skills/mcp-builder
       args:
         - --skill
         - mcp-builder
     - name: https://github.com/anthropics/skills
+      key: anthropics/skills/skill-creator
       args:
         - --skill
         - skill-creator

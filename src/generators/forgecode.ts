@@ -5,7 +5,7 @@ import { type ParsedRule, enabledRulesFor } from "../parsers/rule.js";
 import { type ParsedSkill, enabledSkillsFor } from "../parsers/skill.js";
 import type { McpConfig } from "../schema.js";
 import { mergeOrCopyDir } from "../utils/config-merger.js";
-import { cleanDir, copyDir, copySkillDirs, fileExists, readFile, writeFile } from "../utils/fs.js";
+import { cleanDir, copySkillDirs, fileExists, readFile, writeFile } from "../utils/fs.js";
 import { log } from "../utils/logger.js";
 import { mcpServersFor, translateEnvMap } from "../utils/mcp-block.js";
 import { buildPolicyCommentBlock } from "../utils/policy-comments.js";
@@ -99,7 +99,11 @@ export function generateForgecode(
       continue;
     }
 
-    const entry: Record<string, unknown> = { url: server.url };
+    const transportType = server.transport ?? "http";
+    const entry: Record<string, unknown> = {
+      type: transportType,
+      url: server.url,
+    };
     const headers = translateEnvMap(server.headers, "forgecode");
     if (headers) entry.headers = headers;
     if (server.enabled === false) {
@@ -109,8 +113,8 @@ export function generateForgecode(
     log.dim(`  mcp: ${name} (remote)`);
   }
 
-  writeFile(join(outDir, ".mcp.json"), JSON.stringify({ mcpServers }, null, 2));
-  log.success(".mcp.json");
+  writeFile(join(outDir, ".forge", ".mcp.json"), JSON.stringify({ mcpServers }, null, 2));
+  log.success(".forge/.mcp.json");
 
   // Merge raw files into output (common first, then platform-specific to allow overrides)
   const rawCommon = join(aiDir, "raw", "common");
