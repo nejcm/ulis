@@ -1,5 +1,7 @@
+import { Platform } from "../platforms.js";
 import type { McpConfig, McpServer } from "../schema.js";
 import { translateEnvVar } from "./env-var.js";
+import { checkPlatform } from "./platform.js";
 
 type EnvTarget = Parameters<typeof translateEnvVar>[1];
 
@@ -32,4 +34,31 @@ export function translateEnvMap(
     out[k] = translateEnvVar(v, target);
   }
   return out;
+}
+
+/**
+ * Normalize local MCP command execution for platform quirks.
+ * Claude Code on Windows requires invoking npx via `cmd /c`.
+ */
+export function normalizeLocalMcpCommand(
+  server: Pick<McpServer, "command" | "args">,
+  target: Platform,
+  platform: NodeJS.Platform = process.platform,
+): { command?: string; args?: string[] } {
+  const command = server.command;
+  const args = server.args ? [...server.args] : undefined;
+  if (!command) return { command, args };
+  const which = checkPlatform(platform);
+
+  const isWindowsClaude = which.windows && target === "claude";
+  const isNpxCommand = /(^|[\\/])npx(?:\.cmd)?$/i.test(command);
+
+  if (isWindowsClaude && isNpxCommand) {
+    return {
+      command: "cmd",
+      args: ["/c", command, ...(args ?? [])],
+    };
+  }
+
+  return { command, args };
 }

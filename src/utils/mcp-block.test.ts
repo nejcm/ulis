@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 
 import type { McpConfig } from "../schema.js";
-import { mcpServersFor, translateEnvMap } from "./mcp-block.js";
+import { mcpServersFor, normalizeLocalMcpCommand, translateEnvMap } from "./mcp-block.js";
 
 const mcp: McpConfig = {
   servers: {
@@ -105,5 +105,66 @@ describe("translateEnvMap", () => {
   it("extracts only the var name for codex_header", () => {
     const result = translateEnvMap({ Authorization: "${API_KEY}", Other: "static" }, "codex_header");
     expect(result).toEqual({ Authorization: "API_KEY", Other: "static" });
+  });
+});
+
+describe("normalizeLocalMcpCommand", () => {
+  it("wraps npx with cmd /c for Claude on Windows", () => {
+    const result = normalizeLocalMcpCommand(
+      {
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-memory"],
+      },
+      "claude",
+      "win32",
+    );
+    expect(result).toEqual({
+      command: "cmd",
+      args: ["/c", "npx", "-y", "@modelcontextprotocol/server-memory"],
+    });
+  });
+
+  it("also wraps npx.cmd paths for Claude on Windows", () => {
+    const result = normalizeLocalMcpCommand(
+      {
+        command: "C:\\Program Files\\nodejs\\npx.cmd",
+        args: ["-y", "context-mode"],
+      },
+      "claude",
+      "win32",
+    );
+    expect(result).toEqual({
+      command: "cmd",
+      args: ["/c", "C:\\Program Files\\nodejs\\npx.cmd", "-y", "context-mode"],
+    });
+  });
+
+  it("does not wrap non-npx commands on Windows", () => {
+    const result = normalizeLocalMcpCommand(
+      {
+        command: "node",
+        args: ["./mcp-server.js"],
+      },
+      "claude",
+      "win32",
+    );
+    expect(result).toEqual({
+      command: "node",
+      args: ["./mcp-server.js"],
+    });
+  });
+
+  it("does not wrap npx outside Windows Claude", () => {
+    const linuxClaude = normalizeLocalMcpCommand({ command: "npx", args: ["-y", "pkg"] }, "claude", "linux");
+    expect(linuxClaude).toEqual({
+      command: "npx",
+      args: ["-y", "pkg"],
+    });
+
+    const windowsCursor = normalizeLocalMcpCommand({ command: "npx", args: ["-y", "pkg"] }, "cursor", "win32");
+    expect(windowsCursor).toEqual({
+      command: "npx",
+      args: ["-y", "pkg"],
+    });
   });
 });

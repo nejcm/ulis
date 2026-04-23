@@ -8,7 +8,7 @@ import type { McpConfig, PermissionsConfig, PluginsConfig } from "../schema.js";
 import { mergeOrCopyDir } from "../utils/config-merger.js";
 import { cleanDir, fileExists, writeAgentsAliases, writeFile } from "../utils/fs.js";
 import { log } from "../utils/logger.js";
-import { mcpServersFor, translateEnvMap } from "../utils/mcp-block.js";
+import { mcpServersFor, normalizeLocalMcpCommand, translateEnvMap } from "../utils/mcp-block.js";
 import { buildPolicyCommentBlock } from "../utils/policy-comments.js";
 import { mapTools } from "../utils/tool-mapper.js";
 
@@ -209,8 +209,9 @@ export function generateClaude(
   for (const [name, server] of mcpServersFor(mcp, "claude")) {
     if (server.type === "local") {
       const entry: Record<string, unknown> = {};
-      if (server.command) entry.command = server.command;
-      if (server.args) entry.args = server.args;
+      const { command, args } = normalizeLocalMcpCommand(server, "claude");
+      if (command) entry.command = command;
+      if (args) entry.args = args;
       const env = translateEnvMap(server.env, "claude");
       if (env) entry.env = env;
       mcpServers[name] = entry;
