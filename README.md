@@ -226,7 +226,7 @@ Copied verbatim into generated outputs. Use `raw/` for platform-specific fragmen
 | Cursor      | Merge (additive) | `./.cursor/`          | `~/.cursor/`         |
 | ForgeCode   | Merge (additive) | `./.forge/`           | `~/.forge/`          |
 
-`settings.json`, `mcp.json`, and ForgeCode's `.forge/.mcp.json` are deep-merged so user content outside `ulis`-managed keys is preserved. With `--backup`, existing platform directories/files are copied aside before overwriting.
+`settings.json`, `.claude.json`, `mcp.json`, and ForgeCode's `.forge/.mcp.json` are deep-merged so user content outside `ulis`-managed keys is preserved. With `--backup`, existing platform directories/files are copied aside before overwriting.
 
 ---
 

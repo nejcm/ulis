@@ -14,7 +14,7 @@ ULIS is a CLI (`ulis`) that lets you define AI agent configurations **once** and
 
 ```
 .ulis/                        .ulis/generated/
-├── agents/*.md       ─────►  ├── claude/   (agents/, commands/, settings.json, rules/)
+├── agents/*.md       ─────►  ├── claude/   (agents/, commands/, rules/, settings.json, .claude.json)
 ├── skills/*/         ─────►  ├── opencode/ (opencode.json, agents/, skills/)
 │   SKILL.md                  ├── codex/    (config.toml, agents/*.toml, AGENTS.md)
 ├── mcp.yaml          ─────►  ├── cursor/   (agents/*.mdc, skills/, mcp.json)

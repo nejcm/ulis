@@ -228,7 +228,7 @@ export function generateClaude(
     }
   }
 
-  // Build settings.json
+  // Build settings.json (Claude MCP servers live in .claude.json)
   const enabledPlugins: Record<string, boolean> = {};
   const extraKnownMarketplaces: Record<string, unknown> = {};
 
@@ -261,15 +261,16 @@ export function generateClaude(
   if (Object.keys(extraKnownMarketplaces).length > 0) {
     settings.extraKnownMarketplaces = extraKnownMarketplaces;
   }
-  if (Object.keys(mcpServers).length > 0) {
-    settings.mcpServers = mcpServers;
-  }
   if (Object.keys(permissionsBlock).length > 0) {
     settings.permissions = permissionsBlock;
   }
 
   writeFile(join(outDir, "settings.json"), JSON.stringify(settings, null, 2));
   log.success("settings.json");
+  if (Object.keys(mcpServers).length > 0) {
+    writeFile(join(outDir, ".claude.json"), JSON.stringify({ mcpServers }, null, 2));
+    log.success(".claude.json");
+  }
 
   // Merge raw files into output (common first, then platform-specific to allow overrides)
   const rawCommon = join(aiDir, "raw", "common");

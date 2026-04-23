@@ -42,9 +42,17 @@ export async function installCmd(options: InstallCmdOptions = {}): Promise<void>
   });
 }
 
+// TODO: improve this function
 function detectCollisions(destBase: string, targets: readonly Platform[]): string[] {
   const paths: string[] = [];
   for (const platform of targets) {
+    if (platform === "claude") {
+      const rootConfigPath = join(destBase, ".claude.json");
+      if (existsSync(rootConfigPath)) {
+        paths.push(rootConfigPath);
+      }
+    }
+
     if (platform === "forgecode") {
       const forgeDir = platformConfigDir(platform, destBase);
       if (existsSync(forgeDir)) {

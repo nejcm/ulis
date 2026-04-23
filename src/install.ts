@@ -161,9 +161,12 @@ function installClaude(context: InstallContext): void {
   const sourceDir = join(context.outputDir, "claude");
   const generatedSettings = join(sourceDir, "settings.json");
   const targetSettings = join(targetDir, "settings.json");
+  const generatedRootConfig = join(sourceDir, ".claude.json");
+  const targetRootConfig = join(context.destBase, ".claude.json");
 
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.claude}`);
   backupDirectory(targetDir, context);
+  backupFile(targetRootConfig, context);
   ensureDir(targetDir);
 
   if (existsSync(generatedSettings)) {
@@ -177,7 +180,18 @@ function installClaude(context: InstallContext): void {
     }
   }
 
-  copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["settings.json"]));
+  if (existsSync(generatedRootConfig)) {
+    if (existsSync(targetRootConfig)) {
+      const merged = mergeSettingsJson(targetRootConfig, generatedRootConfig);
+      writeJson(targetRootConfig, merged);
+      logSuccess(context.logger, ".claude.json (merged)");
+    } else {
+      cpSync(generatedRootConfig, targetRootConfig);
+      logSuccess(context.logger, ".claude.json (copied)");
+    }
+  }
+
+  copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["settings.json", ".claude.json"]));
   installClaudePlugins(context.plugins, context.logger);
 
   const claudeSkills = context.skills.claude?.skills ?? [];

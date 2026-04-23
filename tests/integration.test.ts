@@ -87,9 +87,13 @@ describe("Claude generator", () => {
 
   it("generates settings.json", () => {
     const settings = JSON.parse(readOut("claude", "settings.json"));
-    expect(settings).toHaveProperty("mcpServers");
-    expect(settings.mcpServers["test-local"]).toBeDefined();
-    expect(settings.mcpServers["test-remote"]).toBeDefined();
+    expect(settings).not.toHaveProperty("mcpServers");
+  });
+
+  it("generates .claude.json with all targeted servers", () => {
+    const mcp = JSON.parse(readOut("claude", ".claude.json"));
+    expect(mcp.mcpServers).toHaveProperty("test-local");
+    expect(mcp.mcpServers).toHaveProperty("test-remote");
   });
 });
 

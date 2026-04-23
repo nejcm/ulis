@@ -79,7 +79,7 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 | Cursor    | `agents/` (`.mdc` files)                      | `mcp.json`                           |
 | ForgeCode | `.forge/agents`, `.forge/skills`              | `.forge/.mcp.json`                   |
 
-Deep-merge preserves user-owned keys in `settings.json` / `mcp.json` / `.forge/.mcp.json` only.
+Deep-merge preserves user-owned keys in `settings.json`, `.claude.json`, `mcp.json`, and `.forge/.mcp.json`.
 
 ---
 
