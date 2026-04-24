@@ -1,39 +1,26 @@
 import { join } from "node:path";
 
-import { type ParsedAgent, enabledAgentsFor } from "../parsers/agent.js";
-import { parseCommands } from "../parsers/command.js";
-import { type ParsedRule, enabledRulesFor } from "../parsers/rule.js";
-import { type ParsedSkill, enabledSkillsFor } from "../parsers/skill.js";
-import type { McpConfig, PermissionsConfig } from "../schema.js";
-import { mergeOrCopyDir } from "../utils/config-merger.js";
-import { cleanDir, copyDir, copySkillDirs, fileExists, readFile, writeFile } from "../utils/fs.js";
-import { log } from "../utils/logger.js";
-import { mcpServersFor, translateEnvMap } from "../utils/mcp-block.js";
-import { buildPolicyCommentBlock } from "../utils/policy-comments.js";
+import { enabledAgentsFor } from "../../parsers/agent.js";
+import { parseCommands } from "../../parsers/command.js";
+import { enabledRulesFor } from "../../parsers/rule.js";
+import { enabledSkillsFor } from "../../parsers/skill.js";
+import { fileExists, readFile } from "../../utils/fs.js";
+import { mcpServersFor, translateEnvMap } from "../../utils/mcp-block.js";
+import { buildPolicyCommentBlock } from "../../utils/policy-comments.js";
+import type { FileArtifact, GenerationResult, ProjectBundle } from "../types.js";
 
 const OPENCODE_DEFAULT_MODEL = "anthropic/sonnet";
 const OPENCODE_SMALL_MODEL = "opencode/kimi-k2.5-free";
 
-export function generateOpencode(
-  agents: readonly ParsedAgent[],
-  skills: readonly ParsedSkill[],
-  mcp: McpConfig,
-  aiDir: string,
-  outDir: string,
-  permissions: PermissionsConfig = {},
-  rules: readonly ParsedRule[] = [],
-  unsupportedPlatformRules: "inject" | "exclude" = "inject",
-): void {
-  cleanDir(outDir);
-  log.header("OpenCode");
+export function generateOpencode(project: ProjectBundle): GenerationResult {
+  const artifacts: FileArtifact[] = [];
 
-  const enabledAgents = enabledAgentsFor(agents, "opencode");
-  const enabledSkills = enabledSkillsFor(skills, "opencode");
+  const enabledAgents = enabledAgentsFor(project.agents, "opencode");
+  const enabledSkills = enabledSkillsFor(project.skills, "opencode");
 
-  // Build agent block
+  // Build agent block for opencode.json
   const agentBlock: Record<string, unknown> = {};
   for (const agent of enabledAgents) {
-    const ocName = agent.name;
     const ocPlatform = agent.frontmatter.platforms?.opencode;
     const ocModel = ocPlatform?.model ?? agent.frontmatter.model;
 
@@ -44,24 +31,12 @@ export function generateOpencode(
       tools: { ...agent.frontmatter.tools },
     };
 
-    if (agent.frontmatter.temperature !== undefined) {
-      entry.temperature = agent.frontmatter.temperature;
-    }
-    // steps = maxTurns for OpenCode
-    if (agent.frontmatter.maxTurns !== undefined) {
-      entry.steps = agent.frontmatter.maxTurns;
-    }
-    if (ocPlatform?.top_p !== undefined) {
-      entry.top_p = ocPlatform.top_p;
-    }
-    if (ocPlatform?.hidden) {
-      entry.hidden = true;
-    }
-    if (ocPlatform?.disable) {
-      entry.disable = true;
-    }
+    if (agent.frontmatter.temperature !== undefined) entry.temperature = agent.frontmatter.temperature;
+    if (agent.frontmatter.maxTurns !== undefined) entry.steps = agent.frontmatter.maxTurns;
+    if (ocPlatform?.top_p !== undefined) entry.top_p = ocPlatform.top_p;
+    if (ocPlatform?.hidden) entry.hidden = true;
+    if (ocPlatform?.disable) entry.disable = true;
 
-    // Derive permission from security + toolPolicy (security wins over platform override)
     const sec = agent.frontmatter.security;
     const toolPolicy = agent.frontmatter.toolPolicy;
     const basePerm = ocPlatform?.permission ?? {};
@@ -77,23 +52,17 @@ export function generateOpencode(
     if (sec?.requireApproval?.includes("bash") || toolPolicy?.requireConfirmation?.includes("bash")) {
       derivedPerm.bash ??= "ask";
     }
-    if (Object.keys(derivedPerm).length > 0) {
-      entry.permission = derivedPerm;
-    }
+    if (Object.keys(derivedPerm).length > 0) entry.permission = derivedPerm;
 
-    // rate_limit_per_hour: platform override or security.rateLimit
     const rateLimit = ocPlatform?.rate_limit_per_hour ?? sec?.rateLimit?.perHour;
-    if (rateLimit !== undefined) {
-      entry.rate_limit_per_hour = rateLimit;
-    }
+    if (rateLimit !== undefined) entry.rate_limit_per_hour = rateLimit;
 
-    agentBlock[ocName] = entry;
-    log.dim(`  agent: ${ocName} (${ocModel})`);
+    agentBlock[agent.name] = entry;
   }
 
-  // Build MCP block
+  // MCP block
   const mcpBlock: Record<string, unknown> = {};
-  for (const [name, server] of mcpServersFor(mcp, "opencode")) {
+  for (const [name, server] of mcpServersFor(project.mcp, "opencode")) {
     if (server.type === "local") {
       const entry: Record<string, unknown> = {
         type: "local",
@@ -113,15 +82,12 @@ export function generateOpencode(
       if (headers) entry.headers = headers;
       mcpBlock[name] = entry;
     }
-    log.dim(`  mcp: ${name} (${server.type})`);
   }
 
-  // Build permission block from permissions.json (flat top-level keys per OpenCode schema)
-  const permissionBlock: Record<string, unknown> = {
-    ...(permissions?.opencode?.permission ?? {}),
-  };
+  // Permission block
+  const permissionBlock: Record<string, unknown> = { ...(project.permissions?.opencode?.permission ?? {}) };
 
-  // Assemble opencode.json
+  // opencode.json
   const opencodeJson = {
     $schema: "https://opencode.ai/config.json",
     model: OPENCODE_DEFAULT_MODEL,
@@ -130,39 +96,25 @@ export function generateOpencode(
     permission: permissionBlock,
     mcp: mcpBlock,
   };
+  artifacts.push({ path: "opencode.json", contents: JSON.stringify(opencodeJson, null, 2) });
 
-  writeFile(join(outDir, "opencode.json"), JSON.stringify(opencodeJson, null, 2));
-  log.success("opencode.json");
-
-  // Copy agent markdown bodies, prepending policy comment block for non-native fields
-  const agentsCoreDir = join(outDir, "agents", "core");
-  const agentsSpecDir = join(outDir, "agents", "specialized");
+  // Agent markdown bodies under agents/core or agents/specialized
   for (const agent of enabledAgents) {
-    const ocName = agent.name;
     const isCore = agent.frontmatter.tags.includes("core");
-    const destDir = isCore ? agentsCoreDir : agentsSpecDir;
-    // contextHints and restrictedPaths have no native OpenCode equivalent → comments in body
+    const destDir = isCore ? join("agents", "core") : join("agents", "specialized");
     const commentOnlyHints = agent.frontmatter.contextHints ? { contextHints: agent.frontmatter.contextHints } : {};
     const commentOnlySec = agent.frontmatter.security?.restrictedPaths?.length
       ? { security: { ...agent.frontmatter.security, blockedCommands: [], requireApproval: [] } }
       : {};
     const policyBlock = buildPolicyCommentBlock({ ...commentOnlyHints, ...commentOnlySec }, "md");
     const body = policyBlock ? `${policyBlock}\n${agent.body}` : agent.body;
-    writeFile(join(destDir, `${ocName}.md`), body);
-  }
-  log.success("agents/");
-
-  // Copy skill directories filtered by OpenCode platform enablement
-  copySkillDirs(enabledSkills, join(outDir, "skills"));
-  if (enabledSkills.length > 0) {
-    log.success(`skills/ (${enabledSkills.length} skills)`);
+    artifacts.push({ path: join(destDir, `${agent.name}.md`), contents: body });
   }
 
-  // Process commands: resolve platforms.opencode.model ?? model, strip platforms block.
-  const commandsSrc = join(aiDir, "commands");
+  // Commands with OpenCode-specific frontmatter resolution
+  const commandsSrc = join(project.sourceDir, "commands");
   if (fileExists(commandsSrc)) {
-    const parsedCmds = parseCommands(commandsSrc);
-    for (const cmd of parsedCmds) {
+    for (const cmd of parseCommands(commandsSrc)) {
       const fm = cmd.frontmatter as Record<string, unknown>;
       const ocPlatform = (fm.platforms as Record<string, unknown> | undefined)?.opencode as
         | Record<string, unknown>
@@ -187,48 +139,30 @@ export function generateOpencode(
       }
       lines.push("---");
 
-      writeFile(join(outDir, "commands", cmd.filename), `${lines.join("\n")}\n\n${cmd.body}\n`);
+      artifacts.push({
+        path: join("commands", cmd.filename),
+        contents: `${lines.join("\n")}\n\n${cmd.body}\n`,
+      });
     }
     const readmeSrc = join(commandsSrc, "README.md");
     if (fileExists(readmeSrc)) {
-      writeFile(join(outDir, "commands", "README.md"), readFile(readmeSrc));
-    }
-    log.success(`commands/ (${parsedCmds.length} commands processed)`);
-  }
-
-  // Copy directories if they exist
-  const copyDirs = ["docs"];
-  for (const dir of copyDirs) {
-    const src = join(aiDir, dir);
-    if (fileExists(src)) {
-      copyDir(src, join(outDir, dir));
-      log.success(`${dir}/`);
+      artifacts.push({ path: join("commands", "README.md"), contents: readFile(readmeSrc) });
     }
   }
 
   // Empty settings.json
-  writeFile(join(outDir, "settings.json"), "{}");
+  artifacts.push({ path: "settings.json", contents: "{}" });
 
-  // Merge raw files into output (common first, then platform-specific to allow overrides)
-  const rawCommon = join(aiDir, "raw", "common");
-  if (fileExists(rawCommon)) {
-    mergeOrCopyDir(rawCommon, outDir);
-    log.success("raw/common/");
-  }
-  const rawPlatform = join(aiDir, "raw", "opencode");
-  if (fileExists(rawPlatform)) {
-    mergeOrCopyDir(rawPlatform, outDir);
-    log.success("raw/opencode/");
-  }
-
-  // Append Rules Index to AGENTS.md after all raw merges (OpenCode supports AGENTS.md natively)
+  // Rules: files + optional AGENTS.md index injection
+  const unsupportedPlatformRules = project.ulisConfig.unsupportedPlatformRules ?? "inject";
+  const appendAfterRaw: { path: string; content: string }[] = [];
   if (unsupportedPlatformRules === "inject") {
-    const enabledRules = enabledRulesFor(rules, "opencode");
+    const enabledRules = enabledRulesFor(project.rules, "opencode");
     if (enabledRules.length > 0) {
       for (const rule of enabledRules) {
-        const src = join(aiDir, "rules", rule.filename);
+        const src = join(project.sourceDir, "rules", rule.filename);
         if (fileExists(src)) {
-          writeFile(join(outDir, "rules", rule.filename), readFile(src));
+          artifacts.push({ path: join("rules", rule.filename), contents: readFile(src) });
         }
       }
       const indexLines = [
@@ -246,11 +180,21 @@ export function generateOpencode(
         }
         indexLines.push(line);
       }
-      const rulesSection = indexLines.join("\n") + "\n";
-      const agentsPath = join(outDir, "AGENTS.md");
-      const existing = fileExists(agentsPath) ? readFile(agentsPath).trimEnd() + "\n\n" : "";
-      writeFile(agentsPath, existing + rulesSection);
-      log.success("AGENTS.md (rules index injected)");
+      appendAfterRaw.push({ path: "AGENTS.md", content: indexLines.join("\n") + "\n" });
     }
   }
+
+  const docsSrc = join(project.sourceDir, "docs");
+  const copyDirs = fileExists(docsSrc) ? [{ src: docsSrc, destRelative: "docs" }] : [];
+
+  return {
+    artifacts,
+    post: {
+      rawDirs: [join(project.sourceDir, "raw", "common"), join(project.sourceDir, "raw", "opencode")],
+      aliasFiles: [],
+      skillDirs: enabledSkills.map((s) => ({ name: s.name, dir: s.dir })),
+      appendAfterRaw,
+      copyDirs,
+    },
+  };
 }

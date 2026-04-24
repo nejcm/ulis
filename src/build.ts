@@ -1,11 +1,7 @@
 import { join, resolve } from "node:path";
 
 import { ULIS_GENERATED_DIRNAME } from "./config.js";
-import { generateClaude } from "./generators/claude.js";
-import { generateCodex } from "./generators/codex.js";
-import { generateCursor } from "./generators/cursor.js";
-import { generateForgecode } from "./generators/forgecode.js";
-import { generateOpencode } from "./generators/opencode.js";
+import { generate, writeResult } from "./generators/index.js";
 import { parseAgents } from "./parsers/agent.js";
 import { loadMcp } from "./parsers/mcp.js";
 import { loadPermissions } from "./parsers/permissions.js";
@@ -108,27 +104,13 @@ export function runBuild(options: BuildOptions): BuildResult {
   }
   logger.success(`Validation passed (${warningCount} warning(s))`);
 
-  const unsupportedPlatformRules = ulisConfig.unsupportedPlatformRules;
+  const projectBundle = { agents, skills, rules, mcp, permissions, plugins, ulisConfig, sourceDir };
 
   for (const target of activeTargets) {
     const outDir = join(outputDir, target);
-    switch (target) {
-      case "opencode":
-        generateOpencode(agents, skills, mcp, sourceDir, outDir, permissions, rules, unsupportedPlatformRules);
-        break;
-      case "claude":
-        generateClaude(agents, skills, mcp, plugins, sourceDir, outDir, permissions, rules);
-        break;
-      case "codex":
-        generateCodex(agents, skills, mcp, sourceDir, outDir, permissions, rules, unsupportedPlatformRules);
-        break;
-      case "cursor":
-        generateCursor(agents, skills, mcp, sourceDir, outDir, permissions, rules);
-        break;
-      case "forgecode":
-        generateForgecode(agents, skills, mcp, sourceDir, outDir, rules, unsupportedPlatformRules);
-        break;
-    }
+    const result = generate(target, projectBundle);
+    if (!result) throw new Error(`No generator registered for platform: ${target}`);
+    writeResult(result, outDir, target);
   }
 
   logger.header("Build Complete");
