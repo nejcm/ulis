@@ -1,15 +1,17 @@
 import { z } from "zod";
 
-export const ToolPermissionsSchema = z.object({
-  read: z.boolean().default(true),
-  write: z.boolean().default(false),
-  edit: z.boolean().default(false),
-  bash: z.boolean().default(false),
-  search: z.boolean().default(false),
-  browser: z.boolean().default(false),
-  // Can spawn subagents: true = any, string[] = allowlist of agent names
-  agent: z.union([z.boolean(), z.array(z.string())]).optional(),
-});
+export const ToolPermissionsSchema = z
+  .object({
+    read: z.boolean().default(true),
+    write: z.boolean().default(false),
+    edit: z.boolean().default(false),
+    bash: z.boolean().default(false),
+    search: z.boolean().default(false),
+    browser: z.boolean().default(false),
+    // Can spawn subagents: true = any, string[] = allowlist of agent names
+    agent: z.union([z.boolean(), z.array(z.string())]).optional(),
+  })
+  .or(z.string());
 
 const HookEntrySchema = z.object({
   matcher: z.string().optional(),
