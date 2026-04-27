@@ -6,6 +6,7 @@ import { createInterface } from "node:readline/promises";
 import { runInstall } from "../install.js";
 import { PLATFORMS, platformConfigDir, type Platform } from "../platforms.js";
 import { logger as log } from "../utils/logger.js";
+import { parsePresetNames, resolvePresets } from "../utils/resolve-presets.js";
 import { resolveSource } from "../utils/resolve-source.js";
 import { parseTargets, type BuildCmdOptions } from "./build.js";
 
@@ -21,6 +22,9 @@ export interface InstallCmdOptions extends BuildCmdOptions {
 export async function installCmd(options: InstallCmdOptions = {}): Promise<void> {
   const { sourceDir, destBase, mode } = resolveSource({ global: options.global, source: options.source });
   const targets = parseTargets(options) ?? PLATFORMS;
+  const presets = options.preset
+    ? await resolvePresets(parsePresetNames(options.preset), { nonInteractive: options.yes ?? false })
+    : [];
 
   const collisions = detectCollisions(destBase, targets);
   if (collisions.length > 0 && !options.yes) {
@@ -43,6 +47,7 @@ export async function installCmd(options: InstallCmdOptions = {}): Promise<void>
     backup: options.backup ?? false,
     rebuild: options.rebuild ?? true,
     logger: log,
+    presets,
   });
 }
 

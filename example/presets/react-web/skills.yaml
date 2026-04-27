@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=../../../dist/schemas/skills.schema.json
+
+"*":
+  skills:
+    - name: https://skills.sh/vercel-labs/agent-skills/vercel-react-best-practices
+      key: vercel-labs/agent-skills/vercel-react-best-practices
+    - name: https://skills.sh/anthropics/skills/frontend-design
+      key: anthropics/skills/frontend-design
+    - name: https://skills.sh/shadcn/ui/shadcn
+      key: shadcn/ui/shadcn
+    - name: https://skills.sh/vercel-labs/next-skills/next-best-practices
+      key: vercel-labs/next-skills/next-best-practices

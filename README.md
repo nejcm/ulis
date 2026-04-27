@@ -81,18 +81,32 @@ ulis install --global   # deploys to ~/.claude/, ~/.codex/, ~/.cursor/, ~/.openc
 | `ulis init`    | Scaffold `.ulis/` in the current project (or `~/.ulis/` with `--global`) |
 | `ulis build`   | Generate configs into `<source>/generated/` without installing           |
 | `ulis install` | Build, then deploy generated configs to the target platform directories  |
+| `ulis preset`  | List available presets from `~/.ulis/presets/`                           |
 | `ulis tui`     | Launch the interactive terminal UI                                       |
 
 ### Common flags
 
-| Flag                  | Applies to         | Description                                                                |
-| --------------------- | ------------------ | -------------------------------------------------------------------------- |
-| `-g`, `--global`      | all                | Operate on `~/.ulis/` and home-level install targets (`~/.claude/`…)       |
-| `--source <path>`     | `build`, `install` | Override the source directory; with `--global`, installs still target home |
-| `--target <platform>` | `build`, `install` | Comma-separated list: `claude`, `codex`, `cursor`, `opencode`, `forgecode` |
-| `-y`, `--yes`         | `install`          | Skip confirmation prompts                                                  |
-| `--no-rebuild`        | `install`          | Skip the build step and deploy existing `generated/`                       |
-| `--backup`            | `install`          | Back up existing platform dirs (`<dir>.backup.YYYYMMDD_HHMMSS`)            |
+| Flag                  | Applies to         | Description                                                                 |
+| --------------------- | ------------------ | --------------------------------------------------------------------------- |
+| `-g`, `--global`      | all                | Operate on `~/.ulis/` and home-level install targets (`~/.claude/`…)        |
+| `--source <path>`     | `build`, `install` | Override the source directory; with `--global`, installs still target home  |
+| `--target <platform>` | `build`, `install` | Comma-separated list: `claude`, `codex`, `cursor`, `opencode`, `forgecode`  |
+| `--preset <names>`    | `build`, `install` | Apply preset(s) from `~/.ulis/presets/` (comma-separated or repeated flags) |
+| `-y`, `--yes`         | `install`          | Skip confirmation prompts                                                   |
+| `--no-rebuild`        | `install`          | Skip the build step and deploy existing `generated/`                        |
+| `--backup`            | `install`          | Back up existing platform dirs (`<dir>.backup.YYYYMMDD_HHMMSS`)             |
+
+### Presets
+
+Presets let you layer shared config onto a project-local source before build/install. Presets are resolved from `~/.ulis/presets/<name>/` and merged in the order provided, with the base source winning conflicts.
+
+```bash
+ulis preset list
+ulis build --preset team-default
+ulis install --preset team-default,react --yes
+```
+
+When `--yes` is set, missing presets fail fast with an error instead of prompting, which keeps CI runs non-interactive and deterministic.
 
 ### Source resolution
 

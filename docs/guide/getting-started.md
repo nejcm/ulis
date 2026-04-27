@@ -39,6 +39,18 @@ ulis install --yes
 
 This builds generated output and installs into local tool folders like `./.claude/`, `./.cursor/`, `./.codex/`, `./.opencode/`, and `./.forge/`.
 
+## Optional: Use presets
+
+If you keep shared defaults in `~/.ulis/presets/`, you can layer them into any build/install run:
+
+```bash
+ulis preset list
+ulis build --preset team-default
+ulis install --preset team-default,react --yes
+```
+
+Preset merge order is left-to-right, then your base source is applied last (base wins conflicts). In non-interactive mode (`--yes`), missing presets fail immediately instead of prompting.
+
 ## Next reads
 
 - [Project vs Global Mode](/guide/project-vs-global)

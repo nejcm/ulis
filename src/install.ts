@@ -6,7 +6,7 @@ import { basename, join, resolve } from "node:path";
 import { runBuild, type Logger } from "./build.js";
 import { ULIS_GENERATED_DIRNAME } from "./config.js";
 import { loadPlugins } from "./parsers/plugins.js";
-import { loadSkills } from "./parsers/skills.js";
+import { loadSkills, mergeSkillsConfigs } from "./parsers/skills.js";
 import {
   PLATFORM_DIRS,
   PLATFORM_LABELS,
@@ -16,6 +16,7 @@ import {
   type Platform,
 } from "./platforms.js";
 import { type PluginsConfig, type SkillsConfig } from "./schema.js";
+import type { ResolvedPreset } from "./utils/resolve-presets.js";
 
 export interface InstallOptions {
   readonly platforms?: readonly Platform[];
@@ -36,6 +37,8 @@ export interface InstallOptions {
   readonly backup?: boolean;
   readonly rebuild?: boolean;
   readonly logger?: Logger;
+  /** Resolved presets to merge at build time and for external skill installs. */
+  readonly presets?: readonly ResolvedPreset[];
 }
 
 class InstallError extends Error {
@@ -120,11 +123,14 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
       logger,
       rebuild ? "Rebuilding generated configs before install." : "Missing generated output. Running build.",
     );
-    runBuild({ targets: platforms, sourceDir, outputDir, logger });
+    runBuild({ targets: platforms, sourceDir, outputDir, logger, presets: options.presets });
   }
 
   const plugins = loadPlugins(sourceDir);
-  const skillsConfig = loadSkills(sourceDir);
+  const skillsConfig = mergeSkillsConfigs([
+    ...(options.presets ?? []).map((preset) => loadSkills(preset.dir)),
+    loadSkills(sourceDir),
+  ]);
 
   const timestamp = makeTimestamp();
   for (const platform of platforms) {
