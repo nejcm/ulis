@@ -47,6 +47,7 @@ jobs:
           echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
 
       - name: "🔖 Create and push tag"
+        continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -62,9 +63,20 @@ jobs:
         with:
           node-version: 24
           registry-url: "https://registry.npmjs.org"
+          scope: "@nejcm"
+
+      - name: "🔐 Verify npm auth"
+        run: |
+          npm config set @nejcm:registry https://registry.npmjs.org/
+          npm whoami
+          npm ping
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: "📤 Publish to npm"
-        run: npm publish --access public --tag ${{ steps.pkg.outputs.dist_tag }}
+        run: |
+          npm config set @nejcm:registry https://registry.npmjs.org/
+          npm publish --access public --tag ${{ steps.pkg.outputs.dist_tag }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
