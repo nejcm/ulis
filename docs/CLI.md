@@ -38,7 +38,7 @@ Fails if `.ulis/` (or `~/.ulis/` in global mode) already exists.
 Parse, validate, and generate configs into `<source>/generated/<platform>/` without installing anything.
 
 ```
-ulis build [-g | --global] [--source <path>] [--target <platforms>]
+ulis build [-g | --global] [--source <path>] [--target <platforms>] [--preset <names>]
 ```
 
 | Flag                   | Effect                                                                            |
@@ -46,6 +46,7 @@ ulis build [-g | --global] [--source <path>] [--target <platforms>]
 | `-g`, `--global`       | Read from `~/.ulis/` instead of `./.ulis/`.                                       |
 | `--source <path>`      | Explicit source path. Takes precedence over `--global`.                           |
 | `--target <platforms>` | Comma-separated subset of `claude,codex,cursor,opencode,forgecode`. Default: all. |
+| `--preset <names>`     | Apply preset(s) from `~/.ulis/presets/` before building (comma-separated).        |
 
 Output is always written under `<source>/generated/<platform>/`. Existing contents there are cleared before each build.
 
@@ -57,7 +58,7 @@ Run `build` and then deploy the generated configs onto the target platform direc
 
 ```
 ulis install [-g | --global] [--source <path>] [--target <platforms>]
-             [-y | --yes] [--no-rebuild] [--backup]
+             [-y | --yes] [--no-rebuild] [--backup] [--preset <names>]
 ```
 
 | Flag                   | Effect                                                                                                 |
@@ -68,6 +69,9 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 | `-y`, `--yes`          | Skip the "about to overwrite" confirmation prompt.                                                     |
 | `--no-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`.                               |
 | `--backup`             | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.                      |
+| `--preset <names>`     | Apply preset(s) from `~/.ulis/presets/` before install/build.                                          |
+
+Preset names are resolved from `~/.ulis/presets/<name>/`, merged in the provided order, then overlaid by the base source (base wins on conflicts). With `--yes`, missing presets do not prompt and instead fail fast.
 
 **Install strategy per platform:**
 
@@ -92,6 +96,18 @@ ulis tui
 ```
 
 The TUI reads from `~/.ulis/` and writes to the corresponding home directories. It's the equivalent of `ulis install --global` with a point-and-click selection.
+
+---
+
+## `ulis preset`
+
+List available presets discovered under `~/.ulis/presets/`.
+
+```
+ulis preset [list]
+```
+
+`list` is the default action. Output includes each preset folder name and optional metadata from `preset.yaml`.
 
 ---
 
@@ -132,4 +148,12 @@ Reinstall from an existing build without regenerating:
 
 ```bash
 ulis install --no-rebuild --yes
+```
+
+Build with reusable presets:
+
+```bash
+ulis preset list
+ulis build --preset team-default,typescript
+ulis install --preset team-default --yes
 ```
