@@ -18,7 +18,7 @@ export type SkillPlatform = "claude" | "opencode" | "codex" | "cursor" | "forgec
 
 /** Filter skills that are not explicitly disabled for the given platform. */
 export function enabledSkillsFor(skills: readonly ParsedSkill[], platform: SkillPlatform): readonly ParsedSkill[] {
-  return skills.filter((s) => s.frontmatter.platforms?.[platform]?.enabled !== false);
+  return skills.filter((s) => s.frontmatter?.platforms?.[platform]?.enabled !== false);
 }
 
 /** Internal: collects all skill parse results without throwing. Used by parseProject. */
@@ -36,8 +36,8 @@ export function collectSkills(skillsDir: string): { items: readonly ParsedSkill[
       const raw = readFile(skillFile);
       const { data, content } = matter(raw);
       const frontmatter = SkillFrontmatterSchema.parse(data);
-      if (frontmatter.name !== entry.name) {
-        throw new Error(`frontmatter name '${frontmatter.name}' must match directory '${entry.name}'`);
+      if (frontmatter?.name !== entry.name) {
+        throw new Error(`frontmatter name '${frontmatter?.name}' must match directory '${entry.name}'`);
       }
       skills.push({ name: entry.name, dir: skillDir, frontmatter, body: content.trim() });
     } catch (err) {

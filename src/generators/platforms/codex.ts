@@ -191,9 +191,9 @@ export function generateCodex(project: ProjectBundle): GenerationResult {
 
   // Skills: SKILL.md (transformed) + optional agents/openai.yaml per skill
   for (const skill of enabledSkillsFor(project.skills, "codex")) {
-    const skillName = skill.frontmatter.name ?? skill.name;
+    const skillName = skill.frontmatter?.name ?? skill.name;
     const fm = skill.frontmatter;
-    const codexPlatform = fm.platforms?.codex;
+    const codexPlatform = fm?.platforms?.codex;
 
     // Destructure known/specially-handled fields; everything else passes through.
     const {
@@ -229,7 +229,7 @@ export function generateCodex(project: ProjectBundle): GenerationResult {
     const hasDeps = codexPlatform?.mcpDependencies?.length;
     const hasModel = !!codexPlatform?.model;
     const hasExtra = Object.keys(codexSkillExtra).length > 0;
-    const needsYaml = hasUiConfig || hasDeps || hasModel || hasExtra || !fm.allowImplicitInvocation;
+    const needsYaml = hasUiConfig || hasDeps || hasModel || hasExtra || !fm?.allowImplicitInvocation;
 
     if (needsYaml) {
       const yamlLines: string[] = [];
@@ -254,7 +254,7 @@ export function generateCodex(project: ProjectBundle): GenerationResult {
       }
 
       yamlLines.push("policy:");
-      yamlLines.push(`  allow_implicit_invocation: ${fm.allowImplicitInvocation}`);
+      yamlLines.push(`  allow_implicit_invocation: ${fm?.allowImplicitInvocation}`);
       yamlLines.push("");
 
       if (hasDeps) {

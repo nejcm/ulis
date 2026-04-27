@@ -101,6 +101,7 @@ export const SkillFrontmatterSchema = z
       .loose()
       .optional(),
   })
-  .loose();
+  .loose()
+  .optional();
 
 export type SkillFrontmatter = z.infer<typeof SkillFrontmatterSchema>;

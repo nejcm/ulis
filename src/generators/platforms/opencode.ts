@@ -186,9 +186,9 @@ export function generateOpencode(project: ProjectBundle): GenerationResult {
       rawDirs: [join(project.sourceDir, "raw", "common"), join(project.sourceDir, "raw", "opencode")],
       aliasFiles: [],
       skillDirs: enabledSkills.map((s) => {
-        const p = s.frontmatter.platforms?.opencode;
+        const p = s.frontmatter?.platforms?.opencode;
         const { enabled: _e, model: _m, ...extra } = (p ?? {}) as Record<string, unknown>;
-        const model = p?.model ?? s.frontmatter.model;
+        const model = p?.model ?? s.frontmatter?.model;
         return { name: s.name, dir: s.dir, extraFrontmatter: { ...(model ? { model } : {}), ...extra } };
       }),
       appendAfterRaw,

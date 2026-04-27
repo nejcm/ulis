@@ -25,7 +25,7 @@ export function validateCollisions(
 
   diags.push(
     ...findDuplicates(
-      skills.map((s) => s.frontmatter.name ?? s.name),
+      skills.map((s) => s.frontmatter?.name ?? s.name),
       "skill",
       "Duplicate skill name",
       `Rename one of the colliding directories in the ulis skills/ folder (or its \`name:\` frontmatter)`,
