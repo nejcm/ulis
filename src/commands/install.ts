@@ -5,7 +5,7 @@ import { createInterface } from "node:readline/promises";
 
 import { runInstall } from "../install.js";
 import { PLATFORMS, platformConfigDir, type Platform } from "../platforms.js";
-import { log } from "../utils/logger.js";
+import { logger as log } from "../utils/logger.js";
 import { resolveSource } from "../utils/resolve-source.js";
 import { parseTargets, type BuildCmdOptions } from "./build.js";
 
@@ -15,8 +15,11 @@ export interface InstallCmdOptions extends BuildCmdOptions {
   readonly rebuild?: boolean;
 }
 
+/**
+ * Detect destination collisions, optionally confirm, then install generated configs.
+ */
 export async function installCmd(options: InstallCmdOptions = {}): Promise<void> {
-  const { sourceDir, destBase } = resolveSource({ global: options.global, source: options.source });
+  const { sourceDir, destBase, mode } = resolveSource({ global: options.global, source: options.source });
   const targets = parseTargets(options) ?? PLATFORMS;
 
   const collisions = detectCollisions(destBase, targets);
@@ -35,6 +38,7 @@ export async function installCmd(options: InstallCmdOptions = {}): Promise<void>
   runInstall({
     sourceDir,
     destBase,
+    globalInstall: mode === "global",
     platforms: targets,
     backup: options.backup ?? false,
     rebuild: options.rebuild ?? true,

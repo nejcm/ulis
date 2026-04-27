@@ -17,8 +17,10 @@ describe("AgentFrontmatterSchema", () => {
     expect(result.description).toBe("A test agent");
     expect(result.model).toBeUndefined();
     expect(result.tags).toEqual([]); // default
-    expect(result.tools.read).toBe(true);
-    expect(result.tools.bash).toBe(false); // default
+    const tools = result.tools;
+    if (typeof tools === "string") throw new Error("expected tools object");
+    expect(tools.read).toBe(true);
+    expect(tools.bash).toBe(false); // default
   });
 
   it("accepts precise model id", () => {
@@ -124,7 +126,9 @@ describe("AgentFrontmatterSchema", () => {
       description: "x",
       tools: { agent: ["planner", "tester"] },
     });
-    expect(result.tools.agent).toEqual(["planner", "tester"]);
+    const tools = result.tools;
+    if (typeof tools === "string") throw new Error("expected tools object");
+    expect(tools.agent).toEqual(["planner", "tester"]);
   });
 
   it("parses platform overrides", () => {
@@ -144,12 +148,12 @@ describe("AgentFrontmatterSchema", () => {
 describe("SkillFrontmatterSchema", () => {
   it("parses minimal valid skill", () => {
     const result = SkillFrontmatterSchema.parse({ name: "a-skill", description: "A skill" });
-    expect(result.name).toBe("a-skill");
-    expect(result.description).toBe("A skill");
-    expect(result.userInvocable).toBe(true); // default
-    expect(result.allowModelInvocation).toBe(true); // default
-    expect(result.allowImplicitInvocation).toBe(true); // default
-    expect(result.tags).toEqual([]); // default
+    expect(result?.name).toBe("a-skill");
+    expect(result?.description).toBe("A skill");
+    expect(result?.userInvocable).toBe(true); // default
+    expect(result?.allowModelInvocation).toBe(true); // default
+    expect(result?.allowImplicitInvocation).toBe(true); // default
+    expect(result?.tags).toEqual([]); // default
   });
 
   it("rejects missing description", () => {
@@ -175,9 +179,9 @@ describe("SkillFrontmatterSchema", () => {
       metadata: { author: "example-org", version: "1.0" },
       "allowed-tools": "Bash(git:*) Read",
     });
-    expect(result.compatibility).toContain("local CLI");
-    expect(result.metadata?.author).toBe("example-org");
-    expect(result["allowed-tools"]).toContain("Read");
+    expect(result?.compatibility).toContain("local CLI");
+    expect(result?.metadata?.author).toBe("example-org");
+    expect(result?.["allowed-tools"]).toContain("Read");
 
     expect(() =>
       SkillFrontmatterSchema.parse({
@@ -201,7 +205,7 @@ describe("SkillFrontmatterSchema", () => {
       description: "x",
       isolation: "fork",
     });
-    expect(result.isolation).toBe("fork");
+    expect(result?.isolation).toBe("fork");
   });
 
   it("parses paths as string or array", () => {
@@ -210,14 +214,40 @@ describe("SkillFrontmatterSchema", () => {
       description: "x",
       paths: "src/**",
     });
-    expect(single.paths).toBe("src/**");
+    expect(single?.paths).toBe("src/**");
 
     const multi = SkillFrontmatterSchema.parse({
       name: "x-skill",
       description: "x",
       paths: ["src/**", "tests/**"],
     });
-    expect(multi.paths).toEqual(["src/**", "tests/**"]);
+    expect(multi?.paths).toEqual(["src/**", "tests/**"]);
+  });
+
+  it("preserves unknown root fields", () => {
+    const result = SkillFrontmatterSchema.parse({
+      name: "x-skill",
+      description: "x",
+      author: "acme-org",
+      customField: 42,
+    });
+    expect((result as Record<string, unknown>).author).toBe("acme-org");
+    expect((result as Record<string, unknown>).customField).toBe(42);
+  });
+
+  it("preserves unknown fields inside platform overrides", () => {
+    const result = SkillFrontmatterSchema.parse({
+      name: "x-skill",
+      description: "x",
+      platforms: {
+        claude: { enabled: true, extra_claude_field: "hello" },
+        cursor: { enabled: true, cursor_custom: true },
+        unknown_platform: { enabled: true },
+      },
+    });
+    expect((result?.platforms?.claude as Record<string, unknown>).extra_claude_field).toBe("hello");
+    expect((result?.platforms?.cursor as Record<string, unknown>).cursor_custom).toBe(true);
+    expect((result?.platforms as Record<string, unknown>).unknown_platform).toBeDefined();
   });
 });
 

@@ -1,7 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { toPlatformSkillMarkdown } from "./skill-frontmatter.js";
+import { applySkillFrontmatterOverrides, toPlatformSkillMarkdown } from "./skill-frontmatter.js";
 
 export function ensureDir(dirPath: string): void {
   mkdirSync(dirPath, { recursive: true });
@@ -56,7 +56,11 @@ export function writeAgentsAliases(outDir: string, aliases: readonly string[]): 
  * (OpenCode, Cursor).
  */
 export function copySkillDirs(
-  skills: ReadonlyArray<{ readonly name: string; readonly dir: string }>,
+  skills: ReadonlyArray<{
+    readonly name: string;
+    readonly dir: string;
+    readonly extraFrontmatter?: Record<string, unknown>;
+  }>,
   outSkillsDir: string,
 ): void {
   for (const skill of skills) {
@@ -64,8 +68,11 @@ export function copySkillDirs(
     copyDir(skill.dir, destDir);
     const skillMdPath = join(destDir, "SKILL.md");
     if (existsSync(skillMdPath)) {
-      const transformed = toPlatformSkillMarkdown(readFile(skillMdPath));
-      writeFile(skillMdPath, transformed + "\n");
+      let content = toPlatformSkillMarkdown(readFile(skillMdPath));
+      if (skill.extraFrontmatter && Object.keys(skill.extraFrontmatter).length > 0) {
+        content = applySkillFrontmatterOverrides(content, skill.extraFrontmatter);
+      }
+      writeFile(skillMdPath, content + "\n");
     }
   }
 }

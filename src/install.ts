@@ -31,18 +31,39 @@ export interface InstallOptions {
    * Where the intermediate build output lives. Defaults to `<sourceDir>/generated/`.
    */
   readonly outputDir?: string;
+  /** Install skills globally (`npx skills ... -g`) instead of project-local. */
+  readonly globalInstall?: boolean;
   readonly backup?: boolean;
   readonly rebuild?: boolean;
   readonly logger?: Logger;
 }
 
+class InstallError extends Error {
+  constructor(
+    message: string,
+    readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = "InstallError";
+  }
+}
+
+/**
+ * Load environment variables from `<rootDir>/.env` without overriding existing values.
+ */
 export function loadDotEnv(rootDir: string, env: NodeJS.ProcessEnv = process.env): void {
   const envPath = join(rootDir, ".env");
   if (!existsSync(envPath)) {
     return;
   }
 
-  const lines = readFileSync(envPath, "utf8").split(/\r?\n/u);
+  let lines: readonly string[];
+  try {
+    lines = readFileSync(envPath, "utf8").split(/\r?\n/u);
+  } catch (error) {
+    throw new InstallError(`Failed to read .env file at ${envPath}`, error);
+  }
+
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) {
@@ -60,16 +81,22 @@ export function loadDotEnv(rootDir: string, env: NodeJS.ProcessEnv = process.env
       continue;
     }
 
-    env[key] = rawValue.replace(/^['"]|['"]$/gu, "");
+    const hasMatchingQuotes =
+      (rawValue.startsWith('"') && rawValue.endsWith('"')) || (rawValue.startsWith("'") && rawValue.endsWith("'"));
+    env[key] = hasMatchingQuotes ? rawValue.slice(1, -1) : rawValue;
   }
 }
 
+/**
+ * Install generated per-platform configs from source to destination base directory.
+ */
 export function runInstall(options: InstallOptions): readonly Platform[] {
   const logger = options.logger;
   const sourceDir = resolve(options.sourceDir);
   const destBase = resolve(options.destBase);
   const outputDir = resolve(options.outputDir ?? join(sourceDir, ULIS_GENERATED_DIRNAME));
   const platforms = options.platforms ? uniquePlatforms(options.platforms) : [...PLATFORMS];
+  const globalInstall = options.globalInstall ?? destBase === resolve(homedir());
   const backup = options.backup ?? false;
   const rebuild = options.rebuild ?? false;
 
@@ -101,7 +128,16 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
 
   const timestamp = makeTimestamp();
   for (const platform of platforms) {
-    const context: InstallContext = { outputDir, destBase, backup, timestamp, plugins, skills: skillsConfig, logger };
+    const context: InstallContext = {
+      outputDir,
+      destBase,
+      globalInstall,
+      backup,
+      timestamp,
+      plugins,
+      skills: skillsConfig,
+      logger,
+    };
     switch (platform) {
       case "opencode":
         installOpencode(context);
@@ -121,10 +157,10 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
     }
   }
 
-  const globalSkills = skillsConfig["*"]?.skills ?? [];
-  if (globalSkills.length > 0) {
-    logHeader(logger, "Installing Global Skills");
-    installSkills(globalSkills, "*", logger);
+  const allSkills = skillsConfig["*"]?.skills ?? [];
+  if (allSkills.length > 0) {
+    logHeader(logger, "Installing External Skills");
+    installSkills(allSkills, "*", destBase, globalInstall, logger);
   }
 
   logHeader(logger, "Installation Complete");
@@ -134,6 +170,7 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
 interface InstallContext {
   readonly outputDir: string;
   readonly destBase: string;
+  readonly globalInstall: boolean;
   readonly backup: boolean;
   readonly timestamp: string;
   readonly plugins: PluginsConfig;
@@ -152,7 +189,7 @@ function installOpencode(context: InstallContext): void {
 
   const skills = context.skills.opencode?.skills ?? [];
   if (skills.length > 0) {
-    installSkills(skills, "opencode", context.logger);
+    installSkills(skills, "opencode", context.destBase, context.globalInstall, context.logger);
   }
 }
 
@@ -196,7 +233,7 @@ function installClaude(context: InstallContext): void {
 
   const claudeSkills = context.skills.claude?.skills ?? [];
   if (claudeSkills.length > 0) {
-    installSkills(claudeSkills, "claude", context.logger);
+    installSkills(claudeSkills, "claude", context.destBase, context.globalInstall, context.logger);
   }
 }
 
@@ -209,7 +246,7 @@ function installCodex(context: InstallContext): void {
 
   const skills = context.skills.codex?.skills ?? [];
   if (skills.length > 0) {
-    installSkills(skills, "codex", context.logger);
+    installSkills(skills, "codex", context.destBase, context.globalInstall, context.logger);
   }
 }
 
@@ -238,7 +275,7 @@ function installCursor(context: InstallContext): void {
 
   const skills = context.skills.cursor?.skills ?? [];
   if (skills.length > 0) {
-    installSkills(skills, "cursor", context.logger);
+    installSkills(skills, "cursor", context.destBase, context.globalInstall, context.logger);
   }
 }
 
@@ -282,15 +319,20 @@ function copyPlatformContents(
   skipNames: ReadonlySet<string> = new Set(),
 ): void {
   ensureDir(targetDir);
-  for (const entry of readdirSync(sourceDir)) {
+  if (!existsSync(sourceDir)) {
+    throw new InstallError(`Generated platform directory does not exist: ${sourceDir}`);
+  }
+
+  const entries = readDirectoryEntries(sourceDir);
+  for (const entry of entries) {
     if (skipNames.has(entry)) {
       continue;
     }
 
     const sourcePath = join(sourceDir, entry);
     const targetPath = join(targetDir, entry);
-    rmSync(targetPath, { recursive: true, force: true });
-    cpSync(sourcePath, targetPath, { recursive: true });
+    removePath(targetPath);
+    copyPath(sourcePath, targetPath);
     logSuccess(logger, entry);
   }
 }
@@ -334,12 +376,20 @@ function mergeCursorMcpJson(existingPath: string, generatedPath: string): Record
 }
 
 function readJson(filePath: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(filePath, "utf8")) as Record<string, unknown>;
+  try {
+    return JSON.parse(readFileSync(filePath, "utf8")) as Record<string, unknown>;
+  } catch (error) {
+    throw new InstallError(`Failed to parse JSON at ${filePath}`, error);
+  }
 }
 
 function writeJson(filePath: string, value: Record<string, unknown>): void {
-  ensureDir(dirnameOf(filePath));
-  writeFileSync(filePath, JSON.stringify(value, null, 2));
+  try {
+    ensureDir(dirnameOf(filePath));
+    writeFileSync(filePath, JSON.stringify(value, null, 2));
+  } catch (error) {
+    throw new InstallError(`Failed to write JSON at ${filePath}`, error);
+  }
 }
 
 function backupDirectory(targetDir: string, context: InstallContext): void {
@@ -348,7 +398,7 @@ function backupDirectory(targetDir: string, context: InstallContext): void {
   }
 
   const backupPath = `${targetDir}.${context.timestamp}.backup`;
-  cpSync(targetDir, backupPath, { recursive: true });
+  copyPath(targetDir, backupPath);
   logInfo(context.logger, `[backup] ${targetDir} -> ${backupPath}`);
 }
 
@@ -358,7 +408,7 @@ function backupFile(targetPath: string, context: InstallContext): void {
   }
 
   const backupPath = `${targetPath}.${context.timestamp}.backup`;
-  cpSync(targetPath, backupPath);
+  copyPath(targetPath, backupPath);
   logInfo(context.logger, `[backup] ${targetPath} -> ${backupPath}`);
 }
 
@@ -373,7 +423,7 @@ function installClaudePlugins(plugins: PluginsConfig, logger?: Logger): void {
 
   for (const plugin of claudePlugins) {
     const source = plugin.source === "github" && plugin.repo ? plugin.repo : plugin.name;
-    const result = spawnSync("claude", ["plugin", "add", "--from", source], {
+    const result = runCommand("claude", ["plugin", "add", "--from", source], {
       stdio: ["ignore", "ignore", "pipe"],
       shell: process.platform === "win32",
       encoding: "utf8",
@@ -381,7 +431,8 @@ function installClaudePlugins(plugins: PluginsConfig, logger?: Logger): void {
     if (result.status === 0) {
       logSuccess(logger, `Plugin: ${plugin.name}`);
     } else {
-      const detail = (result.stderr ?? "").trim().split("\n").pop() || result.error?.message || `exit ${result.status}`;
+      const detail =
+        normalizeProcessOutput(result.stderr).split("\n").pop() || result.error?.message || `exit ${result.status}`;
       logWarn(logger, `Failed to install plugin: ${plugin.name} (${detail})`);
     }
   }
@@ -399,21 +450,28 @@ const SKILL_PLATFORM_AGENT_NAMES: Partial<Record<Platform, string>> = {
 function installSkills(
   skills: readonly { key?: string; name: string; args?: readonly string[] }[],
   platform: Platform | "*",
+  installBaseDir: string,
+  globalInstall: boolean,
   logger?: Logger,
 ): void {
   if (skills.length === 0) return;
-  const agentFlags =
-    platform === "*"
-      ? Object.values(SKILL_PLATFORM_AGENT_NAMES)
-          .map((name) => ["-a", name])
-          .flat()
-      : ["-a", SKILL_PLATFORM_AGENT_NAMES[platform] ?? platform];
+  const agentNames =
+    platform === "*" ? Object.values(SKILL_PLATFORM_AGENT_NAMES) : [SKILL_PLATFORM_AGENT_NAMES[platform] ?? platform];
+  const agentFlags = ["-a", ...agentNames];
 
   for (const skill of skills) {
-    const npxArgs = ["skills@latest", "add", skill.name, ...agentFlags, "--yes", ...(skill.args ?? [])];
-    const result = spawnSync("npx", npxArgs, {
+    const npxArgs = [
+      "skills@latest",
+      "add",
+      skill.name,
+      ...agentFlags,
+      ...(globalInstall ? ["-g"] : ["--project"]),
+      "--yes",
+      ...(skill.args ?? []),
+    ];
+    const result = runCommand("npx", npxArgs, {
       stdio: ["ignore", "pipe", "pipe"],
-      cwd: homedir(),
+      cwd: installBaseDir,
       shell: process.platform === "win32",
       encoding: "utf8",
     });
@@ -433,7 +491,7 @@ function installSkills(
 
 function commandExists(command: string): boolean {
   const lookupCommand = process.platform === "win32" ? "where" : "which";
-  const result = spawnSync(lookupCommand, [command], {
+  const result = runCommand(lookupCommand, [command], {
     stdio: "ignore",
     shell: process.platform === "win32",
   });
@@ -441,7 +499,11 @@ function commandExists(command: string): boolean {
 }
 
 function ensureDir(dirPath: string): void {
-  mkdirSync(dirPath, { recursive: true });
+  try {
+    mkdirSync(dirPath, { recursive: true });
+  } catch (error) {
+    throw new InstallError(`Failed to create directory: ${dirPath}`, error);
+  }
 }
 
 function dirnameOf(filePath: string): string {
@@ -458,6 +520,48 @@ function makeTimestamp(): string {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readDirectoryEntries(dirPath: string): readonly string[] {
+  try {
+    return readdirSync(dirPath);
+  } catch (error) {
+    throw new InstallError(`Failed to list directory: ${dirPath}`, error);
+  }
+}
+
+function removePath(path: string): void {
+  try {
+    rmSync(path, { recursive: true, force: true });
+  } catch (error) {
+    throw new InstallError(`Failed to remove path: ${path}`, error);
+  }
+}
+
+function copyPath(sourcePath: string, targetPath: string): void {
+  try {
+    cpSync(sourcePath, targetPath, { recursive: true });
+  } catch (error) {
+    throw new InstallError(`Failed to copy ${sourcePath} -> ${targetPath}`, error);
+  }
+}
+
+function runCommand(command: string, args: readonly string[], options: Parameters<typeof spawnSync>[2]) {
+  try {
+    return spawnSync(command, [...args], options);
+  } catch (error) {
+    throw new InstallError(`Failed to run command: ${command} ${args.join(" ")}`, error);
+  }
+}
+
+function normalizeProcessOutput(value: string | Buffer | undefined): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (!value) {
+    return "";
+  }
+  return value.toString("utf8").trim();
 }
 
 function logHeader(logger: Logger | undefined, message: string): void {

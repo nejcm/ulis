@@ -29,15 +29,24 @@ export const PLATFORM_DIRS: Record<Platform, { home: string; project: string }> 
   forgecode: { home: ".forge", project: ".forge" },
 };
 
+/**
+ * Check whether a raw string maps to a supported platform id.
+ */
 export function isPlatform(value: string): value is Platform {
   return (PLATFORMS as readonly string[]).includes(value);
 }
 
+/**
+ * Return platforms in canonical order with duplicates removed.
+ */
 export function uniquePlatforms(values: readonly Platform[]): Platform[] {
   const selected = new Set(values);
   return PLATFORMS.filter((platform) => selected.has(platform));
 }
 
+/**
+ * Parse comma-delimited platform CLI input and validate platform ids.
+ */
 export function parsePlatformList(rawValues: readonly string[]): Platform[] {
   const parsedValues = rawValues.flatMap((value) =>
     value
@@ -54,6 +63,9 @@ export function parsePlatformList(rawValues: readonly string[]): Platform[] {
   return uniquePlatforms(parsedValues as Platform[]);
 }
 
+/**
+ * Resolve the target config directory for a platform in home vs project mode.
+ */
 export function platformConfigDir(platform: Platform, destBase: string, userHome: string = homedir()): string {
   const dirName = destBase === userHome ? PLATFORM_DIRS[platform].home : PLATFORM_DIRS[platform].project;
   return join(destBase, dirName);

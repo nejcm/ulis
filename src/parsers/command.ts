@@ -1,10 +1,5 @@
-import { readdirSync } from "node:fs";
-import { join, basename } from "node:path";
-
-import matter from "gray-matter";
-
 import { CommandFrontmatterSchema, type CommandFrontmatter } from "../schema.js";
-import { readFile } from "../utils/fs.js";
+import { ParseError, readMarkdownDir } from "./_shared.js";
 
 export interface ParsedCommand {
   name: string; // filename without .md
@@ -13,17 +8,16 @@ export interface ParsedCommand {
   body: string;
 }
 
+/**
+ * Parse and validate command markdown definitions from the commands directory.
+ */
 export function parseCommands(commandsDir: string): readonly ParsedCommand[] {
-  const files = readdirSync(commandsDir).filter((f) => f.endsWith(".md") && f.toLowerCase() !== "readme.md");
-  return files.map((file) => {
-    const raw = readFile(join(commandsDir, file));
-    const { data, content } = matter(raw);
-    const frontmatter = CommandFrontmatterSchema.parse(data);
-    return {
-      name: basename(file, ".md"),
-      filename: file,
-      frontmatter,
-      body: content.trim(),
-    };
-  });
+  const { items, errors } = readMarkdownDir(
+    commandsDir,
+    CommandFrontmatterSchema,
+    "command",
+    (name, frontmatter, body, relFile) => ({ name, filename: relFile, frontmatter, body }),
+  );
+  if (errors.length > 0) throw errors[0] as ParseError;
+  return items;
 }

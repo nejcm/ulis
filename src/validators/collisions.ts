@@ -1,6 +1,6 @@
 import type { ParsedAgent } from "../parsers/agent.js";
 import type { ParsedSkill } from "../parsers/skill.js";
-import type { Diagnostic } from "./cross-refs.js";
+import type { Diagnostic } from "../types.js";
 
 /**
  * Validate that no two entities share an output identifier that would cause
@@ -25,7 +25,7 @@ export function validateCollisions(
 
   diags.push(
     ...findDuplicates(
-      skills.map((s) => s.frontmatter.name ?? s.name),
+      skills.map((s) => s.frontmatter?.name ?? s.name),
       "skill",
       "Duplicate skill name",
       `Rename one of the colliding directories in the ulis skills/ folder (or its \`name:\` frontmatter)`,

@@ -6,17 +6,17 @@ export const GlobalSkillSchema = z.object({
   args: z.array(z.string()).optional(),
 });
 
-const perPlatformSkillsSchema = z.object({
+const PER_PLATFORM_SKILLS_SCHEMA = z.object({
   skills: z.array(GlobalSkillSchema).default([]),
 });
 
 export const SkillsConfigSchema = z.object({
-  "*": perPlatformSkillsSchema.optional(),
-  claude: perPlatformSkillsSchema.optional(),
-  opencode: perPlatformSkillsSchema.optional(),
-  codex: perPlatformSkillsSchema.optional(),
-  cursor: perPlatformSkillsSchema.optional(),
-  forgecode: perPlatformSkillsSchema.optional(),
+  "*": PER_PLATFORM_SKILLS_SCHEMA.optional(),
+  claude: PER_PLATFORM_SKILLS_SCHEMA.optional(),
+  opencode: PER_PLATFORM_SKILLS_SCHEMA.optional(),
+  codex: PER_PLATFORM_SKILLS_SCHEMA.optional(),
+  cursor: PER_PLATFORM_SKILLS_SCHEMA.optional(),
+  forgecode: PER_PLATFORM_SKILLS_SCHEMA.optional(),
 });
 
 export type SkillsConfig = z.infer<typeof SkillsConfigSchema>;

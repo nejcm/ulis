@@ -7,6 +7,6 @@ import { loadConfigFile } from "../utils/config-loader.js";
  */
 export function loadSkills(sourceDir: string): SkillsConfig {
   const raw = loadConfigFile(sourceDir, "skills");
-  if (raw === undefined) return {};
+  if (!raw) return {};
   return SkillsConfigSchema.parse(raw);
 }

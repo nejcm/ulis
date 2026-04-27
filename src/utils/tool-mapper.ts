@@ -52,6 +52,8 @@ const PLATFORM_TOOL_NAMES: Record<
  * Tool name maps are internal ULIS defaults and not user-configurable.
  */
 export function mapTools(perms: ToolPermissions, platform: ToolPlatform): string[] {
+  if (typeof perms === "string") return perms.split(",").map((t) => t.trim());
+
   if (platform === "opencode" || platform === "codex") {
     // These platforms consume the structured `ToolPermissions` directly;
     // no flat tool name list is needed.

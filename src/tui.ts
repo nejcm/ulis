@@ -474,6 +474,7 @@ async function executeWorkflow(plan: ReturnType<typeof resolveWorkflowPlan>): Pr
         backup: state.backup,
         sourceDir,
         destBase,
+        globalInstall: true,
         logger,
       });
     }
@@ -532,6 +533,9 @@ function exitApp(code: number): void {
   process.exit(code);
 }
 
+/**
+ * Start the interactive ULIS terminal UI.
+ */
 export function runTui(): void {
   main();
 }

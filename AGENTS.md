@@ -28,7 +28,7 @@ When you need tool-specific configuration behavior:
 
 ## Source layout
 
-```
+```yaml
 src/
   cli.ts                # cac entry point (bundled to dist/cli.js)
   commands/             # init, install, build, tui
@@ -40,7 +40,7 @@ src/
   utils/                # config-loader, resolve-source, fs, logger, …
   tui.ts                # interactive UI
   tools/                # gen-json-schema, gen-reference
-example/                       # reference example config
+example/                # reference example config
 dist/                   # tsup output (cli.js + schemas/) — gitignored
 ```
 

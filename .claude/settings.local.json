@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp -r example/generated/codex /tmp/codex-before)",
+      "Bash(bun run *)",
+      "Bash(cp -r example/generated /tmp/gen-before)",
+      "Bash(git remote *)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}
