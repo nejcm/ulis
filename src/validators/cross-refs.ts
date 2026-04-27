@@ -53,7 +53,8 @@ export function validateCrossRefs(
     }
 
     // 3. Subagent allowlist (warning — Claude will silently ignore unknown names)
-    const agentTool = agent.frontmatter.tools.agent;
+    const { tools } = agent.frontmatter;
+    const agentTool = typeof tools !== "string" ? tools.agent : undefined;
     if (Array.isArray(agentTool)) {
       for (const subagentRef of agentTool) {
         if (!agentNames.has(subagentRef)) {

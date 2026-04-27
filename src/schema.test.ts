@@ -17,8 +17,10 @@ describe("AgentFrontmatterSchema", () => {
     expect(result.description).toBe("A test agent");
     expect(result.model).toBeUndefined();
     expect(result.tags).toEqual([]); // default
-    expect(result.tools.read).toBe(true);
-    expect(result.tools.bash).toBe(false); // default
+    const tools = result.tools;
+    if (typeof tools === "string") throw new Error("expected tools object");
+    expect(tools.read).toBe(true);
+    expect(tools.bash).toBe(false); // default
   });
 
   it("accepts precise model id", () => {
@@ -124,7 +126,9 @@ describe("AgentFrontmatterSchema", () => {
       description: "x",
       tools: { agent: ["planner", "tester"] },
     });
-    expect(result.tools.agent).toEqual(["planner", "tester"]);
+    const tools = result.tools;
+    if (typeof tools === "string") throw new Error("expected tools object");
+    expect(tools.agent).toEqual(["planner", "tester"]);
   });
 
   it("parses platform overrides", () => {

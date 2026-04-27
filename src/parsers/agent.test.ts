@@ -14,9 +14,11 @@ describe("parseAgents", () => {
     expect(worker.name).toBe("worker");
     expect(worker.frontmatter.description).toBe("A minimal test agent");
     expect(worker.frontmatter.model).toBe("claude-haiku-4-5-20251001");
-    expect(worker.frontmatter.tools.read).toBe(true);
-    expect(worker.frontmatter.tools.edit).toBe(true);
-    expect(worker.frontmatter.tools.bash).toBe(false); // default
+    const tools = worker.frontmatter.tools;
+    if (typeof tools === "string") throw new Error("expected tools object");
+    expect(tools.read).toBe(true);
+    expect(tools.edit).toBe(true);
+    expect(tools.bash).toBe(false); // default
     expect(worker.frontmatter.tags).toEqual(["core"]);
     expect(worker.body).toContain("You are a minimal worker agent");
   });
