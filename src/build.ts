@@ -7,6 +7,8 @@ import type { Platform } from "./platforms.js";
 import { PLATFORMS, uniquePlatforms } from "./platforms.js";
 import type { Diagnostic } from "./types.js";
 import { logger as defaultLogger } from "./utils/logger.js";
+import { mergeProjects } from "./utils/merge-projects.js";
+import type { ResolvedPreset } from "./utils/resolve-presets.js";
 import { validateCollisions } from "./validators/collisions.js";
 import { validateCrossRefs } from "./validators/cross-refs.js";
 
@@ -32,6 +34,8 @@ export interface BuildOptions {
    */
   readonly outputDir?: string;
   readonly logger?: Logger;
+  /** Resolved presets to merge into the project before building. Applied in order; base wins. */
+  readonly presets?: readonly ResolvedPreset[];
 }
 
 export interface BuildResult {
@@ -55,9 +59,24 @@ export function runBuild(options: BuildOptions): BuildResult {
   logger.info(`Targets: ${activeTargets.join(", ")}`);
 
   logger.header("Parsing");
+
+  const presets = options.presets ?? [];
+  if (presets.length > 0) {
+    logger.info(`Presets: ${presets.map((p) => p.name).join(", ")}`);
+  }
+
   let parsed: ReturnType<typeof parseProject>;
   try {
-    parsed = parseProject(sourceDir);
+    if (presets.length === 0) {
+      parsed = parseProject(sourceDir);
+    } else {
+      const presetProjects = presets.map((preset) => {
+        logger.dim(`  Parsing preset: ${preset.name}`);
+        return parseProject(preset.dir);
+      });
+      const baseProject = parseProject(sourceDir);
+      parsed = mergeProjects([...presetProjects, baseProject]);
+    }
   } catch (err) {
     if (err instanceof ParseAggregateError) {
       for (const e of err.errors) logger.error(e.message);

@@ -14,6 +14,7 @@ import {
   McpConfigSchema,
   PermissionsConfigSchema,
   PluginsConfigSchema,
+  PresetMetaSchema,
   SkillFrontmatterSchema,
   SkillsConfigSchema,
   UlisConfigSchema,
@@ -30,6 +31,7 @@ const schemas: Array<{ name: string; schema: z.ZodType }> = [
   { name: "plugins", schema: PluginsConfigSchema },
   { name: "skills", schema: SkillsConfigSchema },
   { name: "permissions", schema: PermissionsConfigSchema },
+  { name: "preset", schema: PresetMetaSchema },
 ];
 
 for (const { name, schema } of schemas) {

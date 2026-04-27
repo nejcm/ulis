@@ -1,6 +1,7 @@
 import { runBuild } from "../build.js";
 import { parsePlatformList, type Platform } from "../platforms.js";
 import { logger as log } from "../utils/logger.js";
+import { parsePresetNames, resolvePresets } from "../utils/resolve-presets.js";
 import { resolveSource } from "../utils/resolve-source.js";
 
 export interface BuildCmdOptions {
@@ -8,6 +9,7 @@ export interface BuildCmdOptions {
   readonly source?: string;
   readonly target?: string | string[];
   readonly targets?: string | string[];
+  readonly preset?: string | string[];
 }
 
 /**
@@ -16,8 +18,11 @@ export interface BuildCmdOptions {
 export async function buildCmd(options: BuildCmdOptions = {}): Promise<void> {
   const { sourceDir } = resolveSource({ global: options.global, source: options.source });
   const targets = parseTargets(options);
+  const presets = options.preset
+    ? await resolvePresets(parsePresetNames(options.preset), { nonInteractive: false })
+    : [];
 
-  runBuild({ sourceDir, targets, logger: log });
+  runBuild({ sourceDir, targets, logger: log, presets });
 }
 
 /**

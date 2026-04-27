@@ -1,0 +1,5 @@
+# yaml-language-server: $schema=../../../dist/schemas/preset.schema.json
+
+name: React Native
+description: React Native project guidance and implementation skills.
+version: 1

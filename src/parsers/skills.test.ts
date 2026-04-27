@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { loadSkills } from "./skills.js";
+import { loadSkills, mergeSkillsConfigs } from "./skills.js";
 
 describe("loadSkills", () => {
   it("returns empty config for empty skills.yaml", () => {
@@ -14,5 +14,35 @@ describe("loadSkills", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("merges platform skill installs in order", () => {
+    expect(
+      mergeSkillsConfigs([
+        {
+          "*": {
+            skills: [{ name: "preset/all" }],
+          },
+          cursor: {
+            skills: [{ name: "preset/cursor" }],
+          },
+        },
+        {
+          "*": {
+            skills: [{ name: "base/all" }],
+          },
+          cursor: {
+            skills: [{ name: "base/cursor" }],
+          },
+        },
+      ]),
+    ).toEqual({
+      "*": {
+        skills: [{ name: "preset/all" }, { name: "base/all" }],
+      },
+      cursor: {
+        skills: [{ name: "preset/cursor" }, { name: "base/cursor" }],
+      },
+    });
   });
 });
