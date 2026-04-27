@@ -77,4 +77,15 @@ describe("commands", () => {
     expect(existsSync(join(projectRoot, ".claude.json"))).toBe(true);
     expect(readFileSync(join(projectRoot, ".claude", "agents", "worker.md"), "utf8")).toContain("A minimal test agent");
   });
+
+  it("installCmd with --yes fails fast for missing presets without prompting", async () => {
+    const projectRoot = createTempRoot();
+    copyFixtureSource(projectRoot);
+    process.chdir(projectRoot);
+
+    const missingPreset = `missing-${Date.now()}`;
+    await expect(installCmd({ yes: true, target: "claude", preset: missingPreset })).rejects.toThrow(
+      `Preset "${missingPreset}" not found`,
+    );
+  });
 });

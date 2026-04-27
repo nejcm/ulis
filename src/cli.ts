@@ -7,6 +7,7 @@ import { cac } from "cac";
 import { buildCmd } from "./commands/build.js";
 import { initCmd } from "./commands/init.js";
 import { installCmd } from "./commands/install.js";
+import { presetListCmd } from "./commands/preset.js";
 import { tuiCmd } from "./commands/tui.js";
 
 function resolvePackageVersion(): string {
@@ -43,6 +44,7 @@ async function main(): Promise<void> {
     .option("--target <platform>", "Only build/install the given platform(s) (comma-separated)")
     .option("--no-rebuild", "Skip the build step and install existing generated output")
     .option("--backup", "Back up existing platform dirs before overwriting")
+    .option("--preset <names>", "Apply preset(s) from ~/.ulis/presets/ (comma-separated)")
     .action((options) =>
       installCmd({
         global: Boolean(options.global),
@@ -51,6 +53,7 @@ async function main(): Promise<void> {
         target: options.target,
         rebuild: options.rebuild !== false,
         backup: Boolean(options.backup),
+        preset: options.preset,
       }),
     );
 
@@ -59,13 +62,20 @@ async function main(): Promise<void> {
     .option("-g, --global", "Build from ~/.ulis/")
     .option("--source <path>", "Override the ulis source directory")
     .option("--target <platform>", "Only build the given platform(s) (comma-separated)")
+    .option("--preset <names>", "Apply preset(s) from ~/.ulis/presets/ (comma-separated)")
     .action((options) =>
       buildCmd({
         global: Boolean(options.global),
         source: options.source,
         target: options.target,
+        preset: options.preset,
       }),
     );
+
+  cli.command("preset [action]", "Manage presets (action: list)").action((action: string | undefined) => {
+    if (!action || action === "list") return presetListCmd();
+    throw new Error(`Unknown preset action: "${action}". Available: list`);
+  });
 
   cli.command("tui", "Launch the interactive terminal UI").action(() => tuiCmd());
 
