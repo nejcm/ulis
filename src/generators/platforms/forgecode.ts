@@ -3,11 +3,11 @@ import { join } from "node:path";
 import { enabledAgentsFor } from "../../parsers/agent.js";
 import { enabledRulesFor } from "../../parsers/rule.js";
 import { enabledSkillsFor } from "../../parsers/skill.js";
-import { fileExists, readFile } from "../../utils/fs.js";
 import { mcpServersFor, translateEnvMap } from "../../utils/mcp-block.js";
 import { buildPolicyCommentBlock } from "../../utils/policy-comments.js";
 import { mapTools } from "../../utils/tool-mapper.js";
 import type { FileArtifact, GenerationResult, ProjectBundle } from "../types.js";
+import { buildRulesIndex } from "../shared/rules-index.js";
 
 const EFFORT_MAP: Record<string, string> = { low: "low", medium: "medium", high: "high", max: "high" };
 
@@ -71,30 +71,14 @@ export function generateForgecode(project: ProjectBundle): GenerationResult {
   const unsupportedPlatformRules = project.ulisConfig.unsupportedPlatformRules ?? "inject";
   const appendAfterRaw: { path: string; content: string }[] = [];
   if (unsupportedPlatformRules === "inject") {
-    const enabledRules = enabledRulesFor(project.rules, "forgecode");
-    if (enabledRules.length > 0) {
-      for (const rule of enabledRules) {
-        const src = join(project.sourceDir, "rules", rule.filename);
-        if (fileExists(src)) {
-          artifacts.push({ path: join(".forge", "rules", rule.filename), contents: readFile(src) });
-        }
-      }
-      const indexLines = [
-        "## Rules",
-        "",
-        "The following rules contain guidelines you should apply when relevant.",
-        "Read the referenced file when working in the indicated context.",
-        "",
-      ];
-      for (const rule of enabledRules) {
-        let line = `- **${rule.name}** (\`rules/${rule.filename}\`)`;
-        if (rule.frontmatter.description) line += `: ${rule.frontmatter.description}`;
-        if (rule.frontmatter.paths?.length) {
-          line += ` — apply when working in ${rule.frontmatter.paths.join(", ")}`;
-        }
-        indexLines.push(line);
-      }
-      appendAfterRaw.push({ path: join(".forge", "RULES.md"), content: indexLines.join("\n") + "\n" });
+    const result = buildRulesIndex(enabledRulesFor(project.rules, "forgecode"), {
+      sourceDir: project.sourceDir,
+      artifactPrefix: join(".forge", "rules"),
+      indexPath: join(".forge", "RULES.md"),
+    });
+    if (result) {
+      artifacts.push(...result.artifacts);
+      appendAfterRaw.push(result.appendEntry);
     }
   }
 

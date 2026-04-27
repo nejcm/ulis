@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Platform } from "../platforms.js";
 import { mergeOrCopyDir } from "../utils/config-merger.js";
 import { cleanDir, copyDir, copySkillDirs, fileExists, readFile, writeAgentsAliases, writeFile } from "../utils/fs.js";
-import { log } from "../utils/logger.js";
+import { logger as log } from "../utils/logger.js";
 import type { GenerationResult } from "./types.js";
 
 /**

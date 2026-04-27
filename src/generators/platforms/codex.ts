@@ -8,6 +8,7 @@ import { fileExists, readFile } from "../../utils/fs.js";
 import { mcpServersFor } from "../../utils/mcp-block.js";
 import { buildPolicyCommentBlock } from "../../utils/policy-comments.js";
 import { toPlatformSkillMarkdown } from "../../utils/skill-frontmatter.js";
+import { buildRulesIndex } from "../shared/rules-index.js";
 import type { FileArtifact, GenerationResult, ProjectBundle } from "../types.js";
 
 const CODEX_DEFAULT_MODEL = "gpt-5.4";
@@ -16,6 +17,14 @@ const CODEX_DEFAULT_SANDBOX = "elevated";
 const CODEX_DEFAULT_MCP_STARTUP_TIMEOUT_SEC = 20;
 
 const EFFORT_MAP: Record<string, string> = { low: "low", medium: "medium", high: "high", max: "max" };
+
+function toTomlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function toYamlString(value: string): string {
+  return JSON.stringify(value);
+}
 
 /**
  * Codex distinguishes three HTTP header cases:
@@ -44,13 +53,13 @@ function codexHttpHeaderLines(headers: Record<string, string> | undefined): stri
     staticHeaders.push([headerName, headerValue]);
   }
 
-  if (bearerVar) lines.push(`bearer_token_env_var = "${bearerVar}"`);
+  if (bearerVar) lines.push(`bearer_token_env_var = ${toTomlString(bearerVar)}`);
   if (staticHeaders.length > 0) {
-    const pairs = staticHeaders.map(([k, v]) => `"${k}" = "${v}"`).join(", ");
+    const pairs = staticHeaders.map(([k, v]) => `${toTomlString(k)} = ${toTomlString(v)}`).join(", ");
     lines.push(`http_headers = { ${pairs} }`);
   }
   if (envHeaders.length > 0) {
-    const pairs = envHeaders.map(([k, v]) => `"${k}" = "${v}"`).join(", ");
+    const pairs = envHeaders.map(([k, v]) => `${toTomlString(k)} = ${toTomlString(v)}`).join(", ");
     lines.push(`env_http_headers = { ${pairs} }`);
   }
 
@@ -59,31 +68,31 @@ function codexHttpHeaderLines(headers: Record<string, string> | undefined): stri
 
 function buildConfigToml(project: ProjectBundle): string {
   const lines: string[] = [];
-  lines.push(`model = "${CODEX_DEFAULT_MODEL}"`);
-  lines.push(`model_reasoning_effort = "${CODEX_DEFAULT_MODEL_REASONING_EFFORT}"`);
+  lines.push(`model = ${toTomlString(CODEX_DEFAULT_MODEL)}`);
+  lines.push(`model_reasoning_effort = ${toTomlString(CODEX_DEFAULT_MODEL_REASONING_EFFORT)}`);
 
   const approvalMode = project.permissions?.codex?.approvalMode;
-  if (approvalMode) lines.push(`approval_policy = "${approvalMode}"`);
+  if (approvalMode) lines.push(`approval_policy = ${toTomlString(approvalMode)}`);
 
   lines.push("");
   lines.push("[windows]");
   const sandbox = project.permissions?.codex?.sandbox ?? CODEX_DEFAULT_SANDBOX;
-  lines.push(`sandbox = "${sandbox}"`);
+  lines.push(`sandbox = ${toTomlString(sandbox)}`);
   lines.push("");
 
   const trustedProjects = project.permissions?.codex?.trustedProjects ?? {};
   for (const [path, level] of Object.entries(trustedProjects)) {
     lines.push(`[projects.'${path}']`);
-    lines.push(`trust_level = "${level}"`);
+    lines.push(`trust_level = ${toTomlString(level)}`);
     lines.push("");
   }
 
   for (const [name, server] of mcpServersFor(project.mcp, "codex")) {
     if (server.type === "local") {
       lines.push(`[mcp_servers.${name}]`);
-      if (server.command) lines.push(`command = "${server.command}"`);
+      if (server.command) lines.push(`command = ${toTomlString(server.command)}`);
       if (server.args) {
-        const args = server.args.map((a) => `"${translateEnvVar(a, "codex")}"`).join(", ");
+        const args = server.args.map((a) => toTomlString(translateEnvVar(a, "codex"))).join(", ");
         lines.push(`args = [${args}]`);
       }
       lines.push(`startup_timeout_sec = ${CODEX_DEFAULT_MCP_STARTUP_TIMEOUT_SEC}`);
@@ -91,20 +100,20 @@ function buildConfigToml(project: ProjectBundle): string {
         lines.push("");
         lines.push(`[mcp_servers.${name}.env]`);
         for (const [k, v] of Object.entries(server.env)) {
-          lines.push(`${k} = "${translateEnvVar(v, "codex")}"`);
+          lines.push(`${k} = ${toTomlString(translateEnvVar(v, "codex"))}`);
         }
       }
       lines.push("");
     } else if (server.url) {
       lines.push(`[mcp_servers.${name}]`);
-      lines.push(`url = "${server.url}"`);
+      lines.push(`url = ${toTomlString(server.url)}`);
       for (const headerLine of codexHttpHeaderLines(server.headers)) lines.push(headerLine);
       lines.push(`startup_timeout_sec = ${CODEX_DEFAULT_MCP_STARTUP_TIMEOUT_SEC}`);
       lines.push("");
     } else if (server.localFallback) {
       lines.push(`[mcp_servers.${name}]`);
-      lines.push(`command = "${server.localFallback.command}"`);
-      const args = server.localFallback.args.map((a) => `"${translateEnvVar(a, "codex")}"`).join(", ");
+      lines.push(`command = ${toTomlString(server.localFallback.command)}`);
+      const args = server.localFallback.args.map((a) => toTomlString(translateEnvVar(a, "codex"))).join(", ");
       lines.push(`args = [${args}]`);
       lines.push(`startup_timeout_sec = ${CODEX_DEFAULT_MCP_STARTUP_TIMEOUT_SEC}`);
       lines.push("");
@@ -124,25 +133,25 @@ export function generateCodex(project: ProjectBundle): GenerationResult {
     const codexPlatform = agent.frontmatter.platforms?.codex;
     const agentLines: string[] = [];
 
-    agentLines.push(`name = "${agent.name}"`);
-    agentLines.push(`description = "${agent.frontmatter.description.replace(/"/g, '\\"')}"`);
+    agentLines.push(`name = ${toTomlString(agent.name)}`);
+    agentLines.push(`description = ${toTomlString(agent.frontmatter.description)}`);
     agentLines.push("");
     agentLines.push(`developer_instructions = """`);
     agentLines.push(agent.body.trim());
     agentLines.push(`"""`);
     agentLines.push("");
 
-    if (codexPlatform?.model) agentLines.push(`model = "${codexPlatform.model}"`);
+    if (codexPlatform?.model) agentLines.push(`model = ${toTomlString(codexPlatform.model)}`);
 
     const reasoningEffort =
       codexPlatform?.model_reasoning_effort ??
       (agent.frontmatter.effort ? EFFORT_MAP[agent.frontmatter.effort] : undefined);
-    if (reasoningEffort) agentLines.push(`model_reasoning_effort = "${reasoningEffort}"`);
+    if (reasoningEffort) agentLines.push(`model_reasoning_effort = ${toTomlString(reasoningEffort)}`);
 
-    if (codexPlatform?.sandbox_mode) agentLines.push(`sandbox_mode = "${codexPlatform.sandbox_mode}"`);
+    if (codexPlatform?.sandbox_mode) agentLines.push(`sandbox_mode = ${toTomlString(codexPlatform.sandbox_mode)}`);
 
     if (codexPlatform?.nickname_candidates?.length) {
-      const nicks = codexPlatform.nickname_candidates.map((n) => `"${n}"`).join(", ");
+      const nicks = codexPlatform.nickname_candidates.map((n) => toTomlString(n)).join(", ");
       agentLines.push(`nickname_candidates = [${nicks}]`);
     }
 
@@ -157,7 +166,11 @@ export function generateCodex(project: ProjectBundle): GenerationResult {
     const fm = skill.frontmatter;
     const codexPlatform = fm.platforms?.codex;
 
-    const rawSkillMd = readFile(join(skill.dir, "SKILL.md"));
+    const skillMdPath = join(skill.dir, "SKILL.md");
+    if (!fileExists(skillMdPath)) {
+      continue;
+    }
+    const rawSkillMd = readFile(skillMdPath);
     artifacts.push({
       path: join("skills", skill.name, "SKILL.md"),
       contents: toPlatformSkillMarkdown(rawSkillMd) + "\n",
@@ -177,19 +190,22 @@ export function generateCodex(project: ProjectBundle): GenerationResult {
     if (needsYaml) {
       const yamlLines: string[] = [];
 
-      if (hasModel) {
-        yamlLines.push(`model: "${codexPlatform!.model}"`);
+      if (codexPlatform?.model) {
+        yamlLines.push(`model: ${toYamlString(codexPlatform.model)}`);
         yamlLines.push("");
       }
 
       if (hasUiConfig) {
         yamlLines.push("interface:");
-        yamlLines.push(`  display_name: "${codexPlatform?.displayName ?? skillName}"`);
-        if (codexPlatform?.shortDescription) yamlLines.push(`  short_description: "${codexPlatform.shortDescription}"`);
-        if (codexPlatform?.iconSmall) yamlLines.push(`  icon_small: "${codexPlatform.iconSmall}"`);
-        if (codexPlatform?.iconLarge) yamlLines.push(`  icon_large: "${codexPlatform.iconLarge}"`);
-        if (codexPlatform?.brandColor) yamlLines.push(`  brand_color: "${codexPlatform.brandColor}"`);
-        if (codexPlatform?.defaultPrompt) yamlLines.push(`  default_prompt: "${codexPlatform.defaultPrompt}"`);
+        yamlLines.push(`  display_name: ${toYamlString(codexPlatform?.displayName ?? skillName)}`);
+        if (codexPlatform?.shortDescription)
+          yamlLines.push(`  short_description: ${toYamlString(codexPlatform.shortDescription)}`);
+        if (codexPlatform?.iconSmall) yamlLines.push(`  icon_small: ${toYamlString(codexPlatform.iconSmall)}`);
+        if (codexPlatform?.iconLarge) yamlLines.push(`  icon_large: ${toYamlString(codexPlatform.iconLarge)}`);
+        if (codexPlatform?.brandColor) yamlLines.push(`  brand_color: ${toYamlString(codexPlatform.brandColor)}`);
+        if (codexPlatform?.defaultPrompt) {
+          yamlLines.push(`  default_prompt: ${toYamlString(codexPlatform.defaultPrompt)}`);
+        }
         yamlLines.push("");
       }
 
@@ -202,10 +218,10 @@ export function generateCodex(project: ProjectBundle): GenerationResult {
         yamlLines.push("  tools:");
         for (const dep of codexPlatform!.mcpDependencies!) {
           yamlLines.push(`    - type: ${dep.type}`);
-          yamlLines.push(`      value: "${dep.value}"`);
-          if (dep.description) yamlLines.push(`      description: "${dep.description}"`);
-          if (dep.transport) yamlLines.push(`      transport: "${dep.transport}"`);
-          if (dep.url) yamlLines.push(`      url: "${dep.url}"`);
+          yamlLines.push(`      value: ${toYamlString(dep.value)}`);
+          if (dep.description) yamlLines.push(`      description: ${toYamlString(dep.description)}`);
+          if (dep.transport) yamlLines.push(`      transport: ${toYamlString(dep.transport)}`);
+          if (dep.url) yamlLines.push(`      url: ${toYamlString(dep.url)}`);
         }
       }
 
@@ -220,30 +236,14 @@ export function generateCodex(project: ProjectBundle): GenerationResult {
   const unsupportedPlatformRules = project.ulisConfig.unsupportedPlatformRules ?? "inject";
   const appendAfterRaw: { path: string; content: string }[] = [];
   if (unsupportedPlatformRules === "inject") {
-    const enabledRules = enabledRulesFor(project.rules, "codex");
-    if (enabledRules.length > 0) {
-      for (const rule of enabledRules) {
-        const src = join(project.sourceDir, "rules", rule.filename);
-        if (fileExists(src)) {
-          artifacts.push({ path: join("rules", rule.filename), contents: readFile(src) });
-        }
-      }
-      const indexLines = [
-        "## Rules",
-        "",
-        "The following rules contain guidelines you should apply when relevant.",
-        "Read the referenced file when working in the indicated context.",
-        "",
-      ];
-      for (const rule of enabledRules) {
-        let line = `- **${rule.name}** (\`rules/${rule.filename}\`)`;
-        if (rule.frontmatter.description) line += `: ${rule.frontmatter.description}`;
-        if (rule.frontmatter.paths?.length) {
-          line += ` — apply when working in ${rule.frontmatter.paths.join(", ")}`;
-        }
-        indexLines.push(line);
-      }
-      appendAfterRaw.push({ path: "AGENTS.md", content: indexLines.join("\n") + "\n" });
+    const result = buildRulesIndex(enabledRulesFor(project.rules, "codex"), {
+      sourceDir: project.sourceDir,
+      artifactPrefix: "rules",
+      indexPath: "AGENTS.md",
+    });
+    if (result) {
+      artifacts.push(...result.artifacts);
+      appendAfterRaw.push(result.appendEntry);
     }
   }
 

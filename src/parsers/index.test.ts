@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
-import { parseProject, ParseAggregateError, ParseError } from "./index.js";
+import { ParseAggregateError, ParseError, parseProject } from "./index.js";
 
 const fixturesDir = resolve(join(import.meta.dirname, "../../tests/fixtures"));
 
@@ -176,7 +176,16 @@ describe("ParseError", () => {
 
   it("formats ZodError fields into the message", () => {
     const { ZodError } = require("zod");
-    const zErr = new ZodError([{ code: "invalid_type", path: ["model"], message: "Expected string", expected: "string", received: "number", fatal: false }]);
+    const zErr = new ZodError([
+      {
+        code: "invalid_type",
+        path: ["model"],
+        message: "Expected string",
+        expected: "string",
+        received: "number",
+        fatal: false,
+      },
+    ]);
     const e = new ParseError("agent", "agents/x.md", zErr);
     expect(e.message).toContain("model");
   });

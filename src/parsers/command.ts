@@ -1,5 +1,5 @@
 import { CommandFrontmatterSchema, type CommandFrontmatter } from "../schema.js";
-import { readMarkdownDir, ParseError } from "./_shared.js";
+import { ParseError, readMarkdownDir } from "./_shared.js";
 
 export interface ParsedCommand {
   name: string; // filename without .md
@@ -8,6 +8,9 @@ export interface ParsedCommand {
   body: string;
 }
 
+/**
+ * Parse and validate command markdown definitions from the commands directory.
+ */
 export function parseCommands(commandsDir: string): readonly ParsedCommand[] {
   const { items, errors } = readMarkdownDir(
     commandsDir,

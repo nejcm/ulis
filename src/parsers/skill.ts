@@ -4,7 +4,7 @@ import { join } from "node:path";
 import matter from "gray-matter";
 
 import { SkillFrontmatterSchema, type SkillFrontmatter } from "../schema.js";
-import { readFile, fileExists } from "../utils/fs.js";
+import { fileExists, readFile } from "../utils/fs.js";
 import { ParseError } from "./_shared.js";
 
 export interface ParsedSkill {
@@ -48,6 +48,9 @@ export function collectSkills(skillsDir: string): { items: readonly ParsedSkill[
   return { items: skills, errors };
 }
 
+/**
+ * Parse and validate all skill directories containing `SKILL.md`.
+ */
 export function parseSkills(skillsDir: string): readonly ParsedSkill[] {
   const { items, errors } = collectSkills(skillsDir);
   if (errors.length > 0) throw errors[0] as ParseError;

@@ -1,27 +1,32 @@
 import { z } from "zod";
 
-export const PLuginSchema = z.object({
+export const PluginSchema = z.object({
   name: z.string(),
   source: z.string(),
   repo: z.string().optional(),
 });
 
-const perPlatformPluginsSchema = z
+const PER_PLATFORM_PLUGINS_SCHEMA = z
   .object({
-    plugins: z.array(PLuginSchema).optional().nullable(),
+    plugins: z.array(PluginSchema).optional().nullable(),
   })
   .optional()
   .nullable();
 
 export const PluginsConfigSchema = z
   .object({
-    "*": perPlatformPluginsSchema,
-    claude: perPlatformPluginsSchema,
-    opencode: perPlatformPluginsSchema,
-    codex: perPlatformPluginsSchema,
-    cursor: perPlatformPluginsSchema,
+    "*": PER_PLATFORM_PLUGINS_SCHEMA,
+    claude: PER_PLATFORM_PLUGINS_SCHEMA,
+    opencode: PER_PLATFORM_PLUGINS_SCHEMA,
+    codex: PER_PLATFORM_PLUGINS_SCHEMA,
+    cursor: PER_PLATFORM_PLUGINS_SCHEMA,
   })
   .optional()
   .nullable();
+
+/**
+ * @deprecated Use `PluginSchema` instead.
+ */
+export const PLuginSchema = PluginSchema;
 
 export type PluginsConfig = z.infer<typeof PluginsConfigSchema>;

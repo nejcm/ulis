@@ -2,11 +2,11 @@ import { join, resolve } from "node:path";
 
 import { ULIS_GENERATED_DIRNAME } from "./config.js";
 import { generate, writeResult } from "./generators/index.js";
-import { parseProject, ParseAggregateError } from "./parsers/index.js";
+import { ParseAggregateError, parseProject } from "./parsers/index.js";
 import type { Platform } from "./platforms.js";
 import { PLATFORMS, uniquePlatforms } from "./platforms.js";
-import { log } from "./utils/logger.js";
 import type { Diagnostic } from "./types.js";
+import { logger as defaultLogger } from "./utils/logger.js";
 import { validateCollisions } from "./validators/collisions.js";
 import { validateCrossRefs } from "./validators/cross-refs.js";
 
@@ -40,8 +40,11 @@ export interface BuildResult {
   readonly outputDir: string;
 }
 
+/**
+ * Parse, validate, and generate all requested platform outputs.
+ */
 export function runBuild(options: BuildOptions): BuildResult {
-  const logger = options.logger ?? log;
+  const logger = options.logger ?? defaultLogger;
   const sourceDir = resolve(options.sourceDir);
   const outputDir = resolve(options.outputDir ?? join(sourceDir, ULIS_GENERATED_DIRNAME));
   const activeTargets = options.targets ? uniquePlatforms(options.targets) : [...PLATFORMS];

@@ -13,7 +13,7 @@ import {
   renderSkills,
   type ScaffoldContext,
 } from "../scaffold/index.js";
-import { log } from "../utils/logger.js";
+import { logger as log } from "../utils/logger.js";
 
 export interface InitOptions {
   readonly global?: boolean;
@@ -21,6 +21,9 @@ export interface InitOptions {
 
 const SUBDIRS = ["agents", "skills", "commands", "raw", "rules"] as const;
 
+/**
+ * Scaffold a new `.ulis` source tree in project or global mode.
+ */
 export async function initCmd(options: InitOptions = {}): Promise<void> {
   const cwd = process.cwd();
   const targetRoot = options.global ? homedir() : cwd;

@@ -8,6 +8,7 @@ import { mcpServersFor, normalizeLocalMcpCommand, translateEnvMap } from "../../
 import { buildPolicyCommentBlock } from "../../utils/policy-comments.js";
 import { mapTools } from "../../utils/tool-mapper.js";
 import type { FileArtifact, GenerationResult, ProjectBundle } from "../types.js";
+import { toYamlScalar, serializeYamlFrontmatter } from "../shared/yaml.js";
 
 /** Serialize the YAML frontmatter block for a Claude subagent. */
 function subagentFrontmatter(agent: ParsedAgent): string {
@@ -15,18 +16,18 @@ function subagentFrontmatter(agent: ParsedAgent): string {
   const claudePlatform = fm.platforms?.claude;
   const lines: string[] = ["---"];
 
-  lines.push(`name: ${agent.name}`);
-  lines.push(`description: ${fm.description}`);
+  lines.push(`name: ${toYamlScalar(agent.name)}`);
+  lines.push(`description: ${toYamlScalar(fm.description)}`);
 
   const model = claudePlatform?.model ?? fm.model;
-  if (model) lines.push(`model: ${model}`);
+  if (model) lines.push(`model: ${toYamlScalar(model)}`);
 
   const allowedTools = mapTools(fm.tools, "claude");
   const disallowedTools = [...(claudePlatform?.disallowedTools ?? []), ...(fm.toolPolicy?.avoid ?? [])];
 
-  if (allowedTools.length > 0) lines.push(`tools: ${allowedTools.join(", ")}`);
+  if (allowedTools.length > 0) lines.push(`tools: ${toYamlScalar(allowedTools.join(", "))}`);
   if (disallowedTools.length > 0) {
-    lines.push(`disallowedTools: ${[...new Set(disallowedTools)].join(", ")}`);
+    lines.push(`disallowedTools: ${toYamlScalar([...new Set(disallowedTools)].join(", "))}`);
   }
 
   let permissionMode = claudePlatform?.permissionMode;
@@ -35,7 +36,7 @@ function subagentFrontmatter(agent: ParsedAgent): string {
   } else if (fm.security?.requireApproval?.length || fm.toolPolicy?.requireConfirmation?.length) {
     permissionMode ??= "default";
   }
-  if (permissionMode) lines.push(`permissionMode: ${permissionMode}`);
+  if (permissionMode) lines.push(`permissionMode: ${toYamlScalar(permissionMode)}`);
 
   if (fm.maxTurns !== undefined) lines.push(`maxTurns: ${fm.maxTurns}`);
   if (fm.effort) lines.push(`effort: ${fm.effort}`);
@@ -45,11 +46,11 @@ function subagentFrontmatter(agent: ParsedAgent): string {
 
   if (fm.skills && fm.skills.length > 0) {
     lines.push(`skills:`);
-    for (const s of fm.skills) lines.push(`  - ${s}`);
+    for (const s of fm.skills) lines.push(`  - ${toYamlScalar(s)}`);
   }
   if (fm.mcpServers && fm.mcpServers.length > 0) {
     lines.push(`mcpServers:`);
-    for (const s of fm.mcpServers) lines.push(`  - ${s}`);
+    for (const s of fm.mcpServers) lines.push(`  - ${toYamlScalar(s)}`);
   }
 
   // Merge explicit hooks with blocked-command hooks derived from security policy.
@@ -72,20 +73,20 @@ function subagentFrontmatter(agent: ParsedAgent): string {
       lines.push(`  ${event}:`);
       for (const entry of entries as Array<{ matcher?: string; command: string }>) {
         if (entry.matcher) {
-          lines.push(`    - matcher: "${entry.matcher}"`);
+          lines.push(`    - matcher: ${toYamlScalar(entry.matcher)}`);
           lines.push(`      hooks:`);
           lines.push(`        - type: command`);
-          lines.push(`          command: "${entry.command}"`);
+          lines.push(`          command: ${toYamlScalar(entry.command)}`);
         } else {
           lines.push(`    - type: command`);
-          lines.push(`      command: "${entry.command}"`);
+          lines.push(`      command: ${toYamlScalar(entry.command)}`);
         }
       }
     }
   }
 
-  if (fm.color) lines.push(`color: ${fm.color}`);
-  if (claudePlatform?.initialPrompt) lines.push(`initialPrompt: ${claudePlatform.initialPrompt}`);
+  if (fm.color) lines.push(`color: ${toYamlScalar(fm.color)}`);
+  if (claudePlatform?.initialPrompt) lines.push(`initialPrompt: ${toYamlScalar(claudePlatform.initialPrompt)}`);
 
   lines.push("---");
   return lines.join("\n");
@@ -122,6 +123,7 @@ function buildMcpBlock(mcp: ProjectBundle["mcp"]): Record<string, unknown> {
   }
   return mcpServers;
 }
+
 
 function buildSettings(
   permissions: ProjectBundle["permissions"],
@@ -199,19 +201,9 @@ export function generateClaude(project: ProjectBundle): GenerationResult {
       const outData: Record<string, unknown> = { ...rest };
       if (resolvedModel) outData.model = resolvedModel;
 
-      const lines = ["---"];
-      for (const [k, v] of Object.entries(outData)) {
-        if (v === undefined || v === null) continue;
-        if (typeof v === "boolean") lines.push(`${k}: ${v}`);
-        else if (typeof v === "number") lines.push(`${k}: ${v}`);
-        else if (Array.isArray(v)) lines.push(`${k}: ${JSON.stringify(v)}`);
-        else lines.push(`${k}: ${v}`);
-      }
-      lines.push("---");
-
       artifacts.push({
         path: join("commands", cmd.filename),
-        contents: `${lines.join("\n")}\n\n${cmd.body}\n`,
+        contents: `${serializeYamlFrontmatter(outData)}\n\n${cmd.body}\n`,
       });
     }
   }

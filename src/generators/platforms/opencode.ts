@@ -8,6 +8,8 @@ import { fileExists, readFile } from "../../utils/fs.js";
 import { mcpServersFor, translateEnvMap } from "../../utils/mcp-block.js";
 import { buildPolicyCommentBlock } from "../../utils/policy-comments.js";
 import type { FileArtifact, GenerationResult, ProjectBundle } from "../types.js";
+import { buildRulesIndex } from "../shared/rules-index.js";
+import { serializeYamlFrontmatter } from "../shared/yaml.js";
 
 const OPENCODE_DEFAULT_MODEL = "anthropic/sonnet";
 const OPENCODE_SMALL_MODEL = "opencode/kimi-k2.5-free";
@@ -28,7 +30,7 @@ export function generateOpencode(project: ProjectBundle): GenerationResult {
       description: agent.frontmatter.description,
       mode: ocPlatform?.mode ?? "subagent",
       model: ocModel,
-      tools: { ...agent.frontmatter.tools },
+      tools: agent.frontmatter.tools,
     };
 
     if (agent.frontmatter.temperature !== undefined) entry.temperature = agent.frontmatter.temperature;
@@ -129,19 +131,9 @@ export function generateOpencode(project: ProjectBundle): GenerationResult {
       if (resolvedAgent) outData.agent = resolvedAgent;
       if (resolvedSubtask !== undefined) outData.subtask = resolvedSubtask;
 
-      const lines = ["---"];
-      for (const [k, v] of Object.entries(outData)) {
-        if (v === undefined || v === null) continue;
-        if (typeof v === "boolean") lines.push(`${k}: ${v}`);
-        else if (typeof v === "number") lines.push(`${k}: ${v}`);
-        else if (Array.isArray(v)) lines.push(`${k}: ${JSON.stringify(v)}`);
-        else lines.push(`${k}: ${v}`);
-      }
-      lines.push("---");
-
       artifacts.push({
         path: join("commands", cmd.filename),
-        contents: `${lines.join("\n")}\n\n${cmd.body}\n`,
+        contents: `${serializeYamlFrontmatter(outData)}\n\n${cmd.body}\n`,
       });
     }
     const readmeSrc = join(commandsSrc, "README.md");
@@ -157,30 +149,14 @@ export function generateOpencode(project: ProjectBundle): GenerationResult {
   const unsupportedPlatformRules = project.ulisConfig.unsupportedPlatformRules ?? "inject";
   const appendAfterRaw: { path: string; content: string }[] = [];
   if (unsupportedPlatformRules === "inject") {
-    const enabledRules = enabledRulesFor(project.rules, "opencode");
-    if (enabledRules.length > 0) {
-      for (const rule of enabledRules) {
-        const src = join(project.sourceDir, "rules", rule.filename);
-        if (fileExists(src)) {
-          artifacts.push({ path: join("rules", rule.filename), contents: readFile(src) });
-        }
-      }
-      const indexLines = [
-        "## Rules",
-        "",
-        "The following rules contain guidelines you should apply when relevant.",
-        "Read the referenced file when working in the indicated context.",
-        "",
-      ];
-      for (const rule of enabledRules) {
-        let line = `- **${rule.name}** (\`rules/${rule.filename}\`)`;
-        if (rule.frontmatter.description) line += `: ${rule.frontmatter.description}`;
-        if (rule.frontmatter.paths?.length) {
-          line += ` — apply when working in ${rule.frontmatter.paths.join(", ")}`;
-        }
-        indexLines.push(line);
-      }
-      appendAfterRaw.push({ path: "AGENTS.md", content: indexLines.join("\n") + "\n" });
+    const result = buildRulesIndex(enabledRulesFor(project.rules, "opencode"), {
+      sourceDir: project.sourceDir,
+      artifactPrefix: "rules",
+      indexPath: "AGENTS.md",
+    });
+    if (result) {
+      artifacts.push(...result.artifacts);
+      appendAfterRaw.push(result.appendEntry);
     }
   }
 

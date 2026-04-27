@@ -1,5 +1,5 @@
 import { RuleFrontmatterSchema, type RuleFrontmatter } from "../schema.js";
-import { readMarkdownDir, ParseError } from "./_shared.js";
+import { ParseError, readMarkdownDir } from "./_shared.js";
 
 export interface ParsedRule {
   /** Stem of the file relative to the rules dir, normalized to forward slashes. E.g. "code-style" or "backend/api". */
@@ -17,6 +17,9 @@ export function enabledRulesFor(rules: readonly ParsedRule[], platform: RulePlat
   return rules.filter((r) => r.frontmatter.platforms?.[platform]?.enabled !== false);
 }
 
+/**
+ * Parse and validate markdown rule files, including nested rule paths.
+ */
 export function parseRules(rulesDir: string): readonly ParsedRule[] {
   const { items, errors } = readMarkdownDir(
     rulesDir,

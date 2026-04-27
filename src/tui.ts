@@ -532,6 +532,9 @@ function exitApp(code: number): void {
   process.exit(code);
 }
 
+/**
+ * Start the interactive ULIS terminal UI.
+ */
 export function runTui(): void {
   main();
 }
