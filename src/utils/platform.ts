@@ -1,4 +1,4 @@
-export const isWindows = process.platform === "win32";
+export const IS_WINDOWS = process.platform === "win32";
 
 export function checkPlatform(platform: NodeJS.Platform) {
   return {

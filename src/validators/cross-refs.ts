@@ -1,18 +1,9 @@
 import type { ParsedAgent } from "../parsers/agent.js";
 import type { ParsedSkill } from "../parsers/skill.js";
 import type { McpConfig } from "../schema.js";
+import type { Diagnostic } from "../types.js";
 
-/**
- * Common diagnostic shape returned by every validator. The orchestrator in
- * `src/index.ts` collects diagnostics from all validators, prints warnings,
- * and aborts the build with exit code 1 if any errors were emitted.
- */
-export interface Diagnostic {
-  readonly level: "error" | "warning";
-  readonly entity: string;
-  readonly message: string;
-  readonly suggestion?: string;
-}
+export type { Diagnostic };
 
 /**
  * Validate cross-entity references in the parsed bundle.
@@ -62,7 +53,8 @@ export function validateCrossRefs(
     }
 
     // 3. Subagent allowlist (warning — Claude will silently ignore unknown names)
-    const agentTool = agent.frontmatter.tools.agent;
+    const { tools } = agent.frontmatter;
+    const agentTool = typeof tools !== "string" ? tools.agent : undefined;
     if (Array.isArray(agentTool)) {
       for (const subagentRef of agentTool) {
         if (!agentNames.has(subagentRef)) {

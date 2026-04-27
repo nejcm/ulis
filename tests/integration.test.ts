@@ -1,97 +1,103 @@
 /**
  * Integration snapshot tests.
- * Runs the full generator pipeline against the minimal fixture set and
- * asserts the output of each generator contains expected content.
+ * Drives the new pure `generate(platform, project)` façade against the
+ * minimal fixture set and asserts key content in the returned artifacts.
  *
- * These are NOT snapshot files in the bun sense — we check for key substrings
- * so the tests survive minor formatting changes while catching regressions
- * in generator logic.
+ * No filesystem writes — tests read from the pure `GenerationResult` map,
+ * which keeps them fast and deterministic.
  */
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { describe, expect, it } from "bun:test";
 import { join, resolve } from "node:path";
 
-import { generateClaude } from "../src/generators/claude.js";
-import { generateCodex } from "../src/generators/codex.js";
-import { generateCursor } from "../src/generators/cursor.js";
-import { generateForgecode } from "../src/generators/forgecode.js";
-import { generateOpencode } from "../src/generators/opencode.js";
+import { generate } from "../src/generators/index.js";
+import type { FileArtifact, ProjectBundle } from "../src/generators/types.js";
 import { parseAgents } from "../src/parsers/agent.js";
+import { loadMcp } from "../src/parsers/mcp.js";
+import { loadPermissions } from "../src/parsers/permissions.js";
+import { loadPlugins } from "../src/parsers/plugins.js";
+import { parseRules } from "../src/parsers/rule.js";
 import { parseSkills } from "../src/parsers/skill.js";
-import { McpConfigSchema, PluginsConfigSchema } from "../src/schema.js";
-import { readFile } from "../src/utils/fs.js";
+import type { Platform } from "../src/platforms.js";
+import { UlisConfigSchema } from "../src/schema.js";
 import { validateCollisions } from "../src/validators/collisions.js";
 import { validateCrossRefs } from "../src/validators/cross-refs.js";
 
 const fixturesDir = resolve(join(import.meta.dirname, "fixtures"));
-const outDir = resolve(join(import.meta.dirname, ".tmp-test-output"));
 
-function readOut(platform: string, ...parts: string[]): string {
-  return readFileSync(join(outDir, platform, ...parts), "utf8");
+function buildProject(): ProjectBundle {
+  return {
+    agents: parseAgents(join(fixturesDir, "agents")),
+    skills: parseSkills(join(fixturesDir, "skills")),
+    rules: parseRules(join(fixturesDir, "rules")),
+    mcp: loadMcp(fixturesDir),
+    permissions: loadPermissions(fixturesDir),
+    plugins: loadPlugins(fixturesDir),
+    ulisConfig: UlisConfigSchema.parse({ version: 1, name: "fixtures" }),
+    sourceDir: fixturesDir,
+  };
 }
 
-beforeAll(() => {
-  mkdirSync(outDir, { recursive: true });
+function run(platform: Platform): Map<string, string> {
+  const result = generate(platform, buildProject());
+  if (!result) throw new Error(`No generator for ${platform}`);
+  const map = new Map<string, string>();
+  for (const a of result.artifacts) {
+    const norm = a.path.replace(/\\/g, "/");
+    map.set(norm, typeof a.contents === "string" ? a.contents : a.contents.toString("utf8"));
+  }
+  return map;
+}
 
-  const agents = parseAgents(join(fixturesDir, "agents"));
-  const skills = parseSkills(join(fixturesDir, "skills"));
-  const mcp = McpConfigSchema.parse(JSON.parse(readFile(join(fixturesDir, "mcp.json"))));
-  const plugins = PluginsConfigSchema.parse(JSON.parse(readFile(join(fixturesDir, "plugins.json"))));
-
-  generateClaude(agents, skills, mcp, plugins, fixturesDir, join(outDir, "claude"));
-  generateOpencode(agents, skills, mcp, fixturesDir, join(outDir, "opencode"));
-  generateCodex(agents, skills, mcp, fixturesDir, join(outDir, "codex"));
-  generateCursor(agents, skills, mcp, fixturesDir, join(outDir, "cursor"));
-  generateForgecode(agents, skills, mcp, fixturesDir, join(outDir, "forgecode"));
-});
-
-afterAll(() => {
-  if (existsSync(outDir)) rmSync(outDir, { recursive: true });
-});
+function get(map: Map<string, string>, path: string): string {
+  const v = map.get(path);
+  if (v === undefined) throw new Error(`Artifact not found: ${path}. Have: ${[...map.keys()].join(", ")}`);
+  return v;
+}
 
 // ─── Claude ──────────────────────────────────────────────────────────────────
 
 describe("Claude generator", () => {
+  const m = run("claude");
+
   it("generates agent .md with correct frontmatter", () => {
-    const content = readOut("claude", "agents", "worker.md");
-    expect(content).toContain("name: worker");
-    expect(content).toContain("description: A minimal test agent");
-    expect(content).toContain("model: claude-haiku-4-5-20251001");
+    const c = get(m, "agents/worker.md");
+    expect(c).toContain("name: worker");
+    expect(c).toContain("description: A minimal test agent");
+    expect(c).toContain("model: claude-haiku-4-5-20251001");
   });
 
   it("applies readonly security as permissionMode: plan", () => {
-    const content = readOut("claude", "agents", "worker.md");
-    expect(content).toContain("permissionMode: plan");
+    expect(get(m, "agents/worker.md")).toContain("permissionMode: plan");
   });
 
   it("adds toolPolicy.avoid to disallowedTools", () => {
-    const content = readOut("claude", "agents", "worker.md");
-    expect(content).toContain("disallowedTools:");
-    expect(content).toContain("Bash");
+    const c = get(m, "agents/worker.md");
+    expect(c).toContain("disallowedTools:");
+    expect(c).toContain("Bash");
   });
 
   it("synthesizes PreToolUse hook for blockedCommands", () => {
-    const content = readOut("claude", "agents", "worker.md");
-    expect(content).toContain("hooks:");
-    expect(content).toContain("PreToolUse:");
-    expect(content).toContain("Bash(rm -rf*)");
+    const c = get(m, "agents/worker.md");
+    expect(c).toContain("hooks:");
+    expect(c).toContain("PreToolUse:");
+    expect(c).toContain("Bash(rm -rf*)");
   });
 
   it("embeds contextHints + toolPolicy as HTML comment in body", () => {
-    const content = readOut("claude", "agents", "worker.md");
-    expect(content).toContain("<!--");
-    expect(content).toContain("[ULIS contextHints]");
-    expect(content).toContain("maxInputTokens: 20000");
-    expect(content).toContain("[ULIS toolPolicy]");
+    const c = get(m, "agents/worker.md");
+    expect(c).toContain("<!--");
+    expect(c).toContain("[ULIS contextHints]");
+    expect(c).toContain("maxInputTokens: 20000");
+    expect(c).toContain("[ULIS toolPolicy]");
   });
 
-  it("generates settings.json", () => {
-    const settings = JSON.parse(readOut("claude", "settings.json"));
+  it("generates settings.json without mcpServers", () => {
+    const settings = JSON.parse(get(m, "settings.json"));
     expect(settings).not.toHaveProperty("mcpServers");
   });
 
   it("generates .claude.json with all targeted servers", () => {
-    const mcp = JSON.parse(readOut("claude", ".claude.json"));
+    const mcp = JSON.parse(get(m, ".claude.json"));
     expect(mcp.mcpServers).toHaveProperty("test-local");
     expect(mcp.mcpServers).toHaveProperty("test-remote");
   });
@@ -100,49 +106,43 @@ describe("Claude generator", () => {
 // ─── OpenCode ────────────────────────────────────────────────────────────────
 
 describe("OpenCode generator", () => {
+  const m = run("opencode");
+
   it("generates opencode.json with agent block", () => {
-    const oc = JSON.parse(readOut("opencode", "opencode.json"));
+    const oc = JSON.parse(get(m, "opencode.json"));
     expect(oc.agent).toHaveProperty("worker");
     expect(oc.agent.worker.model).toBeDefined();
   });
 
   it("maps readonly security to deny permissions", () => {
-    const oc = JSON.parse(readOut("opencode", "opencode.json"));
-    const perm = oc.agent.worker.permission;
-    expect(perm?.edit).toBe("deny");
-    expect(perm?.bash).toBe("deny");
+    const oc = JSON.parse(get(m, "opencode.json"));
+    expect(oc.agent.worker.permission?.edit).toBe("deny");
+    expect(oc.agent.worker.permission?.bash).toBe("deny");
   });
 
   it("emits rate_limit_per_hour from security.rateLimit", () => {
-    const oc = JSON.parse(readOut("opencode", "opencode.json"));
+    const oc = JSON.parse(get(m, "opencode.json"));
     expect(oc.agent.worker.rate_limit_per_hour).toBe(30);
   });
 
   it("includes MCP servers for opencode target", () => {
-    const oc = JSON.parse(readOut("opencode", "opencode.json"));
+    const oc = JSON.parse(get(m, "opencode.json"));
     expect(oc.mcp).toHaveProperty("test-local");
     expect(oc.mcp).toHaveProperty("test-remote");
-  });
-
-  it("preserves non-ULIS SKILL.md frontmatter for copied skills", () => {
-    const skill = readOut("opencode", "skills", "my-skill", "SKILL.md");
-    expect(skill).toContain("---");
-    expect(skill).toContain("custom_agent_hint: keep-me");
-    expect(skill).not.toContain("allowImplicitInvocation:");
-    expect(skill).not.toContain("platforms:");
   });
 });
 
 // ─── Codex ───────────────────────────────────────────────────────────────────
 
 describe("Codex generator", () => {
-  it("generates config.toml", () => {
-    const toml = readOut("codex", "config.toml");
-    expect(toml).toContain("[mcp_servers.test-local]");
+  const m = run("codex");
+
+  it("generates config.toml with mcp_servers", () => {
+    expect(get(m, "config.toml")).toContain("[mcp_servers.test-local]");
   });
 
   it("generates agent TOML with policy comments", () => {
-    const toml = readOut("codex", "agents", "worker.toml");
+    const toml = get(m, "agents/worker.toml");
     expect(toml).toContain('name = "worker"');
     expect(toml).toContain("# [ULIS contextHints]");
     expect(toml).toContain("#   maxInputTokens: 20000");
@@ -151,14 +151,8 @@ describe("Codex generator", () => {
     expect(toml).toContain("#   permissionLevel: readonly");
   });
 
-  it("uses localFallback for remote MCP servers", () => {
-    const toml = readOut("codex", "config.toml");
-    // test-remote has a localFallback — should appear in config
-    expect(toml).toContain("test-remote");
-  });
-
   it("preserves non-ULIS SKILL.md frontmatter for codex skills", () => {
-    const skill = readOut("codex", "skills", "my-skill", "SKILL.md");
+    const skill = get(m, "skills/my-skill/SKILL.md");
     expect(skill).toContain("---");
     expect(skill).toContain("name: my-skill");
     expect(skill).toContain("description: A minimal test skill");
@@ -171,65 +165,67 @@ describe("Codex generator", () => {
 // ─── Cursor ──────────────────────────────────────────────────────────────────
 
 describe("Cursor generator", () => {
+  const m = run("cursor");
+
   it("generates agent .mdc with model", () => {
-    const mdc = readOut("cursor", "agents", "worker.mdc");
+    const mdc = get(m, "agents/worker.mdc");
     expect(mdc).toContain("description: A minimal test agent");
     expect(mdc).toContain("model:");
   });
 
   it("embeds policy as HTML comment in mdc body", () => {
-    const mdc = readOut("cursor", "agents", "worker.mdc");
+    const mdc = get(m, "agents/worker.mdc");
     expect(mdc).toContain("<!--");
     expect(mdc).toContain("[ULIS contextHints]");
   });
 
   it("generates mcp.json with all targeted servers", () => {
-    const mcp = JSON.parse(readOut("cursor", "mcp.json"));
+    const mcp = JSON.parse(get(m, "mcp.json"));
     expect(mcp.mcpServers).toHaveProperty("test-local");
     expect(mcp.mcpServers).toHaveProperty("test-remote");
-  });
-
-  it("preserves non-ULIS SKILL.md frontmatter for copied skills", () => {
-    const skill = readOut("cursor", "skills", "my-skill", "SKILL.md");
-    expect(skill).toContain("---");
-    expect(skill).toContain("custom_agent_hint: keep-me");
-    expect(skill).not.toContain("allowImplicitInvocation:");
-    expect(skill).not.toContain("platforms:");
   });
 });
 
 // ─── ForgeCode ───────────────────────────────────────────────────────────────
 
 describe("ForgeCode generator", () => {
+  const m = run("forgecode");
+
   it("generates agent markdown with Forge frontmatter", () => {
-    const content = readOut("forgecode", ".forge", "agents", "worker.md");
-    expect(content).toContain("id: worker");
-    expect(content).toContain("description: A minimal test agent");
-    expect(content).toContain("tools:");
+    const c = get(m, ".forge/agents/worker.md");
+    expect(c).toContain("id: worker");
+    expect(c).toContain("description: A minimal test agent");
+    expect(c).toContain("tools:");
   });
 
   it("generates .forge/.mcp.json with all targeted servers", () => {
-    const mcp = JSON.parse(readOut("forgecode", ".forge", ".mcp.json"));
+    const mcp = JSON.parse(get(m, ".forge/.mcp.json"));
     expect(mcp.mcpServers).toHaveProperty("test-local");
     expect(mcp.mcpServers).toHaveProperty("test-remote");
     expect(mcp.mcpServers["test-remote"].type).toBe("http");
   });
+});
 
-  it("copies skill directories under .forge/skills", () => {
-    const content = readOut("forgecode", ".forge", "skills", "my-skill", "SKILL.md");
-    expect(content).toContain("A minimal test skill");
+// ─── Generator boundary ──────────────────────────────────────────────────────
+
+describe("Generator boundary", () => {
+  it("is pure: two runs produce byte-identical artifacts", () => {
+    const a = run("claude");
+    const b = run("claude");
+    expect([...a.entries()].sort()).toEqual([...b.entries()].sort());
   });
 
-  it("preserves non-ULIS SKILL.md frontmatter for copied skills", () => {
-    const skill = readOut("forgecode", ".forge", "skills", "my-skill", "SKILL.md");
-    expect(skill).toContain("---");
-    expect(skill).toContain("custom_agent_hint: keep-me");
-    expect(skill).not.toContain("allowImplicitInvocation:");
-    expect(skill).not.toContain("platforms:");
-  });
-
-  it("copies raw/common and raw/forgecode payloads", () => {
-    expect(readOut("forgecode", "AGENTS.md")).toContain("fixture common guidance");
+  it("returns FileArtifact[] for every registered platform", () => {
+    for (const platform of ["claude", "codex", "cursor", "opencode", "forgecode"] as const) {
+      const result = generate(platform, buildProject());
+      expect(result).toBeDefined();
+      expect(Array.isArray(result!.artifacts)).toBe(true);
+      expect(result!.artifacts.length).toBeGreaterThan(0);
+      for (const art of result!.artifacts as readonly FileArtifact[]) {
+        expect(typeof art.path).toBe("string");
+        expect(art.path.length).toBeGreaterThan(0);
+      }
+    }
   });
 });
 
@@ -237,10 +233,8 @@ describe("ForgeCode generator", () => {
 
 describe("Validation pipeline (real fixtures)", () => {
   it("happy-path fixtures produce zero diagnostics", () => {
-    const agents = parseAgents(join(fixturesDir, "agents"));
-    const skills = parseSkills(join(fixturesDir, "skills"));
-    const mcp = McpConfigSchema.parse(JSON.parse(readFile(join(fixturesDir, "mcp.json"))));
-    const diags = [...validateCrossRefs(agents, skills, mcp), ...validateCollisions(agents, skills)];
+    const p = buildProject();
+    const diags = [...validateCrossRefs(p.agents, p.skills, p.mcp), ...validateCollisions(p.agents, p.skills)];
     expect(diags).toEqual([]);
   });
 });

@@ -1,3 +1,6 @@
+/**
+ * Lazily load and start the interactive terminal UI workflow.
+ */
 export async function tuiCmd(): Promise<void> {
   // The TUI is heavy (pulls in @cel-tui/core); load lazily so the CLI
   // start-up stays fast for the common non-tui commands.

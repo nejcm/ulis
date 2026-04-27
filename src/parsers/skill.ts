@@ -4,7 +4,8 @@ import { join } from "node:path";
 import matter from "gray-matter";
 
 import { SkillFrontmatterSchema, type SkillFrontmatter } from "../schema.js";
-import { readFile, fileExists } from "../utils/fs.js";
+import { fileExists, readFile } from "../utils/fs.js";
+import { ParseError } from "./_shared.js";
 
 export interface ParsedSkill {
   name: string; // directory name
@@ -20,28 +21,38 @@ export function enabledSkillsFor(skills: readonly ParsedSkill[], platform: Skill
   return skills.filter((s) => s.frontmatter.platforms?.[platform]?.enabled !== false);
 }
 
-export function parseSkills(skillsDir: string): readonly ParsedSkill[] {
-  if (!fileExists(skillsDir)) return [];
+/** Internal: collects all skill parse results without throwing. Used by parseProject. */
+export function collectSkills(skillsDir: string): { items: readonly ParsedSkill[]; errors: readonly ParseError[] } {
+  if (!fileExists(skillsDir)) return { items: [], errors: [] };
   const entries = readdirSync(skillsDir, { withFileTypes: true }).filter((d) => d.isDirectory());
   const skills: ParsedSkill[] = [];
+  const errors: ParseError[] = [];
+
   for (const entry of entries) {
     const skillDir = join(skillsDir, entry.name);
     const skillFile = join(skillDir, "SKILL.md");
     if (!fileExists(skillFile)) continue;
-    const raw = readFile(skillFile);
-    const { data, content } = matter(raw);
-    const frontmatter = SkillFrontmatterSchema.parse(data);
-    if (frontmatter.name !== entry.name) {
-      throw new Error(
-        `Skill name mismatch in ${skillFile}: frontmatter name '${frontmatter.name}' must match directory '${entry.name}'`,
-      );
+    try {
+      const raw = readFile(skillFile);
+      const { data, content } = matter(raw);
+      const frontmatter = SkillFrontmatterSchema.parse(data);
+      if (frontmatter.name !== entry.name) {
+        throw new Error(`frontmatter name '${frontmatter.name}' must match directory '${entry.name}'`);
+      }
+      skills.push({ name: entry.name, dir: skillDir, frontmatter, body: content.trim() });
+    } catch (err) {
+      errors.push(new ParseError("skill", `skills/${entry.name}/SKILL.md`, err));
     }
-    skills.push({
-      name: entry.name,
-      dir: skillDir,
-      frontmatter,
-      body: content.trim(),
-    });
   }
-  return skills;
+
+  return { items: skills, errors };
+}
+
+/**
+ * Parse and validate all skill directories containing `SKILL.md`.
+ */
+export function parseSkills(skillsDir: string): readonly ParsedSkill[] {
+  const { items, errors } = collectSkills(skillsDir);
+  if (errors.length > 0) throw errors[0] as ParseError;
+  return items;
 }

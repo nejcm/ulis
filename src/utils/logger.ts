@@ -5,7 +5,7 @@ const RED = "\x1b[31m";
 const CYAN = "\x1b[36m";
 const DIM = "\x1b[2m";
 
-export const log = {
+export const logger = {
   info: (msg: string) => console.log(`${CYAN}[info]${RESET} ${msg}`),
   success: (msg: string) => console.log(`${GREEN}[done]${RESET} ${msg}`),
   warn: (msg: string) => console.log(`${YELLOW}[warn]${RESET} ${msg}`),

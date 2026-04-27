@@ -17,8 +17,10 @@ describe("AgentFrontmatterSchema", () => {
     expect(result.description).toBe("A test agent");
     expect(result.model).toBeUndefined();
     expect(result.tags).toEqual([]); // default
-    expect(result.tools.read).toBe(true);
-    expect(result.tools.bash).toBe(false); // default
+    const tools = result.tools;
+    if (typeof tools === "string") throw new Error("expected tools object");
+    expect(tools.read).toBe(true);
+    expect(tools.bash).toBe(false); // default
   });
 
   it("accepts precise model id", () => {
@@ -124,7 +126,9 @@ describe("AgentFrontmatterSchema", () => {
       description: "x",
       tools: { agent: ["planner", "tester"] },
     });
-    expect(result.tools.agent).toEqual(["planner", "tester"]);
+    const tools = result.tools;
+    if (typeof tools === "string") throw new Error("expected tools object");
+    expect(tools.agent).toEqual(["planner", "tester"]);
   });
 
   it("parses platform overrides", () => {
@@ -218,6 +222,32 @@ describe("SkillFrontmatterSchema", () => {
       paths: ["src/**", "tests/**"],
     });
     expect(multi.paths).toEqual(["src/**", "tests/**"]);
+  });
+
+  it("preserves unknown root fields", () => {
+    const result = SkillFrontmatterSchema.parse({
+      name: "x-skill",
+      description: "x",
+      author: "acme-org",
+      customField: 42,
+    });
+    expect((result as Record<string, unknown>).author).toBe("acme-org");
+    expect((result as Record<string, unknown>).customField).toBe(42);
+  });
+
+  it("preserves unknown fields inside platform overrides", () => {
+    const result = SkillFrontmatterSchema.parse({
+      name: "x-skill",
+      description: "x",
+      platforms: {
+        claude: { enabled: true, extra_claude_field: "hello" },
+        cursor: { enabled: true, cursor_custom: true },
+        unknown_platform: { enabled: true },
+      },
+    });
+    expect((result.platforms?.claude as Record<string, unknown>).extra_claude_field).toBe("hello");
+    expect((result.platforms?.cursor as Record<string, unknown>).cursor_custom).toBe(true);
+    expect((result.platforms as Record<string, unknown>).unknown_platform).toBeDefined();
   });
 });
 

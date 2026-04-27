@@ -1,6 +1,6 @@
 import type { ParsedAgent } from "../parsers/agent.js";
 import type { ParsedSkill } from "../parsers/skill.js";
-import type { Diagnostic } from "./cross-refs.js";
+import type { Diagnostic } from "../types.js";
 
 /**
  * Validate that no two entities share an output identifier that would cause

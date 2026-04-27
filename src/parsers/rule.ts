@@ -1,10 +1,5 @@
-import { existsSync, readdirSync } from "node:fs";
-import { basename, join } from "node:path";
-
-import matter from "gray-matter";
-
 import { RuleFrontmatterSchema, type RuleFrontmatter } from "../schema.js";
-import { readFile } from "../utils/fs.js";
+import { ParseError, readMarkdownDir } from "./_shared.js";
 
 export interface ParsedRule {
   /** Stem of the file relative to the rules dir, normalized to forward slashes. E.g. "code-style" or "backend/api". */
@@ -22,23 +17,17 @@ export function enabledRulesFor(rules: readonly ParsedRule[], platform: RulePlat
   return rules.filter((r) => r.frontmatter.platforms?.[platform]?.enabled !== false);
 }
 
+/**
+ * Parse and validate markdown rule files, including nested rule paths.
+ */
 export function parseRules(rulesDir: string): readonly ParsedRule[] {
-  if (!existsSync(rulesDir)) return [];
-
-  const entries = readdirSync(rulesDir, { recursive: true }) as string[];
-  const mdFiles = entries
-    .map((f) => f.replace(/\\/g, "/"))
-    .filter((f) => f.endsWith(".md") && basename(f).toLowerCase() !== "readme.md");
-
-  return mdFiles.map((relPath) => {
-    const raw = readFile(join(rulesDir, relPath));
-    const { data, content } = matter(raw);
-    const frontmatter = RuleFrontmatterSchema.parse(data);
-    return {
-      name: relPath.replace(/\.md$/, ""),
-      filename: relPath,
-      frontmatter,
-      body: content.trim(),
-    };
-  });
+  const { items, errors } = readMarkdownDir(
+    rulesDir,
+    RuleFrontmatterSchema,
+    "rule",
+    (name, frontmatter, body, relFile) => ({ name, filename: relFile, frontmatter, body }),
+    { recursive: true },
+  );
+  if (errors.length > 0) throw errors[0] as ParseError;
+  return items;
 }
