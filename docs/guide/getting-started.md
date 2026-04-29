@@ -55,4 +55,5 @@ Preset merge order is left-to-right, then your base source is applied last (base
 
 - [Project vs Global Mode](/guide/project-vs-global)
 - [Source Layout](/guide/source-layout)
+- [Examples](/guide/examples)
 - [CLI Reference](/CLI)

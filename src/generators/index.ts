@@ -1,18 +1,16 @@
 import type { Platform } from "../platforms.js";
-import { generateClaude } from "./platforms/claude.js";
-import { generateCodex } from "./platforms/codex.js";
-import { generateCursor } from "./platforms/cursor.js";
-import { generateForgecode } from "./platforms/forgecode.js";
-import { generateOpencode } from "./platforms/opencode.js";
+import { generateClaude } from "./platforms/claude/index.js";
+import { generateCodex } from "./platforms/codex/index.js";
+import { generateCursor } from "./platforms/cursor/index.js";
+import { generateForgecode } from "./platforms/forgecode/index.js";
+import { generateOpencode } from "./platforms/opencode/index.js";
 import type { GenerationResult, ProjectBundle } from "./types.js";
 
 export type { FileArtifact, GenerationResult, PostEmit, ProjectBundle } from "./types.js";
 export { writeResult } from "./writer.js";
 
 /**
- * Platforms that have been migrated to the pure `GenerationResult` pipeline.
- * Others still route through their legacy `generateXxx(...)` functions in
- * `build.ts`; entries are removed from this map as each platform is ported.
+ * Registered platform generators for the pure `GenerationResult` pipeline.
  */
 const GENERATORS: Partial<Record<Platform, (p: ProjectBundle) => GenerationResult>> = {
   claude: generateClaude,
@@ -25,9 +23,6 @@ const GENERATORS: Partial<Record<Platform, (p: ProjectBundle) => GenerationResul
 /**
  * Run the generator for one platform over a parsed project. Returns a pure
  * `GenerationResult` — no filesystem side effects. Use `writeResult` to apply.
- *
- * Returns `undefined` for platforms that haven't been migrated yet; callers
- * should fall back to the legacy `generateXxx` path in that case.
  */
 export function generate(platform: Platform, project: ProjectBundle): GenerationResult | undefined {
   const fn = GENERATORS[platform];

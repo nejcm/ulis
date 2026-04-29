@@ -2,9 +2,12 @@
 
 > Unified LLM Interface Specification — one config source, five AI tools.
 
-`ulis` is a CLI that compiles a single canonical config tree (agents, skills, MCP servers, plugins, permissions) into native configs for [Claude Code](https://claude.ai/code), [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex), [Cursor](https://cursor.com), and [ForgeCode](https://forgecode.dev/docs/).
+`ulis` is a CLI that helps you write your agent configuration once, then publish it to:
+[Claude Code](https://claude.ai/code), [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex), [Cursor](https://cursor.com), and [ForgeCode](https://forgecode.dev/docs/).
 
-You write the source once under `.ulis/` (per project) or `~/.ulis/` (global), and `ulis` generates and installs the native files each tool expects.
+Docs: [nejcm.github.io/ulis](https://nejcm.github.io/ulis/)
+
+Instead of maintaining separate "dialects" per platform, you keep a single canonical tree in `.ulis/` (per project) or `~/.ulis/` (global). Running `ulis` generates the native files each platform expects and installs them into the right locations.
 
 > **Status:** `0.0.1-alpha`. APIs and file layout may still change.
 
@@ -37,7 +40,7 @@ ulis init
 
 This creates:
 
-```
+```yaml
 .ulis/
 ├── config.yaml          # version + project name
 ├── mcp.yaml             # MCP server definitions
@@ -120,113 +123,22 @@ For `ulis install --source <path> --global`, the explicit source is built, then 
 
 ---
 
-## Source layout (`.ulis/`)
+## Configuration files (`.ulis/`)
 
-### `config.yaml`
+Your `.ulis/` tree is the single source of truth that `ulis` reads when you run `ulis build` / `ulis install`.
 
-```yaml
-# yaml-language-server: $schema=./node_modules/@nejcm/ulis/dist/schemas/config.schema.json
-version: 1
-name: my-project
-```
+You can define:
 
-### `mcp.yaml`
+- `config.yaml` – project identity
+- `mcp.yaml` – MCP servers shared across platforms
+- `permissions.yaml` – per-platform read/write/bash access rules
+- `plugins.yaml` – Claude Code marketplace plugins
+- `skills.yaml` – external skill installs
+- `agents/*.md` – agents (prompt + frontmatter)
+- `skills/<name>/SKILL.md` – skills
+- `commands/` and `raw/` – pass-through fragments copied into generated outputs
 
-MCP servers shared across platforms. Use the `targets` field to restrict a server.
-
-```yaml
-servers:
-  github:
-    type: local
-    command: npx
-    args: ["-y", "@modelcontextprotocol/server-github"]
-    env:
-      GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_PAT}
-  linear:
-    type: remote
-    url: https://mcp.linear.app/mcp
-    headers:
-      Authorization: Bearer ${LINEAR_API_KEY}
-    targets: ["opencode"] # only OpenCode sees this server
-```
-
-| `targets`               | Meaning                                 |
-| ----------------------- | --------------------------------------- |
-| _omitted_               | Applies to every platform               |
-| `["opencode","claude"]` | Applies only to the listed platforms    |
-| `[]`                    | Disabled — excluded from every platform |
-
-Reference secrets as `${VAR}` — the build translates to each platform's env-var syntax. Hardcoded secrets fail validation.
-
-### `agents/*.md`
-
-Each agent is a Markdown file with YAML frontmatter + a prompt body. Example:
-
-```markdown
----
-description: Implements features from specs
-model: sonnet
-tools:
-  read: true
-  write: true
-  edit: true
-  bash: true
-security:
-  blockedCommands:
-    - git push --force
-  rateLimit:
-    perHour: 20
----
-
-You are a focused implementation agent. Read specs carefully before writing code.
-```
-
-See [docs/REFERENCE.md](docs/REFERENCE.md) for the full frontmatter schema.
-
-### `skills/<name>/SKILL.md`
-
-Each skill is a directory containing a `SKILL.md` (frontmatter + body) plus any supporting files (scripts, templates).
-
-### `plugins.yaml`
-
-Claude Code marketplace plugins installed via `claude plugin add`. Only `claude` is supported today:
-
-```yaml
-claude:
-  plugins:
-    - name: frontend-design
-      source: official
-    - name: everything-claude-code
-      source: github
-      repo: affaan-m/everything-claude-code
-```
-
-### `skills.yaml`
-
-External skills installed via `npx skills@latest add`. Keyed by platform or `"*"` (all platforms):
-
-```yaml
-"*":
-  skills:
-    - name: mattpocock/skills/grill-me
-    - name: vercel-labs/agent-skills
-      args: ["--skill", "find-skills"]
-
-claude:
-  skills:
-    - name: anthropics/skills
-      args: ["--skill", "mcp-builder"]
-```
-
-Each entry runs `npx skills@latest add <name> -a <agent> --yes [args...]` per target platform.
-
-### `permissions.yaml`
-
-Per-platform read/write/bash allowlists and deny rules. See [example/permissions.yaml](example/permissions.yaml) for a working example.
-
-### `raw/` and `commands/`
-
-Copied verbatim into generated outputs. Use `raw/` for platform-specific fragments that `ulis` doesn't model directly.
+For the full field-level schema and examples, see [docs/REFERENCE.md](docs/REFERENCE.md). For architecture, see [docs/SPEC.md](docs/SPEC.md).
 
 ---
 
@@ -252,7 +164,9 @@ Schemas are also regenerated on every `npm run build` via `bun run gen:schemas`.
 
 ---
 
-## Development
+## Contributing & Development
+
+Want to build on `ulis` itself? These scripts help you run the CLI locally, regenerate generated assets, and verify changes with the test suite.
 
 Clone the repo:
 
@@ -279,7 +193,7 @@ bun run build      # bundles dist/cli.js + regenerates dist/schemas
 
 ### Repo layout
 
-```
+```yaml
 src/
   cli.ts                   # cac entry point (compiled to dist/cli.js)
   commands/                # init, install, build, tui

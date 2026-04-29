@@ -16,6 +16,7 @@ The canonical source tree lives in `.ulis/` (or `~/.ulis/` in global mode).
 ├── agents/
 ├── skills/
 ├── commands/
+├── rules/
 └── raw/
 ```
 
@@ -32,7 +33,10 @@ The canonical source tree lives in `.ulis/` (or `~/.ulis/` in global mode).
 - `agents/`: Markdown files with frontmatter and prompt body.
 - `skills/`: one directory per skill with `SKILL.md` and optional assets.
 - `commands/`: slash command content copied into generated output.
+- `rules/`: Markdown rule files, including nested folders, compiled to native rule formats where supported.
 - `raw/`: platform-specific fragments deep-merged into generated output (see [Raw overrides](#raw-overrides)).
+
+For full file examples, see [Examples](./examples.md).
 
 ## Raw overrides
 
@@ -41,7 +45,7 @@ Files placed under `raw/` are deep-merged into the generated output after each p
 ```text
 raw/
 ├── common/          # applied to every platform
-│   └── opencode.json
+│   └── AGENTS.md
 └── opencode/        # platform-specific, applied after common
     └── opencode.json
 ```
