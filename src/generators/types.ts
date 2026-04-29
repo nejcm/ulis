@@ -55,7 +55,9 @@ export interface GenerationResult {
 
 /**
  * The platform-agnostic input to every generator. Collects everything parsed
- * and validated upstream in `runBuild`, so generators never re-read from disk.
+ * and validated upstream in `runBuild`. Generators should return artifacts
+ * without filesystem side effects, but may use `sourceDir` to read controlled
+ * pass-through content such as raw directories, commands, rules, and skills.
  */
 export interface ProjectBundle {
   readonly agents: readonly ParsedAgent[];
