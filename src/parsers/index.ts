@@ -2,7 +2,7 @@ import { join } from "node:path";
 
 import type { McpConfig, PermissionsConfig, PluginsConfig, UlisConfig } from "../schema.js";
 import { AgentFrontmatterSchema, RuleFrontmatterSchema, UlisConfigSchema } from "../schema.js";
-import { loadConfigFile } from "../utils/config-loader.js";
+import { loadValidatedConfigFile } from "../utils/config-loader.js";
 import { ParseAggregateError, ParseError, readMarkdownDir } from "./_shared.js";
 import type { ParsedAgent } from "./agent.js";
 import { loadMcp } from "./mcp.js";
@@ -64,8 +64,12 @@ export function parseProject(sourceDir: string): ParsedProject {
 
   if (allErrors.length > 0) throw new ParseAggregateError(allErrors);
 
-  const rawConfig = loadConfigFile(sourceDir, "config");
-  const ulisConfig = UlisConfigSchema.parse(rawConfig ?? UlisConfigSchema.parse({ version: 1, name: "ulis" }));
+  const ulisConfig = loadValidatedConfigFile({
+    dir: sourceDir,
+    baseName: "config",
+    schema: UlisConfigSchema,
+    defaultValue: { version: 1, name: "ulis" },
+  });
 
   return {
     agents: agentsResult.items,
