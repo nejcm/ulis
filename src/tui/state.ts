@@ -76,6 +76,7 @@ export const DASHBOARD_ITEMS = [
 ] as const;
 
 export function createInitialState(availablePresets: readonly PresetListEntry[] = []): TuiState {
+  lastNavigationEvent = undefined;
   return {
     screen: "dashboard",
     cursor: 0,
@@ -463,7 +464,6 @@ function isDuplicateNavigationAlias(direction: NavigationDirection, key: string)
   const duplicate =
     lastNavigationEvent != null &&
     lastNavigationEvent.direction === direction &&
-    lastNavigationEvent.key !== key &&
     now - lastNavigationEvent.at <= NAV_DUPLICATE_WINDOW_MS;
 
   lastNavigationEvent = { direction, key, at: now };

@@ -331,6 +331,16 @@ describe("tui state", () => {
     expect(state.cursor).toBe(1);
   });
 
+  it("deduplicates repeated down key events from a single keypress", () => {
+    const state = createInitialState();
+    state.cursor = 0;
+
+    handleTuiKey(state, "down");
+    handleTuiKey(state, "down");
+
+    expect(state.cursor).toBe(1);
+  });
+
   it("deduplicates mixed up-arrow aliases from a single keypress", () => {
     const state = createInitialState();
     state.cursor = 2;
