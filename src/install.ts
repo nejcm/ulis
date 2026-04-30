@@ -39,6 +39,7 @@ export interface InstallOptions {
   readonly backup?: boolean;
   readonly rebuild?: boolean;
   readonly logger?: Logger;
+  readonly userHome?: string;
   /** Resolved presets to merge at build time and for external skill installs. */
   readonly presets?: readonly ResolvedPreset[];
 }
@@ -101,7 +102,8 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
   const destBase = resolve(options.destBase);
   const outputDir = resolve(options.outputDir ?? join(sourceDir, ULIS_GENERATED_DIRNAME));
   const platforms = options.platforms ? uniquePlatforms(options.platforms) : [...PLATFORMS];
-  const globalInstall = options.globalInstall ?? isSamePath(destBase, homedir());
+  const userHome = resolve(options.userHome ?? homedir());
+  const globalInstall = options.globalInstall ?? isSamePath(destBase, userHome);
   const backup = options.backup ?? false;
   const rebuild = options.rebuild ?? false;
 
@@ -139,6 +141,7 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
     const context: InstallContext = {
       outputDir,
       destBase,
+      userHome,
       globalInstall,
       backup,
       timestamp,
@@ -178,6 +181,7 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
 interface InstallContext {
   readonly outputDir: string;
   readonly destBase: string;
+  readonly userHome: string;
   readonly globalInstall: boolean;
   readonly backup: boolean;
   readonly timestamp: string;
@@ -187,7 +191,7 @@ interface InstallContext {
 }
 
 function installOpencode(context: InstallContext): void {
-  const targetDir = platformConfigDir("opencode", context.destBase);
+  const targetDir = platformConfigDir("opencode", context.destBase, context.userHome);
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.opencode}`);
   backupDirectory(targetDir, context);
 
@@ -202,7 +206,7 @@ function installOpencode(context: InstallContext): void {
 }
 
 function installClaude(context: InstallContext): void {
-  const targetDir = platformConfigDir("claude", context.destBase);
+  const targetDir = platformConfigDir("claude", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "claude");
   const generatedSettings = join(sourceDir, "settings.json");
   const targetSettings = join(targetDir, "settings.json");
@@ -246,7 +250,7 @@ function installClaude(context: InstallContext): void {
 }
 
 function installCodex(context: InstallContext): void {
-  const targetDir = platformConfigDir("codex", context.destBase);
+  const targetDir = platformConfigDir("codex", context.destBase, context.userHome);
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.codex}`);
   backupDirectory(targetDir, context);
   ensureDir(targetDir);
@@ -259,7 +263,7 @@ function installCodex(context: InstallContext): void {
 }
 
 function installCursor(context: InstallContext): void {
-  const targetDir = platformConfigDir("cursor", context.destBase);
+  const targetDir = platformConfigDir("cursor", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "cursor");
   const generatedMcp = join(sourceDir, "mcp.json");
   const targetMcp = join(targetDir, "mcp.json");
@@ -291,7 +295,7 @@ function installForgecode(context: InstallContext): void {
   const sourceDir = join(context.outputDir, "forgecode");
   const sourceForgeDir = join(sourceDir, PLATFORM_DIRS.forgecode.project);
   const sourceMcp = join(sourceForgeDir, ".mcp.json");
-  const targetForgeDir = platformConfigDir("forgecode", context.destBase);
+  const targetForgeDir = platformConfigDir("forgecode", context.destBase, context.userHome);
   const targetMcp = join(targetForgeDir, ".mcp.json");
 
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.forgecode}`);
@@ -303,10 +307,7 @@ function installForgecode(context: InstallContext): void {
     copyPlatformContents(sourceForgeDir, targetForgeDir, context.logger);
   }
 
-  // Project installs can place AGENTS.md and other top-level artifacts in repo root.
-  if (!isSamePath(context.destBase, homedir())) {
-    copyPlatformContents(sourceDir, context.destBase, context.logger, new Set([PLATFORM_DIRS.forgecode.project]));
-  }
+  copyPlatformContents(sourceDir, targetForgeDir, context.logger, new Set([PLATFORM_DIRS.forgecode.project]));
 
   if (existsSync(sourceMcp)) {
     if (existsSync(targetMcp)) {
