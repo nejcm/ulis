@@ -382,7 +382,7 @@ End-user CLI (see [CLI.md](./CLI.md) for the full surface):
 | `ulis init [--global]`            | Scaffold `.ulis/` (or `~/.ulis/`)            |
 | `ulis build [--target ...]`       | Generate configs under `<source>/generated/` |
 | `ulis install [--global] [--yes]` | Build and deploy to platform config dirs     |
-| `ulis tui`                        | Interactive dashboard for source workflows  |
+| `ulis tui`                        | Interactive dashboard for source workflows   |
 
 Repo dev scripts:
 

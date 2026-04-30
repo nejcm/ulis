@@ -96,11 +96,7 @@ export function planSource(state: TuiState, cwd: string = process.cwd(), userHom
         : join(cwd, ULIS_SOURCE_DIRNAME);
 
   const destBase =
-    state.destinationMode === "global"
-      ? userHome
-      : state.sourceMode === "custom"
-        ? dirname(sourceDir)
-        : cwd;
+    state.destinationMode === "global" ? userHome : state.sourceMode === "custom" ? dirname(sourceDir) : cwd;
 
   return {
     sourceDir,
@@ -185,7 +181,12 @@ export function handleTuiKey(state: TuiState, key: string): TuiEffect {
 }
 
 function navigateBack(state: TuiState): TuiEffect {
-  if (state.screen === "source" || state.screen === "presets" || state.screen === "platforms" || state.screen === "missingSource") {
+  if (
+    state.screen === "source" ||
+    state.screen === "presets" ||
+    state.screen === "platforms" ||
+    state.screen === "missingSource"
+  ) {
     state.screen = "dashboard";
     state.cursor = 0;
     state.notice = "";
@@ -350,8 +351,7 @@ function handleMissingSourceKey(state: TuiState, key: string): TuiEffect {
 
   // "Choose a different source" is always the first selectable action item
   const isChooseDifferent =
-    (state.sourceMode === "custom" && state.cursor === 0) ||
-    (state.sourceMode !== "custom" && state.cursor === 1);
+    (state.sourceMode === "custom" && state.cursor === 0) || (state.sourceMode !== "custom" && state.cursor === 1);
 
   if (isChooseDifferent) {
     state.screen = "source";

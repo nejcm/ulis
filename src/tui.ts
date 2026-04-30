@@ -1,10 +1,10 @@
 import { ProcessTerminal, VStack, cel } from "@cel-tui/core";
 
 import type { Logger } from "./build.js";
-import { initializeMissingSource, runTuiAction } from "./tui/actions.js";
-import { createInitialState, handleTuiKey, type TuiState } from "./tui/state.js";
-import { renderScreen } from "./tui/render.js";
 import { listPresets } from "./presets.js";
+import { initializeMissingSource, runTuiAction } from "./tui/actions.js";
+import { renderScreen } from "./tui/render.js";
+import { createInitialState, handleTuiKey, type TuiState } from "./tui/state.js";
 
 const state: TuiState = createInitialState();
 
@@ -24,7 +24,6 @@ function renderApp() {
       alignItems: "start",
       overflow: "scroll",
       scrollbar: true,
-      bgColor: "color00",
       fgColor: "color07",
       focusable: true,
       onKeyPress: (key) => {
@@ -52,9 +51,13 @@ async function handleEffect(effect: ReturnType<typeof handleTuiKey>): Promise<vo
     return;
   }
 
-  await runWithLogs(formatActionTitle(effect.action), `${formatActionTitle(effect.action)} completed successfully.`, (logger) => {
-    runTuiAction(state, effect.action, logger);
-  });
+  await runWithLogs(
+    formatActionTitle(effect.action),
+    `${formatActionTitle(effect.action)} completed successfully.`,
+    (logger) => {
+      runTuiAction(state, effect.action, logger);
+    },
+  );
 }
 
 async function runWithLogs(

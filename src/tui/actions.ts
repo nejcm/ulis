@@ -1,5 +1,5 @@
-import { initCmd } from "../commands/init.js";
 import { analyzeProject, runBuild, type Logger } from "../build.js";
+import { initCmd } from "../commands/init.js";
 import { runInstall } from "../install.js";
 import { planSource, selectedPresets, type TuiAction, type TuiState } from "./state.js";
 
@@ -36,7 +36,6 @@ export function runTuiAction(state: TuiState, action: Exclude<TuiAction, "init">
     presets,
   });
 }
-
 
 export async function initializeMissingSource(state: TuiState, logger: Logger): Promise<void> {
   if (state.sourceMode === "custom") {

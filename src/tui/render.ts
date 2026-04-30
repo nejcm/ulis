@@ -14,7 +14,6 @@ interface UiLine {
   readonly text: string;
   readonly value?: string;
   readonly fgColor?: Color;
-  readonly bgColor?: Color;
   readonly bold?: boolean;
   readonly indent?: number;
 }
@@ -55,8 +54,7 @@ export function renderScreen(state: TuiState) {
         { text: "" },
         {
           text: "Press Enter to return to the dashboard, or q to quit.",
-          fgColor: "color00",
-          bgColor: "color06",
+          fgColor: "color06",
           bold: true,
         },
       ]);
@@ -214,7 +212,6 @@ function renderCard(title: string, subtitle: string, lines: readonly UiLine[]) {
     {
       width: "92%",
       maxWidth: CARD_MAX_WIDTH,
-      bgColor: "color00",
       fgColor: "color07",
       gap: 0,
       alignItems: "stretch",
@@ -250,7 +247,6 @@ function renderCard(title: string, subtitle: string, lines: readonly UiLine[]) {
               {
                 width: "100%",
                 fgColor: line.fgColor,
-                bgColor: line.bgColor,
                 padding: { x: 1 + (line.indent ?? 0) },
                 alignItems: "stretch",
               },
@@ -260,7 +256,6 @@ function renderCard(title: string, subtitle: string, lines: readonly UiLine[]) {
               {
                 width: "100%",
                 fgColor: line.fgColor,
-                bgColor: line.bgColor,
                 padding: { x: 1 + (line.indent ?? 0) },
                 alignItems: "start",
                 justifyContent: "space-between",
@@ -293,8 +288,7 @@ function selectableLine(cursor: number, index: number, text: string): UiLine {
   const focused = cursor === index;
   return {
     text: `${focused ? ">" : " "} ${text}`,
-    bgColor: focused ? "color08" : undefined,
-    fgColor: focused ? "color07" : undefined,
+    fgColor: focused ? "color06" : undefined,
     bold: focused,
   };
 }
@@ -310,7 +304,7 @@ function dashboardActionLine(state: TuiState, label: (typeof DASHBOARD_ITEMS)[nu
   return {
     text: `${selected ? ">" : " "} ${label}`,
     value: hasValue ? value : undefined,
-    bgColor: selected ? "color08" : undefined,
+    fgColor: selected ? "color06" : undefined,
     bold: selected,
   };
 }
@@ -320,8 +314,7 @@ function selectableLabelValueLine(cursor: number, index: number, label: string, 
   return {
     text: `${focused ? ">" : " "} ${label}`,
     value,
-    bgColor: focused ? "color08" : undefined,
-    fgColor: focused ? "color07" : undefined,
+    fgColor: focused ? "color06" : undefined,
     bold: focused,
   };
 }
