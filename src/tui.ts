@@ -16,7 +16,7 @@ interface UiLine {
 }
 
 const CARD_MAX_WIDTH = 96;
-const TITLE = "AI Config Studio";
+const TITLE = "ULIS Config Studio";
 const SUBTITLE = "A guided TUI for generating and installing platform configs.";
 
 const state = {
@@ -42,7 +42,7 @@ function renderApp() {
       height: "100%",
       padding: { x: 1, y: 1 },
       justifyContent: "start",
-      alignItems: "center",
+      alignItems: "start",
       overflow: "scroll",
       scrollbar: true,
       bgColor: "color00",
@@ -75,7 +75,7 @@ function renderScreen() {
         { text: "  - Toggle with enter, x, or space" },
         { text: "  - Press q to quit at any time before execution starts" },
         { text: "" },
-        { text: "Press Enter to start.", fgColor: "color00", bgColor: "color06", bold: true },
+        { text: "Press Enter to start.", fgColor: "color07", bgColor: "color06", bold: true },
       ]);
     case "generate":
       return renderSelectionScreen(
@@ -251,7 +251,7 @@ function renderCard(title: string, subtitle: string, lines: readonly UiLine[]) {
           padding: { x: 1 },
           alignItems: "stretch",
         },
-        [Text(title, { bold: true, wrap: "word" })],
+        [Text(title, { bold: true, wrap: "word", fgColor: "color07" })],
       ),
       VStack(
         {

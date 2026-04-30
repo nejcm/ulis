@@ -1,6 +1,6 @@
 {
   "name": "@nejcm/ulis",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "ULIS - Unified LLM Interface Specification CLI. Generate agent/skill/mcp configs for Claude Code, Codex, Cursor, OpenCode, and ForgeCode from a single source of truth.",
   "license": "ISC",
   "author": "nejcm",
@@ -46,6 +46,7 @@
     "test": "bun test",
     "tui": "tsx src/cli.ts tui",
     "ulis": "tsx src/cli.ts",
+    "docs": "bun docs:dev",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs"

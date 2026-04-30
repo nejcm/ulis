@@ -5,11 +5,9 @@
 `ulis` is a CLI that helps you write your agent configuration once, then publish it to:
 [Claude Code](https://claude.ai/code), [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex), [Cursor](https://cursor.com), and [ForgeCode](https://forgecode.dev/docs/).
 
-Docs: [nejcm.github.io/ulis](https://nejcm.github.io/ulis/)
+**📖 Docs: [nejcm.github.io/ulis](https://nejcm.github.io/ulis/)**
 
 Instead of maintaining separate "dialects" per platform, you keep a single canonical tree in `.ulis/` (per project) or `~/.ulis/` (global). Running `ulis` generates the native files each platform expects and installs them into the right locations.
-
-> **Status:** `0.0.1-alpha`. APIs and file layout may still change.
 
 ---
 

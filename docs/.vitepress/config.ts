@@ -1,10 +1,20 @@
 import { defineConfig } from "vitepress";
 
+const base = "/ulis/";
+
 export default defineConfig({
   title: "ulis",
   description: "Unified LLM Interface Specification CLI for Claude Code, Codex, Cursor, OpenCode, and ForgeCode.",
-  base: "/ulis/",
+  base,
   cleanUrls: false,
+  head: [
+    ["link", { rel: "icon", type: "image/svg+xml", href: `${base}favicon.svg` }],
+    ["link", { rel: "icon", type: "image/png", sizes: "96x96", href: `${base}favicon-96x96.png` }],
+    ["link", { rel: "icon", href: `${base}favicon.ico` }],
+    ["link", { rel: "apple-touch-icon", href: `${base}apple-touch-icon.png` }],
+    ["link", { rel: "manifest", href: `${base}site.webmanifest` }],
+    ["meta", { name: "theme-color", content: "#ffffff" }],
+  ],
   themeConfig: {
     nav: [
       { text: "Guide", link: "/guide/getting-started" },
