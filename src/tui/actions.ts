@@ -1,9 +1,12 @@
+import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
+
 import { analyzeProject, runBuild, type Logger } from "../build.js";
 import { initCmd } from "../commands/init.js";
 import { runInstall } from "../install.js";
 import { planSource, selectedPresets, type TuiAction, type TuiState } from "./state.js";
 
-export function runTuiAction(state: TuiState, action: Exclude<TuiAction, "init">, logger: Logger): void {
+export async function runTuiAction(state: TuiState, action: Exclude<TuiAction, "init">, logger: Logger): Promise<void> {
   const planned = planSource(state);
   const presets = selectedPresets(state);
 
@@ -20,21 +23,12 @@ export function runTuiAction(state: TuiState, action: Exclude<TuiAction, "init">
     return;
   }
 
-  if (action === "build") {
-    runBuild({ sourceDir: planned.sourceDir, targets: state.platforms, presets, logger });
-    return;
-  }
-
-  runInstall({
-    sourceDir: planned.sourceDir,
-    destBase: planned.destBase,
-    globalInstall: planned.globalInstall,
-    platforms: state.platforms,
-    backup: state.backup,
-    rebuild: state.rebuild,
+  await runActionInChildProcess(
+    state,
+    action,
     logger,
-    presets,
-  });
+    presets.map((preset) => preset.name),
+  );
 }
 
 export async function initializeMissingSource(state: TuiState, logger: Logger): Promise<void> {
@@ -44,4 +38,55 @@ export async function initializeMissingSource(state: TuiState, logger: Logger): 
 
   logger.header("ULIS Init");
   await initCmd({ global: state.sourceMode === "global", logger });
+}
+
+async function runActionInChildProcess(
+  state: TuiState,
+  action: Exclude<TuiAction, "init" | "validate">,
+  logger: Logger,
+  presetNames: readonly string[],
+): Promise<void> {
+  const entryScript = process.argv[1];
+  if (!entryScript) {
+    throw new Error("Unable to resolve current CLI entry script.");
+  }
+
+  const args = [...process.execArgv, entryScript, action, "--source", planSource(state).sourceDir];
+  if (state.platforms.length > 0) args.push("--target", state.platforms.join(","));
+  if (presetNames.length > 0) args.push("--preset", presetNames.join(","));
+
+  if (action === "install") {
+    args.push("--yes");
+    if (planSource(state).globalInstall) args.push("--global");
+    if (!state.rebuild) args.push("--no-rebuild");
+    if (state.backup) args.push("--backup");
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"] });
+
+    const stdout = createInterface({ input: child.stdout });
+    stdout.on("line", (line) => {
+      const text = stripAnsi(line).trim();
+      if (text.length > 0) logger.dim(text);
+    });
+
+    const stderr = createInterface({ input: child.stderr });
+    stderr.on("line", (line) => {
+      const text = stripAnsi(line).trim();
+      if (text.length > 0) logger.warn(text);
+    });
+
+    child.on("error", (error) => reject(error));
+    child.on("close", (code) => {
+      stdout.close();
+      stderr.close();
+      if (code === 0) resolve();
+      else reject(new Error(`${action} exited with code ${code ?? "unknown"}`));
+    });
+  });
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(/\u001b\[[0-9;]*m/gu, "");
 }

@@ -70,7 +70,13 @@ async function runWithLogs(
   state.resultTitle = "";
   state.resultMessage = "";
   state.screen = "running";
+  state.runningSpinnerFrame = 0;
   cel.render();
+  const spinnerInterval = setInterval(() => {
+    if (state.screen !== "running") return;
+    state.runningSpinnerFrame = (state.runningSpinnerFrame + 1) % 4;
+    cel.render();
+  }, 120);
 
   try {
     await run(createUiLogger());
@@ -81,6 +87,7 @@ async function runWithLogs(
     state.resultMessage = error instanceof Error ? error.message : String(error);
     pushLog(`[error] ${state.resultMessage}`);
   } finally {
+    clearInterval(spinnerInterval);
     state.screen = "result";
     cel.render();
   }

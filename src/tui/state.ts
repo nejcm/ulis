@@ -34,6 +34,7 @@ export interface PlannedSource {
 export interface TuiState {
   screen: TuiScreen;
   cursor: number;
+  runningSpinnerFrame: number;
   sourceMode: SourceMode;
   destinationMode: DestinationMode;
   customSource: string;
@@ -56,6 +57,13 @@ export type TuiEffect =
   | { readonly type: "start"; readonly action: Exclude<TuiAction, "init"> }
   | { readonly type: "initSource" };
 
+type NavigationDirection = "up" | "down";
+
+const NAV_DUPLICATE_WINDOW_MS = 40;
+let lastNavigationEvent:
+  | { readonly direction: NavigationDirection; readonly key: string; readonly at: number }
+  | undefined;
+
 export const DASHBOARD_ITEMS = [
   "Source",
   "Destination",
@@ -71,6 +79,7 @@ export function createInitialState(availablePresets: readonly PresetListEntry[] 
   return {
     screen: "dashboard",
     cursor: 0,
+    runningSpinnerFrame: 0,
     sourceMode: "project",
     destinationMode: "project",
     customSource: "",
@@ -413,9 +422,12 @@ function startOrMissingSource(state: TuiState, action: Exclude<TuiAction, "init"
 }
 
 function moveCursor(state: TuiState, key: string, lastIndex: number): void {
-  if (isUpKey(key)) {
+  const direction = getNavigationDirection(key);
+  if (!direction || isDuplicateNavigationAlias(direction, key)) return;
+
+  if (direction === "up") {
     state.cursor = (state.cursor + lastIndex) % (lastIndex + 1);
-  } else if (isDownKey(key)) {
+  } else {
     state.cursor = (state.cursor + 1) % (lastIndex + 1);
   }
 }
@@ -438,4 +450,22 @@ function isUpKey(key: string): boolean {
 
 function isDownKey(key: string): boolean {
   return isAnyKey(key, "j", "down", "arrowdown");
+}
+
+function getNavigationDirection(key: string): NavigationDirection | undefined {
+  if (isUpKey(key)) return "up";
+  if (isDownKey(key)) return "down";
+  return undefined;
+}
+
+function isDuplicateNavigationAlias(direction: NavigationDirection, key: string): boolean {
+  const now = Date.now();
+  const duplicate =
+    lastNavigationEvent != null &&
+    lastNavigationEvent.direction === direction &&
+    lastNavigationEvent.key !== key &&
+    now - lastNavigationEvent.at <= NAV_DUPLICATE_WINDOW_MS;
+
+  lastNavigationEvent = { direction, key, at: now };
+  return duplicate;
 }

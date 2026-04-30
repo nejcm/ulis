@@ -16,6 +16,7 @@ import {
   type Platform,
 } from "./platforms.js";
 import { type PluginsConfig, type SkillsConfig } from "./schema.js";
+import { logger as defaultLogger } from "./utils/logger.js";
 import type { ResolvedPreset } from "./utils/resolve-presets.js";
 
 export interface InstallOptions {
@@ -94,7 +95,7 @@ export function loadDotEnv(rootDir: string, env: NodeJS.ProcessEnv = process.env
  * Install generated per-platform configs from source to destination base directory.
  */
 export function runInstall(options: InstallOptions): readonly Platform[] {
-  const logger = options.logger;
+  const logger = options.logger ?? defaultLogger;
   const sourceDir = resolve(options.sourceDir);
   const destBase = resolve(options.destBase);
   const outputDir = resolve(options.outputDir ?? join(sourceDir, ULIS_GENERATED_DIRNAME));

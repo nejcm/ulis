@@ -147,7 +147,7 @@ export function runBuild(options: BuildOptions): BuildResult {
     const outDir = join(outputDir, target);
     const result = generate(target, analysis.project);
     if (!result) throw new Error(`No generator registered for platform: ${target}`);
-    writeResult(result, outDir, target);
+    writeResult(result, outDir, target, logger);
   }
 
   logger.header("Build Complete");
