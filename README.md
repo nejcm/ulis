@@ -9,6 +9,8 @@
 
 Instead of maintaining separate "dialects" per platform, you keep a single canonical tree in `.ulis/` (per project) or `~/.ulis/` (global). Running `ulis` generates the native files each platform expects and installs them into the right locations.
 
+![ulis TUI](./tui.png)
+
 ---
 
 ## Install
