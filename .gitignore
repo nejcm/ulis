@@ -23,3 +23,6 @@ Thumbs.db
 .env.local
 
 TODO.md
+
+# ulis build output
+/.ulis/generated/

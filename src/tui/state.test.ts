@@ -293,14 +293,21 @@ describe("tui state", () => {
   it("dashboard destination toggles with space key", () => {
     const state = createInitialState();
     state.cursor = 1;
+    const originalNow = Date.now;
+    let now = 4_000;
+    Date.now = () => now;
+    try {
+      handleTuiKey(state, " ");
 
-    handleTuiKey(state, " ");
+      expect(state.destinationMode).toBe("global");
 
-    expect(state.destinationMode).toBe("global");
+      now += 45;
+      handleTuiKey(state, " ");
 
-    handleTuiKey(state, " ");
-
-    expect(state.destinationMode).toBe("project");
+      expect(state.destinationMode).toBe("project");
+    } finally {
+      Date.now = originalNow;
+    }
   });
 
   it("dashboard destination toggles with named space key", () => {
@@ -346,6 +353,62 @@ describe("tui state", () => {
     handleTuiKey(state, "\n");
 
     expect(state.destinationMode).toBe("global");
+  });
+
+  it("deduplicates rapid enter so presets back does not immediately open source", () => {
+    const state = createInitialState([
+      { name: "team", displayName: "Team", description: "", source: "user", dir: "/p" },
+    ]);
+    state.screen = "presets";
+    state.cursor = 1; // Back to dashboard
+    const originalNow = Date.now;
+    let now = 1_000;
+    Date.now = () => now;
+    try {
+      handleTuiKey(state, "enter");
+      now += 5;
+      handleTuiKey(state, "enter");
+    } finally {
+      Date.now = originalNow;
+    }
+
+    expect(state.screen as string).toBe("dashboard");
+    expect(state.cursor).toBe(0);
+  });
+
+  it("deduplicates rapid toggle key events", () => {
+    const state = createInitialState();
+    state.cursor = 1;
+    const originalNow = Date.now;
+    let now = 2_000;
+    Date.now = () => now;
+    try {
+      handleTuiKey(state, "x");
+      now += 5;
+      handleTuiKey(state, "x");
+    } finally {
+      Date.now = originalNow;
+    }
+
+    expect(state.destinationMode).toBe("global");
+  });
+
+  it("deduplicates rapid text key events in custom source input", () => {
+    const state = createInitialState();
+    state.screen = "customSource";
+    state.textInput = "";
+    const originalNow = Date.now;
+    let now = 3_000;
+    Date.now = () => now;
+    try {
+      handleTuiKey(state, "l");
+      now += 5;
+      handleTuiKey(state, "l");
+    } finally {
+      Date.now = originalNow;
+    }
+
+    expect(state.textInput).toBe("l");
   });
 
   it("accepts return alias as toggle in install review", () => {

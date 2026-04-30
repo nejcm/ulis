@@ -59,8 +59,8 @@ export type TuiEffect =
 
 type NavigationDirection = "up" | "down";
 
-const NAV_DUPLICATE_WINDOW_MS = 40;
-let lastNavigationEvent: { readonly direction: NavigationDirection; readonly at: number } | undefined;
+const KEY_DUPLICATE_WINDOW_MS = 40;
+let lastKeyEvent: { readonly id: string; readonly at: number } | undefined;
 
 export const DASHBOARD_ITEMS = [
   "Source",
@@ -74,7 +74,7 @@ export const DASHBOARD_ITEMS = [
 ] as const;
 
 export function createInitialState(availablePresets: readonly PresetListEntry[] = []): TuiState {
-  lastNavigationEvent = undefined;
+  lastKeyEvent = undefined;
   return {
     screen: "dashboard",
     cursor: 0,
@@ -160,6 +160,7 @@ export function togglePresetSelection(selected: readonly string[], presetName: s
 export function handleTuiKey(state: TuiState, key: string): TuiEffect {
   key = normalizeKey(key);
   if (state.screen === "running") return { type: "none" };
+  if (isDuplicateKeyEvent(state, key)) return { type: "none" };
 
   if (isAnyKey(key, "ctrl+c", "q") && state.screen !== "customSource") {
     return { type: "exit", code: 0 };
@@ -423,7 +424,7 @@ function startOrMissingSource(state: TuiState, action: Exclude<TuiAction, "init"
 
 function moveCursor(state: TuiState, key: string, lastIndex: number): void {
   const direction = getNavigationDirection(key);
-  if (!direction || isDuplicateNavigationAlias(direction)) return;
+  if (!direction) return;
 
   if (direction === "up") {
     state.cursor = (state.cursor + lastIndex) % (lastIndex + 1);
@@ -458,15 +459,22 @@ function getNavigationDirection(key: string): NavigationDirection | undefined {
   return undefined;
 }
 
-function isDuplicateNavigationAlias(direction: NavigationDirection): boolean {
+function isDuplicateKeyEvent(state: TuiState, key: string): boolean {
+  // Preserve fast/free typing in custom source input mode.
+  if (state.screen === "customSource" && key.length === 1) return false;
+  const id = keyEventId(key);
   const now = Date.now();
-  const duplicate =
-    lastNavigationEvent != null &&
-    lastNavigationEvent.direction === direction &&
-    now - lastNavigationEvent.at <= NAV_DUPLICATE_WINDOW_MS;
-
-  lastNavigationEvent = { direction, at: now };
+  const duplicate = lastKeyEvent != null && lastKeyEvent.id === id && now - lastKeyEvent.at <= KEY_DUPLICATE_WINDOW_MS;
+  lastKeyEvent = { id, at: now };
   return duplicate;
+}
+
+function keyEventId(key: string): string {
+  const direction = getNavigationDirection(key);
+  if (direction) return `nav:${direction}`;
+  if (isConfirmKey(key)) return "confirm";
+  if (isAnyKey(key, " ", "space")) return "space";
+  return key;
 }
 
 function normalizeKey(rawKey: string): string {
