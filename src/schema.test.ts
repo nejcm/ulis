@@ -330,7 +330,7 @@ describe("SkillsConfigSchema", () => {
     const result = SkillsConfigSchema.parse({
       "*": {
         skills: [
-          { name: "mattpocock/skills/grill-me" },
+          { name: "mattpocock/skills/productivity/grill-me" },
           { name: "https://skills.sh/vercel-labs/skills", args: ["--skill", "find-skills"] },
         ],
       },

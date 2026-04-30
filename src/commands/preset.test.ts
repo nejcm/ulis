@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { presetListCmd } from "./preset.js";
 
 const tmpRoots: string[] = [];
+const ANSI_REGEX = /\x1B\[[0-9;]*m/g;
 
 function createTempRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "ulis-preset-list-"));
@@ -29,7 +30,7 @@ describe("presetListCmd", () => {
     const logSpy = spyOn(console, "log").mockImplementation(() => {});
     try {
       await presetListCmd({ presetsRoot: userRoot, bundledPresetsRoot: bundledRoot });
-      const output = logSpy.mock.calls.flat().join("\n");
+      const output = logSpy.mock.calls.flat().join("\n").replace(ANSI_REGEX, "");
       expect(output).toContain("react-web (bundled)");
     } finally {
       logSpy.mockRestore();
@@ -56,7 +57,7 @@ describe("presetListCmd", () => {
     const logSpy = spyOn(console, "log").mockImplementation(() => {});
     try {
       await presetListCmd({ presetsRoot: userRoot, bundledPresetsRoot: bundledRoot });
-      const output = logSpy.mock.calls.flat().join("\n");
+      const output = logSpy.mock.calls.flat().join("\n").replace(ANSI_REGEX, "");
       expect(output).toContain("react-web (User React Web, user)");
       expect(output).not.toContain("Bundled React Web");
     } finally {

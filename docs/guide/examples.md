@@ -302,7 +302,8 @@ claude:
 ```yaml
 "*":
   skills:
-    - name: mattpocock/skills/grill-me
+    - name: mattpocock/skills/productivity/grill-me
+    - name: https://github.com/mattpocock/skills/tree/main/skills/productivity/write-a-skill
 
 claude:
   skills:

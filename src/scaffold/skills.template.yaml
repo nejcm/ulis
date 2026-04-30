@@ -8,7 +8,7 @@
 #
 # "*":
 #   skills:
-#     - name: mattpocock/skills/grill-me
+#     - name: mattpocock/skills/productivity/grill-me
 #     - name: anthropics/skills
 #       args: ["--skill", "pdf"]
 #

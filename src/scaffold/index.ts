@@ -89,7 +89,7 @@ const SKILLS_TEMPLATE = `# yaml-language-server: $schema={{schemaBase}}/skills.s
 #
 # "*":
 #   skills:
-#     - name: mattpocock/skills/grill-me
+#     - name: mattpocock/skills/productivity/grill-me
 #     - name: anthropics/skills
 #       args: ["--skill", "pdf"]
 #

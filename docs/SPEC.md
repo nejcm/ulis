@@ -207,7 +207,7 @@ claude:
 ```yaml
 "*":
   skills:
-    - name: mattpocock/skills/grill-me
+    - name: mattpocock/skills/productivity/grill-me
     - name: vercel-labs/agent-skills
       args: ["--skill", "find-skills"]
 
