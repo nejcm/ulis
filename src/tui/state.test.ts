@@ -321,6 +321,26 @@ describe("tui state", () => {
     expect(state.destinationMode).toBe("global");
   });
 
+  it("deduplicates mixed down-arrow aliases from a single keypress", () => {
+    const state = createInitialState();
+    state.cursor = 0;
+
+    handleTuiKey(state, "down");
+    handleTuiKey(state, "arrowdown");
+
+    expect(state.cursor).toBe(1);
+  });
+
+  it("deduplicates mixed up-arrow aliases from a single keypress", () => {
+    const state = createInitialState();
+    state.cursor = 2;
+
+    handleTuiKey(state, "up");
+    handleTuiKey(state, "arrowup");
+
+    expect(state.cursor).toBe(1);
+  });
+
   it("backspace on source screen returns to dashboard", () => {
     const state = createInitialState();
     state.screen = "source";
