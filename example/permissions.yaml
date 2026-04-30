@@ -6,44 +6,6 @@ claude:
     - Bash(bun lint*)
     - Bash(bun add *)
     - Bash(bun install)
-    - Bash(bun install --frozen-lockfile)
-    - Bash(bun run *)
-    - Bash(bun test:*)
-    - Bash(bun build *)
-    - Bash(bun exec *)
-    - Bash(bun x *)
-    - Bash(bun eslint*)
-    - Bash(bun tsc --noEmit)
-    - Bash(bun tsc *)
-    - Bash(bun jest *)
-    - Bash(bun tsx -e *)
-    - Bash(node *)
-    - Bash(ls *)
-    - Bash(cat *)
-    - Bash(find *)
-    - Bash(grep *)
-    - Bash(head *)
-    - Bash(tail *)
-    - Bash(wc *)
-    - Bash(echo *)
-    - Bash(pwd)
-    - Bash(which *)
-    - Bash(jq *)
-    - Bash(git status)
-    - Bash(git log *)
-    - Bash(git diff *)
-    - Bash(git show *)
-    - Bash(git branch *)
-    - Bash(git stash *)
-    - Bash(git fetch *)
-    - Bash(git checkout *)
-    - Bash(gh api *)
-    - Bash(gh repo *)
-    - Bash(gh issue *)
-    - Bash(gh pr *)
-    - Bash(gh run *)
-    - Bash(gh workflow *)
-    - Bash(gh search *)
   deny: []
   ask: []
 opencode:
@@ -55,11 +17,6 @@ opencode:
     list: allow
     bash:
       "*": ask
-      bq query*: allow
-      bun run build:*: allow
-      bun run lint:file:*: allow
-      bun run test:*: allow
-      bun run test:file:*: allow
       bun test:*: allow
       cc:*: allow
       comm:*: allow

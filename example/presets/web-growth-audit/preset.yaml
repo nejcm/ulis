@@ -1,5 +1,0 @@
-# yaml-language-server: $schema=../../../dist/schemas/preset.schema.json
-
-name: Web Growth Audit
-description: SEO, quality audit, and optimization skills for shipped web experiences.
-version: 1

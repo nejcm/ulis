@@ -72,10 +72,13 @@ async function main(): Promise<void> {
       }),
     );
 
-  cli.command("preset [action]", "Manage presets (action: list)").action((action: string | undefined) => {
-    if (!action || action === "list") return presetListCmd();
-    throw new Error(`Unknown preset action: "${action}". Available: list`);
-  });
+  cli
+    .command("preset [action]", "Manage presets (action: list, or use -l / --list)")
+    .option("-l, --list", "List all presets under ~/.ulis/presets/")
+    .action((action: string | undefined, options: { list?: boolean }) => {
+      if (options.list || !action || action === "list") return presetListCmd();
+      throw new Error(`Unknown preset action: "${action}". Available: list (or use --list)`);
+    });
 
   cli.command("tui", "Launch the interactive terminal UI").action(() => tuiCmd());
 

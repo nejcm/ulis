@@ -8,22 +8,8 @@
         - --skill
         - find-skills
     - name: https://github.com/anthropics/skills
-      key: anthropics/skills/mcp-builder
-      args:
-        - --skill
-        - mcp-builder
-    - name: https://github.com/anthropics/skills
       key: anthropics/skills/skill-creator
       args:
         - --skill
         - skill-creator
-    - name: microsoft/playwright-cli
-      args:
-        - --skill
-        - playwright-cli
     - name: mattpocock/skills/grill-me
-    - name: mattpocock/skills/domain-model
-    - name: mattpocock/skills/to-prd
-    - name: mattpocock/skills/write-a-skill
-    - name: mattpocock/skills/design-an-interface
-    - name: mattpocock/skills/request-refactor-plan
