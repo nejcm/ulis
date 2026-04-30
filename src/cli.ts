@@ -44,7 +44,7 @@ async function main(): Promise<void> {
     .option("--target <platform>", "Only build/install the given platform(s) (comma-separated)")
     .option("--no-rebuild", "Skip the build step and install existing generated output")
     .option("--backup", "Back up existing platform dirs before overwriting")
-    .option("--preset <names>", "Apply preset(s) from ~/.ulis/presets/ (comma-separated)")
+    .option("--preset <names>", "Apply user-global or bundled preset(s) (comma-separated)")
     .action((options) =>
       installCmd({
         global: Boolean(options.global),
@@ -62,7 +62,7 @@ async function main(): Promise<void> {
     .option("-g, --global", "Build from ~/.ulis/")
     .option("--source <path>", "Override the ulis source directory")
     .option("--target <platform>", "Only build the given platform(s) (comma-separated)")
-    .option("--preset <names>", "Apply preset(s) from ~/.ulis/presets/ (comma-separated)")
+    .option("--preset <names>", "Apply user-global or bundled preset(s) (comma-separated)")
     .action((options) =>
       buildCmd({
         global: Boolean(options.global),
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
 
   cli
     .command("preset [action]", "Manage presets (action: list, or use -l / --list)")
-    .option("-l, --list", "List all presets under ~/.ulis/presets/")
+    .option("-l, --list", "List user-global and bundled presets")
     .action((action: string | undefined, options: { list?: boolean }) => {
       if (options.list || !action || action === "list") return presetListCmd();
       throw new Error(`Unknown preset action: "${action}". Available: list (or use --list)`);

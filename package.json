@@ -32,7 +32,7 @@
     "config"
   ],
   "scripts": {
-    "build": "tsup && bun run gen:schemas",
+    "build": "tsup && bun run gen:schemas && bun run copy:presets",
     "dev": "tsx src/cli.ts build --source example",
     "dev:install": "tsx src/cli.ts install --yes",
     "clean": "rimraf dist",
@@ -40,6 +40,7 @@
     "format": "oxfmt .",
     "gen:reference": "tsx src/tools/gen-reference.ts",
     "gen:schemas": "tsx src/tools/gen-json-schema.ts",
+    "copy:presets": "tsx src/tools/copy-presets.ts",
     "lint": "tsc --noEmit",
     "test:coverage": "bun test --coverage",
     "test:update": "bun test --update-snapshots",

@@ -252,6 +252,11 @@ describe("SkillFrontmatterSchema", () => {
 });
 
 describe("McpConfigSchema", () => {
+  it("defaults servers to an empty object", () => {
+    const result = McpConfigSchema.parse({});
+    expect(result.servers).toEqual({});
+  });
+
   it("parses a local MCP server", () => {
     const result = McpConfigSchema.parse({
       servers: {

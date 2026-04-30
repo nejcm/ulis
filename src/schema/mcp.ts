@@ -25,7 +25,7 @@ export const McpServerSchema = z.object({
 });
 
 export const McpConfigSchema = z.object({
-  servers: z.record(z.string(), McpServerSchema),
+  servers: z.record(z.string(), McpServerSchema).default({}),
 });
 
 export type McpServer = z.infer<typeof McpServerSchema>;

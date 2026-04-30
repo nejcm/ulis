@@ -23,11 +23,13 @@ describe("resolvePresets", () => {
   it("throws in non-interactive mode when a preset is missing", async () => {
     const root = createTempRoot();
     const presetsRoot = join(root, "presets");
+    const bundledRoot = join(root, "bundled-presets");
     mkdirSync(join(presetsRoot, "base"), { recursive: true });
+    mkdirSync(bundledRoot, { recursive: true });
 
-    await expect(resolvePresets(["base", "missing"], { presetsRoot, nonInteractive: true })).rejects.toThrow(
-      `Preset "missing" not found in ${presetsRoot}.`,
-    );
+    await expect(
+      resolvePresets(["base", "missing"], { presetsRoot, bundledPresetsRoot: bundledRoot, nonInteractive: true }),
+    ).rejects.toThrow(`Preset "missing" not found in ${presetsRoot} or ${bundledRoot}.`);
   });
 
   it("skips missing presets when configured", async () => {
@@ -50,6 +52,29 @@ describe("resolvePresets", () => {
       { name: "b", dir: join(presetsRoot, "b") },
       { name: "a", dir: join(presetsRoot, "a") },
     ]);
+  });
+
+  it("falls back to bundled presets when user preset is missing", async () => {
+    const root = createTempRoot();
+    const presetsRoot = join(root, "presets");
+    const bundledRoot = join(root, "bundled-presets");
+    mkdirSync(join(bundledRoot, "react-web"), { recursive: true });
+
+    await expect(
+      resolvePresets(["react-web"], { presetsRoot, bundledPresetsRoot: bundledRoot, nonInteractive: true }),
+    ).resolves.toEqual([{ name: "react-web", dir: join(bundledRoot, "react-web") }]);
+  });
+
+  it("prefers user preset over bundled preset with same name", async () => {
+    const root = createTempRoot();
+    const presetsRoot = join(root, "presets");
+    const bundledRoot = join(root, "bundled-presets");
+    mkdirSync(join(presetsRoot, "react-web"), { recursive: true });
+    mkdirSync(join(bundledRoot, "react-web"), { recursive: true });
+
+    await expect(
+      resolvePresets(["react-web"], { presetsRoot, bundledPresetsRoot: bundledRoot, nonInteractive: true }),
+    ).resolves.toEqual([{ name: "react-web", dir: join(presetsRoot, "react-web") }]);
   });
 });
 

@@ -1,0 +1,8 @@
+"*":
+  skills:
+    - name: https://skills.sh/jeffallan/claude-skills/golang-pro
+      key: jeffallan/claude-skills/golang-pro
+    - name: https://skills.sh/affaan-m/everything-claude-code/golang-patterns
+      key: affaan-m/everything-claude-code/golang-patterns
+    - name: https://skills.sh/affaan-m/everything-claude-code/golang-testing
+      key: affaan-m/everything-claude-code/golang-testing
