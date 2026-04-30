@@ -44,9 +44,17 @@ async function handleEffect(effect: ReturnType<typeof handleTuiKey>): Promise<vo
   }
 
   if (effect.type === "initSource") {
+    const pendingAction = state.pendingAction;
     state.pendingAction = undefined;
-    await runWithLogs("Initialize source", "Source initialized successfully.", async (logger) => {
+    const title =
+      pendingAction == null ? "Initialize source" : `Initialize source and ${formatActionTitle(pendingAction)}`;
+    const successMessage =
+      pendingAction == null
+        ? "Source initialized successfully."
+        : `Source initialized and ${formatActionTitle(pendingAction)} completed successfully.`;
+    await runWithLogs(title, successMessage, async (logger) => {
       await initializeMissingSource(state, logger);
+      if (pendingAction != null) await runTuiAction(state, pendingAction, logger);
     });
     return;
   }
@@ -55,7 +63,7 @@ async function handleEffect(effect: ReturnType<typeof handleTuiKey>): Promise<vo
     formatActionTitle(effect.action),
     `${formatActionTitle(effect.action)} completed successfully.`,
     (logger) => {
-      runTuiAction(state, effect.action, logger);
+      return runTuiAction(state, effect.action, logger);
     },
   );
 }

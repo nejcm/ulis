@@ -8,6 +8,7 @@ import { ULIS_GENERATED_DIRNAME } from "./config.js";
 import { loadPlugins } from "./parsers/plugins.js";
 import { loadSkills, mergeSkillsConfigs } from "./parsers/skills.js";
 import {
+  isSamePath,
   PLATFORM_DIRS,
   PLATFORM_LABELS,
   platformConfigDir,
@@ -100,7 +101,7 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
   const destBase = resolve(options.destBase);
   const outputDir = resolve(options.outputDir ?? join(sourceDir, ULIS_GENERATED_DIRNAME));
   const platforms = options.platforms ? uniquePlatforms(options.platforms) : [...PLATFORMS];
-  const globalInstall = options.globalInstall ?? destBase === resolve(homedir());
+  const globalInstall = options.globalInstall ?? isSamePath(destBase, homedir());
   const backup = options.backup ?? false;
   const rebuild = options.rebuild ?? false;
 
@@ -303,7 +304,7 @@ function installForgecode(context: InstallContext): void {
   }
 
   // Project installs can place AGENTS.md and other top-level artifacts in repo root.
-  if (context.destBase !== homedir()) {
+  if (!isSamePath(context.destBase, homedir())) {
     copyPlatformContents(sourceDir, context.destBase, context.logger, new Set([PLATFORM_DIRS.forgecode.project]));
   }
 

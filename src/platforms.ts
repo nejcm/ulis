@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 export const PLATFORMS = ["opencode", "claude", "codex", "cursor", "forgecode"] as const;
 
@@ -67,6 +67,18 @@ export function parsePlatformList(rawValues: readonly string[]): Platform[] {
  * Resolve the target config directory for a platform in home vs project mode.
  */
 export function platformConfigDir(platform: Platform, destBase: string, userHome: string = homedir()): string {
-  const dirName = destBase === userHome ? PLATFORM_DIRS[platform].home : PLATFORM_DIRS[platform].project;
+  const dirName = isSamePath(destBase, userHome) ? PLATFORM_DIRS[platform].home : PLATFORM_DIRS[platform].project;
   return join(destBase, dirName);
+}
+
+/**
+ * Compare filesystem paths in a platform-safe way.
+ */
+export function isSamePath(a: string, b: string): boolean {
+  const left = resolve(a);
+  const right = resolve(b);
+  if (process.platform === "win32") {
+    return left.toLowerCase() === right.toLowerCase();
+  }
+  return left === right;
 }

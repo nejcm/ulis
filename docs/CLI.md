@@ -81,7 +81,7 @@ Preset names are resolved from `~/.ulis/presets/<name>/`, merged in the provided
 | OpenCode  | target dir contents                           | _none_                               |
 | Codex     | target dir contents                           | _none_                               |
 | Cursor    | `agents/` (`.mdc` files)                      | `mcp.json`                           |
-| ForgeCode | `.forge/agents`, `.forge/skills`              | `.forge/.mcp.json`                   |
+| ForgeCode | `.forge/agents`, `.forge/skills`, `AGENTS.md` | `.forge/.mcp.json`                   |
 
 Deep-merge preserves user-owned keys in `settings.json`, `.claude.json`, `mcp.json`, and `.forge/.mcp.json`.
 

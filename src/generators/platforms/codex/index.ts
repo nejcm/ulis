@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { enabledAgentsFor } from "../../../parsers/agent.js";
 import { enabledRulesFor } from "../../../parsers/rule.js";
 import { enabledSkillsFor } from "../../../parsers/skill.js";
+import { PLATFORM_DIRS } from "../../../platforms.js";
 import { buildRulesIndex } from "../../shared/rules-index.js";
 import type { FileArtifact, GenerationResult, ProjectBundle } from "../../types.js";
 import { buildCodexAgentArtifact } from "./agents.js";
@@ -29,6 +30,7 @@ export function generateCodex(project: ProjectBundle): GenerationResult {
       sourceDir: project.sourceDir,
       artifactPrefix: "rules",
       indexPath: "AGENTS.md",
+      referencePrefix: join("~", PLATFORM_DIRS.codex.home, "rules"),
     });
     if (result) {
       artifacts.push(...result.artifacts);

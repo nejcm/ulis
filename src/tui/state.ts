@@ -48,7 +48,7 @@ export interface TuiState {
   notice: string;
   resultTitle: string;
   resultMessage: string;
-  pendingAction?: TuiAction;
+  pendingAction?: Exclude<TuiAction, "init">;
 }
 
 export type TuiEffect =
@@ -60,9 +60,7 @@ export type TuiEffect =
 type NavigationDirection = "up" | "down";
 
 const NAV_DUPLICATE_WINDOW_MS = 40;
-let lastNavigationEvent:
-  | { readonly direction: NavigationDirection; readonly key: string; readonly at: number }
-  | undefined;
+let lastNavigationEvent: { readonly direction: NavigationDirection; readonly at: number } | undefined;
 
 export const DASHBOARD_ITEMS = [
   "Source",
@@ -76,6 +74,7 @@ export const DASHBOARD_ITEMS = [
 ] as const;
 
 export function createInitialState(availablePresets: readonly PresetListEntry[] = []): TuiState {
+  lastNavigationEvent = undefined;
   return {
     screen: "dashboard",
     cursor: 0,
@@ -159,13 +158,14 @@ export function togglePresetSelection(selected: readonly string[], presetName: s
 }
 
 export function handleTuiKey(state: TuiState, key: string): TuiEffect {
+  key = normalizeKey(key);
   if (state.screen === "running") return { type: "none" };
 
   if (isAnyKey(key, "ctrl+c", "q") && state.screen !== "customSource") {
     return { type: "exit", code: 0 };
   }
 
-  if (isAnyKey(key, "backspace") && state.screen !== "customSource") {
+  if (isAnyKey(key, "backspace", "delete") && state.screen !== "customSource") {
     return navigateBack(state);
   }
 
@@ -423,7 +423,7 @@ function startOrMissingSource(state: TuiState, action: Exclude<TuiAction, "init"
 
 function moveCursor(state: TuiState, key: string, lastIndex: number): void {
   const direction = getNavigationDirection(key);
-  if (!direction || isDuplicateNavigationAlias(direction, key)) return;
+  if (!direction || isDuplicateNavigationAlias(direction)) return;
 
   if (direction === "up") {
     state.cursor = (state.cursor + lastIndex) % (lastIndex + 1);
@@ -441,7 +441,7 @@ function isConfirmKey(key: string): boolean {
 }
 
 function isToggleKey(key: string): boolean {
-  return isAnyKey(key, "enter", "x", " ", "space");
+  return isConfirmKey(key) || isAnyKey(key, "x", " ", "space");
 }
 
 function isUpKey(key: string): boolean {
@@ -458,14 +458,34 @@ function getNavigationDirection(key: string): NavigationDirection | undefined {
   return undefined;
 }
 
-function isDuplicateNavigationAlias(direction: NavigationDirection, key: string): boolean {
+function isDuplicateNavigationAlias(direction: NavigationDirection): boolean {
   const now = Date.now();
   const duplicate =
     lastNavigationEvent != null &&
     lastNavigationEvent.direction === direction &&
-    lastNavigationEvent.key !== key &&
     now - lastNavigationEvent.at <= NAV_DUPLICATE_WINDOW_MS;
 
-  lastNavigationEvent = { direction, key, at: now };
+  lastNavigationEvent = { direction, at: now };
   return duplicate;
+}
+
+function normalizeKey(rawKey: string): string {
+  if (rawKey.length === 0) return rawKey;
+
+  if (rawKey === "\u0003") return "ctrl+c";
+  if (isAnyKey(rawKey, "\r", "\n")) return "enter";
+  if (isAnyKey(rawKey, "\u007f", "\u0008")) return "backspace";
+  if (rawKey === "\u001b[3~") return "delete";
+  if (isAnyKey(rawKey, "\u001b[A", "\u001bOA")) return "up";
+  if (isAnyKey(rawKey, "\u001b[B", "\u001bOB")) return "down";
+
+  const lowered = rawKey.toLowerCase();
+  if (isAnyKey(lowered, "return", "newline")) return "enter";
+  if (isAnyKey(lowered, "spacebar")) return "space";
+  if (isAnyKey(lowered, "arrowup")) return "up";
+  if (isAnyKey(lowered, "arrowdown")) return "down";
+  if (isAnyKey(lowered, "del")) return "delete";
+  if (isAnyKey(lowered, "esc")) return "escape";
+
+  return lowered.startsWith("ctrl+") ? lowered : rawKey;
 }

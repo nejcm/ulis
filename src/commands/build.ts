@@ -18,9 +18,8 @@ export interface BuildCmdOptions {
 export async function buildCmd(options: BuildCmdOptions = {}): Promise<void> {
   const { sourceDir } = resolveSource({ global: options.global, source: options.source });
   const targets = parseTargets(options);
-  const presets = options.preset
-    ? await resolvePresets(parsePresetNames(options.preset), { nonInteractive: false })
-    : [];
+  const nonInteractive = process.env.ULIS_NON_INTERACTIVE === "1" || process.stdin.isTTY !== true;
+  const presets = options.preset ? await resolvePresets(parsePresetNames(options.preset), { nonInteractive }) : [];
 
   runBuild({ sourceDir, targets, logger: log, presets });
 }

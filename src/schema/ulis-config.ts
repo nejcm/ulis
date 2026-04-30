@@ -15,7 +15,7 @@ export const UlisConfigSchema = z.object({
    * rules directory (OpenCode, Codex, ForgeCode).
    *
    * - `inject` (default): Append a Rules Index section to the platform's main
-   *   instructions file (AGENTS.md / RULES.md) so the AI can discover and
+   *   instructions file (AGENTS.md) so the AI can discover and
    *   apply rules contextually.
    * - `exclude`: Skip rules entirely for unsupported platforms.
    */

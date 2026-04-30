@@ -21,6 +21,10 @@ mock.module("@cel-tui/core", () => ({
 mock.module("./tui/actions.js", () => ({
   runTuiAction: runTuiActionMock,
   initializeMissingSource: initializeMissingSourceMock,
+  __test: {
+    setRuntimeDependencies: () => undefined,
+    resetRuntimeDependencies: () => undefined,
+  },
 }));
 
 const { __test } = await import("./tui.js");
@@ -44,8 +48,8 @@ describe("tui effect flow", () => {
     expect(state.resultMessage).toContain("completed successfully");
   });
 
-  it("handles start effect failure and records error", async () => {
-    runTuiActionMock.mockImplementation(() => {
+  it("handles async start effect failure and records error", async () => {
+    runTuiActionMock.mockImplementation(async () => {
       throw new Error("kaboom");
     });
 
@@ -58,15 +62,18 @@ describe("tui effect flow", () => {
     expect(state.logs.some((line: string) => line.includes("[error] kaboom"))).toBe(true);
   });
 
-  it("handles initSource effect and clears pendingAction", async () => {
+  it("handles initSource effect, clears pendingAction, and resumes the pending action", async () => {
     const state = __test.getState();
     state.pendingAction = "build";
 
     await __test.handleEffect({ type: "initSource" });
 
     expect(initializeMissingSourceMock).toHaveBeenCalledTimes(1);
+    expect(runTuiActionMock).toHaveBeenCalledTimes(1);
+    const call = runTuiActionMock.mock.calls[0] as unknown[] | undefined;
+    expect(call?.[1]).toBe("build");
     expect(state.pendingAction).toBeUndefined();
     expect(state.screen).toBe("result");
-    expect(state.resultTitle).toBe("Initialize source Complete");
+    expect(state.resultTitle).toBe("Initialize source and Build Complete");
   });
 });

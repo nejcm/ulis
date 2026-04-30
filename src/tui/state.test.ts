@@ -321,12 +321,119 @@ describe("tui state", () => {
     expect(state.destinationMode).toBe("global");
   });
 
+  it("accepts return key as confirm on Linux terminals", () => {
+    const state = createInitialState();
+    state.cursor = 1;
+
+    handleTuiKey(state, "return");
+
+    expect(state.destinationMode).toBe("global");
+  });
+
+  it("accepts carriage return character as confirm", () => {
+    const state = createInitialState();
+    state.cursor = 1;
+
+    handleTuiKey(state, "\r");
+
+    expect(state.destinationMode).toBe("global");
+  });
+
+  it("accepts newline character as confirm", () => {
+    const state = createInitialState();
+    state.cursor = 1;
+
+    handleTuiKey(state, "\n");
+
+    expect(state.destinationMode).toBe("global");
+  });
+
+  it("accepts return alias as toggle in install review", () => {
+    const state = createInitialState();
+    state.screen = "installReview";
+    state.cursor = 0;
+    state.backup = true;
+
+    handleTuiKey(state, "return");
+
+    expect(state.backup).toBe(false);
+  });
+
+  it("delete key navigates back outside custom source", () => {
+    const state = createInitialState();
+    state.screen = "platforms";
+    state.cursor = 2;
+
+    handleTuiKey(state, "delete");
+
+    expect(state.screen as string).toBe("dashboard");
+    expect(state.cursor).toBe(0);
+  });
+
+  it("normalizes control-c character to quit", () => {
+    const state = createInitialState();
+
+    expect(handleTuiKey(state, "\u0003")).toEqual({ type: "exit", code: 0 });
+  });
+
+  it("normalizes ANSI down sequence to move cursor", () => {
+    const state = createInitialState();
+
+    handleTuiKey(state, "\u001b[B");
+
+    expect(state.cursor).toBe(1);
+  });
+
   it("deduplicates mixed down-arrow aliases from a single keypress", () => {
     const state = createInitialState();
     state.cursor = 0;
 
     handleTuiKey(state, "down");
     handleTuiKey(state, "arrowdown");
+
+    expect(state.cursor).toBe(1);
+  });
+
+  it("deduplicates repeated down key events from a single keypress", () => {
+    const state = createInitialState();
+    state.cursor = 0;
+
+    handleTuiKey(state, "down");
+    handleTuiKey(state, "down");
+
+    expect(state.cursor).toBe(1);
+  });
+
+  it("allows repeated down key events outside dedupe window", () => {
+    const state = createInitialState();
+    state.cursor = 0;
+    const originalNow = Date.now;
+    let now = 1_000;
+    Date.now = () => now;
+    try {
+      handleTuiKey(state, "down");
+      now += 45;
+      handleTuiKey(state, "down");
+    } finally {
+      Date.now = originalNow;
+    }
+
+    expect(state.cursor).toBe(2);
+  });
+
+  it("does not dedupe opposite navigation direction", () => {
+    const state = createInitialState();
+    state.cursor = 1;
+    const originalNow = Date.now;
+    let now = 1_000;
+    Date.now = () => now;
+    try {
+      handleTuiKey(state, "down");
+      now += 5;
+      handleTuiKey(state, "up");
+    } finally {
+      Date.now = originalNow;
+    }
 
     expect(state.cursor).toBe(1);
   });
