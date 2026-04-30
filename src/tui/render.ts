@@ -45,7 +45,7 @@ export function renderScreen(state: TuiState) {
     case "installReview":
       return renderInstallReview(state);
     case "running":
-      return renderCard("Running", "The selected workflow is in progress.", renderLogLines(state));
+      return renderRunning(state);
     case "result":
       return renderCard(state.resultTitle, state.resultMessage, [
         { text: "Recent log output", fgColor: "color06", bold: true },
@@ -59,6 +59,12 @@ export function renderScreen(state: TuiState) {
         },
       ]);
   }
+}
+
+function renderRunning(state: TuiState) {
+  const frames = ["|", "/", "-", "\\"];
+  const spinner = frames[state.runningSpinnerFrame % frames.length] ?? "|";
+  return renderCard(`Running ${spinner}`, "The selected workflow is in progress.", renderLogLines(state));
 }
 
 function renderDashboard(state: TuiState) {
@@ -196,13 +202,14 @@ function renderInstallReview(state: TuiState) {
     { text: "" },
     selectableLine(state.cursor, 0, `[${state.backup ? "x" : " "}] Backup existing configs before install`),
     selectableLine(state.cursor, 1, `[${state.rebuild ? "x" : " "}] Rebuild before install`),
+    { text: "" },
     selectableLine(state.cursor, 2, "Start install"),
     selectableLine(state.cursor, 3, "Back to dashboard"),
   ]);
 }
 
 function renderLogLines(state: TuiState): UiLine[] {
-  const recent = state.logs.slice(-14);
+  const recent = state.logs.slice(-40);
   if (recent.length === 0) return [{ text: "Waiting for log output...", fgColor: "color08" }];
   return recent.map((entry) => ({ text: entry }));
 }

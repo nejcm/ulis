@@ -34,6 +34,7 @@ export interface PlannedSource {
 export interface TuiState {
   screen: TuiScreen;
   cursor: number;
+  runningSpinnerFrame: number;
   sourceMode: SourceMode;
   destinationMode: DestinationMode;
   customSource: string;
@@ -78,6 +79,7 @@ export function createInitialState(availablePresets: readonly PresetListEntry[] 
   return {
     screen: "dashboard",
     cursor: 0,
+    runningSpinnerFrame: 0,
     sourceMode: "project",
     destinationMode: "project",
     customSource: "",
