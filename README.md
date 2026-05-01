@@ -72,7 +72,7 @@ Maintain one canonical config for every project on your machine:
 ```bash
 ulis init --global      # creates ~/.ulis/
 # edit ~/.ulis/... to taste
-ulis install --global   # deploys to ~/.claude/, ~/.codex/, ~/.cursor/, ~/.opencode/, ~/.forge/
+ulis install --global   # deploys to ~/.claude/, ~/.codex/, ~/.cursor/, ~/.config/opencode/, ~/.forge/
 ```
 
 ---
@@ -187,13 +187,13 @@ For the full field-level schema and examples, see [docs/REFERENCE.md](docs/REFER
 
 ## Install behaviour
 
-| Tool        | Strategy         | Target (project mode) | Target (global mode) |
-| ----------- | ---------------- | --------------------- | -------------------- |
-| OpenCode    | Overwrite        | `./.opencode/`        | `~/.opencode/`       |
-| Claude Code | Merge (additive) | `./.claude/`          | `~/.claude/`         |
-| Codex       | Overwrite        | `./.codex/`           | `~/.codex/`          |
-| Cursor      | Merge (additive) | `./.cursor/`          | `~/.cursor/`         |
-| ForgeCode   | Merge (additive) | `./.forge/`           | `~/.forge/`          |
+| Tool        | Strategy         | Target (project mode) | Target (global mode)                                                 |
+| ----------- | ---------------- | --------------------- | -------------------------------------------------------------------- |
+| OpenCode    | Overwrite        | `./.opencode/`        | `~/.config/opencode/` (`%USERPROFILE%\.config\opencode\` on Windows) |
+| Claude Code | Merge (additive) | `./.claude/`          | `~/.claude/`                                                         |
+| Codex       | Overwrite        | `./.codex/`           | `~/.codex/`                                                          |
+| Cursor      | Merge (additive) | `./.cursor/`          | `~/.cursor/`                                                         |
+| ForgeCode   | Merge (additive) | `./.forge/`           | `~/.forge/`                                                          |
 
 `settings.json`, `.claude.json`, `mcp.json`, and ForgeCode's `.forge/.mcp.json` are deep-merged so user content outside `ulis`-managed keys is preserved. With `--backup`, existing platform directories/files are copied aside before overwriting.
 

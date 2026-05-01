@@ -5,6 +5,20 @@ export const PLATFORMS = ["opencode", "claude", "codex", "cursor", "forgecode"] 
 
 export type Platform = (typeof PLATFORMS)[number];
 
+/**
+ * Per-OS path segment relative to the destination base (`userHome` for global, project root for local).
+ * Keys are `process.platform` values (`win32`, `linux`, `darwin`, …). Use `default` when several OSes share the same path.
+ */
+export type OsDirMap = Partial<Record<NodeJS.Platform, string>> & { default?: string };
+
+/** Single relative path for every OS, or an OS-keyed map (see {@link OsDirMap}). */
+export type PlatformDirSegment = string | OsDirMap;
+
+export type PlatformDirsEntry = {
+  home: PlatformDirSegment;
+  project: PlatformDirSegment;
+};
+
 export const PLATFORM_LABELS: Record<Platform, string> = {
   opencode: "OpenCode",
   claude: "Claude Code",
@@ -21,13 +35,31 @@ export const PLATFORM_DESCRIPTIONS: Record<Platform, string> = {
   forgecode: "Generate ForgeCode agents, skills, MCP config, and project rules.",
 };
 
-export const PLATFORM_DIRS: Record<Platform, { home: string; project: string }> = {
+export const PLATFORM_DIRS: Record<Platform, PlatformDirsEntry> = {
   claude: { home: ".claude", project: ".claude" },
-  opencode: { home: ".opencode", project: ".opencode" },
+  opencode: {
+    home: {
+      win32: ".config/opencode",
+      linux: "opencode",
+      darwin: "opencode",
+      default: "opencode",
+    },
+    project: ".opencode",
+  },
   codex: { home: ".codex", project: ".codex" },
   cursor: { home: ".cursor", project: ".cursor" },
   forgecode: { home: ".forge", project: ".forge" },
 };
+
+export function resolvePlatformDirSegment(segment: PlatformDirSegment): string {
+  if (typeof segment === "string") return segment;
+  const plat = process.platform as NodeJS.Platform;
+  const dir = segment[plat] ?? segment.default;
+  if (dir == null || dir === "") {
+    throw new Error(`PLATFORM_DIRS: no path for platform "${process.platform}" and no default`);
+  }
+  return dir;
+}
 
 /**
  * Check whether a raw string maps to a supported platform id.
@@ -67,8 +99,11 @@ export function parsePlatformList(rawValues: readonly string[]): Platform[] {
  * Resolve the target config directory for a platform in home vs project mode.
  */
 export function platformConfigDir(platform: Platform, destBase: string, userHome: string = homedir()): string {
-  const dirName = isSamePath(destBase, userHome) ? PLATFORM_DIRS[platform].home : PLATFORM_DIRS[platform].project;
-  return join(destBase, dirName);
+  const entry = PLATFORM_DIRS[platform];
+  const segment = isSamePath(destBase, userHome)
+    ? resolvePlatformDirSegment(entry.home)
+    : resolvePlatformDirSegment(entry.project);
+  return join(destBase, segment);
 }
 
 /**

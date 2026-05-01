@@ -52,7 +52,7 @@ describe("buildRulesIndex", () => {
     });
 
     expect(result).not.toBeNull();
-    expect(result?.artifacts).toEqual([{ path: "rules/common/code-review.md", contents: "rule content\n" }]);
+    expect(result?.artifacts).toEqual([{ path: join("rules", "common/code-review.md"), contents: "rule content\n" }]);
     expect(result?.appendEntry.content).toContain("`~/.codex/rules/common/code-review.md`");
   });
 });

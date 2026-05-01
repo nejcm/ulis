@@ -14,7 +14,7 @@ Running `ulis` with no command prints help. All commands exit non-zero on error 
 
 Scaffold a new `.ulis/` source tree with empty folders, template YAML files, and schema-backed headers.
 
-```
+```bash
 ulis init [-g | --global]
 ```
 
@@ -37,7 +37,7 @@ Fails if `.ulis/` (or `~/.ulis/` in global mode) already exists.
 
 Parse, validate, and generate configs into `<source>/generated/<platform>/` without installing anything.
 
-```
+```bash
 ulis build [-g | --global] [--source <path>] [--target <platforms>] [--preset <names>]
 ```
 
@@ -56,20 +56,20 @@ Output is always written under `<source>/generated/<platform>/`. Existing conten
 
 Run `build` and then deploy the generated configs onto the target platform directories.
 
-```
+```bash
 ulis install [-g | --global] [--source <path>] [--target <platforms>]
              [-y | --yes] [--no-rebuild] [--backup] [--preset <names>]
 ```
 
-| Flag                   | Effect                                                                                                 |
-| ---------------------- | ------------------------------------------------------------------------------------------------------ |
-| `-g`, `--global`       | Read `~/.ulis/` and write to `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.opencode/`, and `~/.forge/`. |
-| `--source <path>`      | Override source (still writes to CWD or home depending on `--global`).                                 |
-| `--target <platforms>` | Only build/install the listed platforms.                                                               |
-| `-y`, `--yes`          | Skip the "about to overwrite" confirmation prompt.                                                     |
-| `--no-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`.                               |
-| `--backup`             | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.                      |
-| `--preset <names>`     | Same resolution as `ulis build --preset` (user-global directory, then bundled).                        |
+| Flag                   | Effect                                                                                                                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-g`, `--global`       | Read `~/.ulis/` and write to `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.config/opencode/` (Windows: `%USERPROFILE%\.config\opencode\`), and `~/.forge/`. |
+| `--source <path>`      | Override source (still writes to CWD or home depending on `--global`).                                                                                     |
+| `--target <platforms>` | Only build/install the listed platforms.                                                                                                                   |
+| `-y`, `--yes`          | Skip the "about to overwrite" confirmation prompt.                                                                                                         |
+| `--no-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`.                                                                                   |
+| `--backup`             | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.                                                                          |
+| `--preset <names>`     | Same resolution as `ulis build --preset` (user-global directory, then bundled).                                                                            |
 
 **Preset resolution:** Each name maps to a directory. ULIS checks `~/.ulis/presets/<name>/` first; if that folder is missing, it uses the matching bundled preset next to the CLI (`dist/presets/` when installed). A preset in your home tree with the same folder name **shadows** the bundled one. Multiple `--preset` values merge **left to right**, then the base source (from `--source`, `./.ulis/`, or `~/.ulis/`) is applied last — **the base wins on conflicts**. Interactive runs prompt to continue when a name is missing; with `--yes`, missing presets fail immediately.
 
@@ -91,7 +91,7 @@ Deep-merge preserves user-owned keys in `settings.json`, `.claude.json`, `mcp.js
 
 Launch the interactive terminal dashboard. Use it to choose a source, select presets and platforms, validate without writing files, build generated outputs, or install with an explicit destination review.
 
-```
+```bash
 ulis tui
 ```
 
@@ -111,7 +111,7 @@ Keyboard controls:
 
 List presets from **both** `~/.ulis/presets/` and the bundled preset set. User presets are preferred when the same folder name exists in both places.
 
-```
+```bash
 ulis preset [--list]
 ulis preset list
 ```

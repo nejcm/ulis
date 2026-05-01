@@ -13,6 +13,7 @@ import {
   PLATFORM_LABELS,
   platformConfigDir,
   PLATFORMS,
+  resolvePlatformDirSegment,
   uniquePlatforms,
   type Platform,
 } from "./platforms.js";
@@ -293,7 +294,7 @@ function installCursor(context: InstallContext): void {
 
 function installForgecode(context: InstallContext): void {
   const sourceDir = join(context.outputDir, "forgecode");
-  const sourceForgeDir = join(sourceDir, PLATFORM_DIRS.forgecode.project);
+  const sourceForgeDir = join(sourceDir, resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project));
   const sourceMcp = join(sourceForgeDir, ".mcp.json");
   const targetForgeDir = platformConfigDir("forgecode", context.destBase, context.userHome);
   const targetMcp = join(targetForgeDir, ".mcp.json");
@@ -307,7 +308,12 @@ function installForgecode(context: InstallContext): void {
     copyPlatformContents(sourceForgeDir, targetForgeDir, context.logger);
   }
 
-  copyPlatformContents(sourceDir, targetForgeDir, context.logger, new Set([PLATFORM_DIRS.forgecode.project]));
+  copyPlatformContents(
+    sourceDir,
+    targetForgeDir,
+    context.logger,
+    new Set([resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project)]),
+  );
 
   if (existsSync(sourceMcp)) {
     if (existsSync(targetMcp)) {

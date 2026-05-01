@@ -392,13 +392,13 @@ End-user CLI (see [CLI.md](./CLI.md) for the full surface):
 
 Repo dev scripts:
 
-| Script                  | Purpose                                           |
-| ----------------------- | ------------------------------------------------- |
+| Script                  | Purpose                                                                    |
+| ----------------------- | -------------------------------------------------------------------------- |
 | `bun run build`         | Bundle `dist/cli.js` + regenerate `dist/schemas/` + `schemas/` (published) |
-| `bun run dev`           | `ulis build --source example`                     |
-| `bun run test`          | Run test suite                                    |
-| `bun run lint`          | `tsc --noEmit`                                    |
-| `bun run format`        | Format with oxfmt                                 |
-| `bun run gen:schemas`   | Regenerate `dist/schemas/*.schema.json` and `schemas/*.schema.json`           |
-| `bun run gen:reference` | Regenerate `docs/REFERENCE.md`                    |
-| `bun run clean`         | Delete `dist/` and `schemas/`                     |
+| `bun run dev`           | `ulis build --source example`                                              |
+| `bun run test`          | Run test suite                                                             |
+| `bun run lint`          | `tsc --noEmit`                                                             |
+| `bun run format`        | Format with oxfmt                                                          |
+| `bun run gen:schemas`   | Regenerate `dist/schemas/*.schema.json` and `schemas/*.schema.json`        |
+| `bun run gen:reference` | Regenerate `docs/REFERENCE.md`                                             |
+| `bun run clean`         | Delete `dist/` and `schemas/`                                              |

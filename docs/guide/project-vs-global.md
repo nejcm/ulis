@@ -19,7 +19,7 @@ Use project mode when each repository needs distinct agent or MCP behavior.
 - Source path: `~/.ulis/`
 - Init command: `ulis init --global`
 - Install command: `ulis install --global`
-- Install targets: `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.opencode/`
+- Install targets: `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.config/opencode/` (Windows: `%USERPROFILE%\.config\opencode\`, main file `opencode.json`)
 
 Use global mode when you want one shared baseline across all projects on your machine.
 
