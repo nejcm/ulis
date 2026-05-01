@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../dist/schemas/skills.schema.json
+# yaml-language-server: $schema=../node_modules/@nejcm/ulis/schemas/skills.schema.json
 
 "*":
   skills:

@@ -141,4 +141,4 @@ export function renderRuleCodeStyle(_context: ScaffoldContext): string {
 }
 
 /** Default schema base URL when project-level templates reference local schemas. */
-export const DEFAULT_SCHEMA_BASE = "./node_modules/@nejcm/ulis/dist/schemas";
+export const DEFAULT_SCHEMA_BASE = "./node_modules/@nejcm/ulis/schemas";

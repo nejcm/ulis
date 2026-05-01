@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../dist/schemas/permissions.schema.json
+# yaml-language-server: $schema=../node_modules/@nejcm/ulis/schemas/permissions.schema.json
 
 claude:
   defaultMode: default

@@ -42,6 +42,7 @@ src/
   tools/                # gen-json-schema, gen-reference
 example/                # reference example config
 dist/                   # tsup output (cli.js + schemas/) — gitignored
+schemas/                # JSON Schema mirror at package root (npm `files`) — gitignored
 ```
 
 ## Before completing a task
@@ -54,7 +55,7 @@ Run from the repo root (in order):
 
 If you changed generators, parsers, schemas, or CLI wiring, also:
 
-4. `bun run build` — rebuild `dist/cli.js` and `dist/schemas/`.
+4. `bun run build` — rebuild `dist/cli.js`, `dist/schemas/`, and publishable `schemas/`.
 5. `node dist/cli.js build --source example` — smoke the bundled CLI end-to-end.
 
 If you changed Zod schemas specifically, also run `bun run gen:reference` to refresh [`docs/REFERENCE.md`](docs/REFERENCE.md).

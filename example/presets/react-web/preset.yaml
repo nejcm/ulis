@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=../../../dist/schemas/preset.schema.json
+# yaml-language-server: $schema=../../../node_modules/@nejcm/ulis/schemas/preset.schema.json
 
 name: React Web
 description: React, Next.js, shadcn/ui, and frontend design skills for web projects.

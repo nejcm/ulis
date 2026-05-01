@@ -201,7 +201,7 @@ For the full field-level schema and examples, see [docs/REFERENCE.md](docs/REFER
 
 ## Schema autocomplete
 
-Scaffolded YAML files include a `# yaml-language-server: $schema=…` header pointing at `./node_modules/@nejcm/ulis/dist/schemas/*.schema.json`. VS Code's YAML extension picks these up automatically when the package is installed.
+Scaffolded YAML files include a `# yaml-language-server: $schema=…` header pointing at `./node_modules/@nejcm/ulis/schemas/*.schema.json`. VS Code's YAML extension picks these up automatically when the package is installed.
 
 Schemas are also regenerated on every `npm run build` via `bun run gen:schemas`.
 
@@ -217,22 +217,22 @@ Clone the repo:
 bun install
 bun run dev        # builds against example/
 bun test           # runs the suite (~96 tests)
-bun run build      # bundles dist/cli.js + regenerates dist/schemas
+bun run build      # bundles dist/cli.js + regenerates dist/schemas + schemas/ (npm pack)
 ```
 
 ### Dev scripts
 
-| Script                  | Purpose                                                             |
-| ----------------------- | ------------------------------------------------------------------- |
-| `bun run build`         | Bundle CLI (`tsup`) and regenerate JSON schemas                     |
-| `bun run dev`           | Run `ulis build` against the `example/` directory                   |
-| `bun run ulis <args>`   | Run the CLI from source (`tsx src/cli.ts …`)                        |
-| `bun run tui`           | Launch the interactive TUI from source                              |
-| `bun run test`          | Run the unit + integration suite                                    |
-| `bun run lint`          | `tsc --noEmit`                                                      |
-| `bun run format`        | Format with [oxfmt](https://oxc.rs/docs/guide/usage/formatter.html) |
-| `bun run gen:schemas`   | Regenerate `dist/schemas/*.schema.json` from Zod                    |
-| `bun run gen:reference` | Regenerate `docs/REFERENCE.md`                                      |
+| Script                  | Purpose                                                                      |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| `bun run build`         | Bundle CLI (`tsup`) and regenerate JSON schemas                              |
+| `bun run dev`           | Run `ulis build` against the `example/` directory                            |
+| `bun run ulis <args>`   | Run the CLI from source (`tsx src/cli.ts …`)                                 |
+| `bun run tui`           | Launch the interactive TUI from source                                       |
+| `bun run test`          | Run the unit + integration suite                                             |
+| `bun run lint`          | `tsc --noEmit`                                                               |
+| `bun run format`        | Format with [oxfmt](https://oxc.rs/docs/guide/usage/formatter.html)          |
+| `bun run gen:schemas`   | Regenerate `dist/schemas/*.schema.json` and `schemas/*.schema.json` from Zod |
+| `bun run gen:reference` | Regenerate `docs/REFERENCE.md`                                               |
 
 ### Repo layout
 

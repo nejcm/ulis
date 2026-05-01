@@ -1,6 +1,7 @@
 # Build dependencies
 **/node_modules/
 **/dist/
+/schemas/
 generated/
 
 # Backup files created by install scripts
