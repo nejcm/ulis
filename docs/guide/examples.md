@@ -359,25 +359,12 @@ Config files (`.json`, `.toml`, `.yaml`, `.yml`) are deep-merged into generated 
 
 ## Presets
 
-Presets live under `~/.ulis/presets/<name>/` and can contain the same source files as a normal `.ulis/` tree.
+See the dedicated guide: [Presets](/guide/presets) (resolution, merge order, `preset.yaml`, CLI, and TUI).
 
-```text
-~/.ulis/presets/typescript/
-├── preset.yaml
-├── skills.yaml
-└── rules/
-    └── typescript.md
-```
-
-```yaml
-# preset.yaml
-name: typescript
-description: Shared TypeScript agents, rules, and skills
-```
-
-Apply presets when building or installing:
+Quick example:
 
 ```bash
-ulis build --preset typescript
-ulis install --preset team-default,typescript --yes
+ulis preset list
+ulis build --preset team-default,react-web
+ulis install --preset team-default --yes
 ```

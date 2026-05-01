@@ -41,19 +41,20 @@ This builds generated output and installs into local tool folders like `./.claud
 
 ## Optional: Use presets
 
-If you keep shared defaults in `~/.ulis/presets/`, you can layer them into any build/install run:
+ULIS can layer **presets** (extra agents, skills, rules, etc.) under your base `.ulis/` or `~/.ulis/` tree. Presets come from `~/.ulis/presets/<name>/` and from **bundled** examples shipped with the CLI; a user folder with the same name overrides the bundled preset.
 
 ```bash
 ulis preset list
-ulis build --preset team-default
-ulis install --preset team-default,react --yes
+ulis build --preset react-web
+ulis install --preset backend,react-web --yes
 ```
 
-Preset merge order is left-to-right, then your base source is applied last (base wins conflicts). In non-interactive mode (`--yes`), missing presets fail immediately instead of prompting.
+Merge order: presets left-to-right, then the base source (base wins on conflicts). With `--yes`, a missing preset name fails fast instead of prompting.
 
 ## Next reads
 
 - [Project vs Global Mode](/guide/project-vs-global)
 - [Source Layout](/guide/source-layout)
+- [Presets](/guide/presets)
 - [Examples](/guide/examples)
 - [CLI Reference](/CLI)

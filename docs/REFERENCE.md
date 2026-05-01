@@ -75,3 +75,15 @@ External skill installs per platform.
 | ------ | ---------- | ------------------------------------------------------- |
 | `name` | `string`   | Package, repo/skill, or URL accepted by the skills CLI. |
 | `args` | `string[]` | Extra CLI args forwarded to the installer.              |
+
+## Preset metadata (`presets/<name>/preset.yaml`) {#preset-metadata}
+
+Presets are optional ULIS source trees (same layout as `.ulis/`) living under `~/.ulis/presets/<name>/` or bundled with the package. The **preset identifier** is the folder name `<name>`; that is what you pass to `ulis build --preset` / `ulis install --preset`.
+
+Optional `preset.yaml` in the preset root supplies metadata for `ulis preset list` and the TUI. It does not change the preset’s CLI name (still the parent folder).
+
+| Field         | Type      | Notes                                                           |
+| ------------- | --------- | --------------------------------------------------------------- |
+| `name`        | `string`  | Display title in listings (defaults to folder name if omitted). |
+| `description` | `string`  | Short blurb shown in `ulis preset list` and the TUI.            |
+| `version`     | `integer` | Optional version integer (schema metadata only).                |

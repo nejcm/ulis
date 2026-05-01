@@ -41,12 +41,12 @@ Parse, validate, and generate configs into `<source>/generated/<platform>/` with
 ulis build [-g | --global] [--source <path>] [--target <platforms>] [--preset <names>]
 ```
 
-| Flag                   | Effect                                                                            |
-| ---------------------- | --------------------------------------------------------------------------------- |
-| `-g`, `--global`       | Read from `~/.ulis/` instead of `./.ulis/`.                                       |
-| `--source <path>`      | Explicit source path. Takes precedence over `--global`.                           |
-| `--target <platforms>` | Comma-separated subset of `claude,codex,cursor,opencode,forgecode`. Default: all. |
-| `--preset <names>`     | Apply preset(s) from `~/.ulis/presets/` before building (comma-separated).        |
+| Flag                   | Effect                                                                                                                                              |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-g`, `--global`       | Read from `~/.ulis/` instead of `./.ulis/`.                                                                                                         |
+| `--source <path>`      | Explicit source path. Takes precedence over `--global`.                                                                                             |
+| `--target <platforms>` | Comma-separated subset of `claude,codex,cursor,opencode,forgecode`. Default: all.                                                                   |
+| `--preset <names>`     | Apply preset(s) before the base source (comma-separated). Resolved from `~/.ulis/presets/<name>/` first, then bundled presets shipped with the CLI. |
 
 Output is always written under `<source>/generated/<platform>/`. Existing contents there are cleared before each build.
 
@@ -69,9 +69,9 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 | `-y`, `--yes`          | Skip the "about to overwrite" confirmation prompt.                                                     |
 | `--no-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`.                               |
 | `--backup`             | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.                      |
-| `--preset <names>`     | Apply preset(s) from `~/.ulis/presets/` before install/build.                                          |
+| `--preset <names>`     | Same resolution as `ulis build --preset` (user-global directory, then bundled).                        |
 
-Preset names are resolved from `~/.ulis/presets/<name>/`, merged in the provided order, then overlaid by the base source (base wins on conflicts). With `--yes`, missing presets do not prompt and instead fail fast.
+**Preset resolution:** Each name maps to a directory. ULIS checks `~/.ulis/presets/<name>/` first; if that folder is missing, it uses the matching bundled preset next to the CLI (`dist/presets/` when installed). A preset in your home tree with the same folder name **shadows** the bundled one. Multiple `--preset` values merge **left to right**, then the base source (from `--source`, `./.ulis/`, or `~/.ulis/`) is applied last — **the base wins on conflicts**. Interactive runs prompt to continue when a name is missing; with `--yes`, missing presets fail immediately.
 
 **Install strategy per platform:**
 
@@ -109,13 +109,14 @@ Keyboard controls:
 
 ## `ulis preset`
 
-List available presets discovered under `~/.ulis/presets/`.
+List presets from **both** `~/.ulis/presets/` and the bundled preset set. User presets are preferred when the same folder name exists in both places.
 
 ```
-ulis preset [list]
+ulis preset [--list]
+ulis preset list
 ```
 
-`list` is the default action. Output includes each preset folder name and optional metadata from `preset.yaml`.
+`-l` / `--list` is accepted. The default action is `list`. Each line shows the directory name (what you pass to `--preset`), a `user` or `bundled` label, optional `name` / `description` from `preset.yaml`, and the display title when it differs from the folder name.
 
 ---
 

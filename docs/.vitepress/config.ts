@@ -29,6 +29,7 @@ export default defineConfig({
           { text: "Getting Started", link: "/guide/getting-started" },
           { text: "Project vs Global Mode", link: "/guide/project-vs-global" },
           { text: "Source Layout", link: "/guide/source-layout" },
+          { text: "Presets", link: "/guide/presets" },
           { text: "Examples", link: "/guide/examples" },
         ],
       },
