@@ -5,8 +5,15 @@ import { listPresets } from "./presets.js";
 import { initializeMissingSource, runTuiAction } from "./tui/actions.js";
 import { readClipboardText } from "./tui/clipboard.js";
 import { loadTuiPreferences, saveTuiPreferences, snapshotTuiPreferences } from "./tui/preferences.js";
-import { renderScreen } from "./tui/render.js";
-import { appendTextInput, createInitialState, handleTuiKey, type TuiState } from "./tui/state.js";
+import { renderScreen, type CustomSourceHandlers } from "./tui/render.js";
+import {
+  appendTextInput,
+  applyCustomSourceTextInputChange,
+  createInitialState,
+  handleCustomSourceTextInputKey,
+  handleTuiKey,
+  type TuiState,
+} from "./tui/state.js";
 
 const state: TuiState = createInitialState();
 let lastSavedPreferences = JSON.stringify(snapshotTuiPreferences(state));
@@ -34,14 +41,34 @@ function renderApp() {
       focusable: true,
       onKeyPress: (key) => {
         const effect = handleTuiKey(state, key);
-        const saveError = persistTuiPreferences();
-        if (saveError) state.notice = saveError;
-        cel.render();
+        renderAfterPreferenceSave();
         void handleEffect(effect);
       },
     },
-    [renderScreen(state)],
+    [renderScreen(state, customSourceHandlers())],
   );
+}
+
+function customSourceHandlers(): CustomSourceHandlers | undefined {
+  if (state.screen !== "customSource") return undefined;
+  return {
+    onCustomSourceChange: (value: string) => {
+      applyCustomSourceTextInputChange(state, value);
+      renderAfterPreferenceSave();
+    },
+    onCustomSourceKeyPress: (key: string) => {
+      const { effect, preventDefault } = handleCustomSourceTextInputKey(state, key);
+      renderAfterPreferenceSave();
+      void handleEffect(effect);
+      return preventDefault ? false : undefined;
+    },
+  };
+}
+
+function renderAfterPreferenceSave(): void {
+  const saveError = persistTuiPreferences();
+  if (saveError) state.notice = saveError;
+  cel.render();
 }
 
 async function handleEffect(effect: ReturnType<typeof handleTuiKey>): Promise<void> {

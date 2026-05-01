@@ -5,7 +5,10 @@ import { join } from "node:path";
 
 import { PLATFORMS } from "../platforms.js";
 import {
+  appendTextInput,
+  applyCustomSourceTextInputChange,
   createInitialState,
+  handleCustomSourceTextInputKey,
   handleTuiKey,
   planSource,
   rememberCustomSource,
@@ -236,58 +239,54 @@ describe("tui state", () => {
     expect(state.cursor).toBe(6);
   });
 
-  it("customSource appends printable characters", () => {
+  it("customSource path value syncs like TextInput onChange", () => {
     const state = createInitialState();
     state.screen = "customSource";
     state.textInput = "foo";
 
-    handleTuiKey(state, "b");
+    applyCustomSourceTextInputChange(state, "foob");
 
     expect(state.textInput).toBe("foob");
   });
 
-  it("customSource appends pasted text", () => {
+  it("customSource appendTextInput still appends pasted text", () => {
     const state = createInitialState();
     state.screen = "customSource";
     state.textInput = "";
 
-    handleTuiKey(state, "C:\\Work\\Personal\\ulis\\.ulis");
+    expect(appendTextInput(state, "C:\\Work\\Personal\\ulis\\.ulis")).toBe(true);
 
     expect(state.textInput).toBe("C:\\Work\\Personal\\ulis\\.ulis");
   });
 
-  it("customSource appends bracketed pasted text", () => {
+  it("customSource appendTextInput strips bracketed paste markers", () => {
     const state = createInitialState();
     state.screen = "customSource";
     state.textInput = "";
 
-    handleTuiKey(state, "\u001b[200~C:\\Work\\Personal\\ulis\\.ulis\u001b[201~");
+    expect(appendTextInput(state, "\u001b[200~C:\\Work\\Personal\\ulis\\.ulis\u001b[201~")).toBe(true);
 
     expect(state.textInput).toBe("C:\\Work\\Personal\\ulis\\.ulis");
   });
 
-  it("customSource ctrl+v requests clipboard paste", () => {
+  it("customSource TextInput ctrl+v requests clipboard paste", () => {
     const state = createInitialState();
     state.screen = "customSource";
 
-    expect(handleTuiKey(state, "\u0016")).toEqual({ type: "pasteClipboard" });
+    expect(handleCustomSourceTextInputKey(state, "\u0016")).toEqual({
+      effect: { type: "pasteClipboard" },
+      preventDefault: true,
+    });
   });
 
-  it("customSource cmd+v requests clipboard paste", () => {
+  it("customSource TextInput cmd+v requests clipboard paste", () => {
     const state = createInitialState();
     state.screen = "customSource";
 
-    expect(handleTuiKey(state, "cmd+v")).toEqual({ type: "pasteClipboard" });
-  });
-
-  it("customSource backspace removes last character", () => {
-    const state = createInitialState();
-    state.screen = "customSource";
-    state.textInput = "foo";
-
-    handleTuiKey(state, "backspace");
-
-    expect(state.textInput).toBe("fo");
+    expect(handleCustomSourceTextInputKey(state, "cmd+v")).toEqual({
+      effect: { type: "pasteClipboard" },
+      preventDefault: true,
+    });
   });
 
   it("customSource escape returns to source screen at custom entry index", () => {
@@ -295,8 +294,9 @@ describe("tui state", () => {
     state.screen = "customSource";
     state.textInput = "some/path";
 
-    handleTuiKey(state, "escape");
+    const result = handleCustomSourceTextInputKey(state, "escape");
 
+    expect(result.preventDefault).toBe(true);
     expect(state.screen as string).toBe("source");
     expect(state.cursor).toBe(2);
   });
@@ -306,8 +306,9 @@ describe("tui state", () => {
     state.screen = "customSource";
     state.textInput = "  ";
 
-    handleTuiKey(state, "enter");
+    const result = handleCustomSourceTextInputKey(state, "enter");
 
+    expect(result.preventDefault).toBe(true);
     expect(state.screen as string).toBe("customSource");
     expect(state.notice).toBeTruthy();
   });
@@ -317,8 +318,9 @@ describe("tui state", () => {
     state.screen = "customSource";
     state.textInput = "/some/custom/path";
 
-    handleTuiKey(state, "enter");
+    const result = handleCustomSourceTextInputKey(state, "enter");
 
+    expect(result.preventDefault).toBe(true);
     expect(state.screen as string).toBe("dashboard");
     expect(state.customSource).toBe("/some/custom/path");
     expect(state.recentCustomSources).toEqual(["/some/custom/path"]);
@@ -340,13 +342,28 @@ describe("tui state", () => {
     expect(state.recentCustomSources).toEqual(["/recent/b", "/recent/a"]);
   });
 
-  it("customSource arrow keys move through recent paths", () => {
+  it("opening custom source keeps the saved custom source in recent inputs", () => {
+    const state = createInitialState();
+    state.screen = "source";
+    state.cursor = 2;
+    state.customSource = "/saved/source";
+    state.recentCustomSources = ["/older/source"];
+
+    handleTuiKey(state, "enter");
+
+    expect(state.screen as string).toBe("customSource");
+    expect(state.textInput).toBe("/saved/source");
+    expect(state.recentCustomSources).toEqual(["/saved/source", "/older/source"]);
+  });
+
+  it("customSource arrow keys move through recent paths from the path row", () => {
     const state = createInitialState();
     state.screen = "customSource";
     state.recentCustomSources = ["/recent/a", "/recent/b"];
 
-    handleTuiKey(state, "down");
+    const result = handleCustomSourceTextInputKey(state, "down");
 
+    expect(result.preventDefault).toBe(true);
     expect(state.cursor).toBe(1);
   });
 
@@ -458,39 +475,38 @@ describe("tui state", () => {
     expect(state.destinationMode).toBe("global");
   });
 
-  it("deduplicates rapid text key events in custom source input", () => {
+  it("deduplicates rapid text key events in custom source TextInput handler", () => {
     const state = createInitialState();
     state.screen = "customSource";
-    state.textInput = "";
     const originalNow = Date.now;
     let now = 3_000;
     Date.now = () => now;
     try {
-      handleTuiKey(state, "l");
+      const first = handleCustomSourceTextInputKey(state, "l");
       now += 5;
-      handleTuiKey(state, "l");
+      const second = handleCustomSourceTextInputKey(state, "l");
+      expect(first.preventDefault).toBe(false);
+      expect(second.preventDefault).toBe(true);
     } finally {
       Date.now = originalNow;
     }
-
-    expect(state.textInput).toBe("l");
   });
 
-  it("allows repeated text key events outside dedupe window", () => {
+  it("allows repeated text key events outside dedupe window in TextInput handler", () => {
     const state = createInitialState();
     state.screen = "customSource";
-    state.textInput = "";
     const originalNow = Date.now;
     let now = 3_000;
     Date.now = () => now;
     try {
-      handleTuiKey(state, "l");
+      const first = handleCustomSourceTextInputKey(state, "l");
       now += 45;
-      handleTuiKey(state, "l");
+      const second = handleCustomSourceTextInputKey(state, "l");
+      expect(first.preventDefault).toBe(false);
+      expect(second.preventDefault).toBe(false);
     } finally {
       Date.now = originalNow;
     }
-    expect(state.textInput).toBe("ll");
   });
 
   it("accepts return alias as toggle in install review", () => {

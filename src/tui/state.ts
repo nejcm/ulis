@@ -169,10 +169,27 @@ export function rememberCustomSource(recent: readonly string[], value: string): 
   return [normalized, ...recent.filter((entry) => entry !== normalized)].slice(0, 3);
 }
 
+export function openCustomSourceInput(state: TuiState): void {
+  state.textInput = state.customSource;
+  state.recentCustomSources = rememberCustomSource(state.recentCustomSources, state.customSource);
+  state.screen = "customSource";
+  state.cursor = 0;
+  state.notice = "";
+}
+
 export function togglePresetSelection(selected: readonly string[], presetName: string): string[] {
   return selected.includes(presetName)
     ? selected.filter((name) => name !== presetName)
     : [...selected, presetName].sort();
+}
+
+export interface CustomSourceTextInputKeyResult {
+  readonly effect: TuiEffect;
+  /**
+   * When true, the TextInput `onKeyPress` handler should return `false` to cel-tui
+   * (consume the key and skip default editing / bubbling).
+   */
+  readonly preventDefault: boolean;
 }
 
 export function handleTuiKey(state: TuiState, key: string): TuiEffect {
@@ -188,13 +205,18 @@ export function handleTuiKey(state: TuiState, key: string): TuiEffect {
     return navigateBack(state);
   }
 
+  // Path row uses cel-tui TextInput; typing is driven by onChange, not root onKeyPress.
+  if (state.screen === "customSource" && state.cursor === 0) {
+    return { type: "none" };
+  }
+
   switch (state.screen) {
     case "dashboard":
       return handleDashboardKey(state, key);
     case "source":
       return handleSourceKey(state, key);
     case "customSource":
-      return handleCustomSourceKey(state, key);
+      return handleCustomSourceListKey(state, key);
     case "presets":
       return handlePresetsKey(state, key);
     case "platforms":
@@ -293,18 +315,77 @@ function handleSourceKey(state: TuiState, key: string): TuiEffect {
     state.destinationMode = "global";
     state.screen = "dashboard";
   } else if (state.cursor === 2) {
-    state.textInput = state.customSource;
-    state.screen = "customSource";
-    state.cursor = 0;
+    openCustomSourceInput(state);
   } else {
     state.screen = "dashboard";
   }
-  state.cursor = 0;
-  state.notice = "";
+  if (state.screen !== "customSource") {
+    state.cursor = 0;
+    state.notice = "";
+  }
   return { type: "none" };
 }
 
-function handleCustomSourceKey(state: TuiState, key: string): TuiEffect {
+/** Called from TextInput `onKeyPress` when editing the custom path (cursor on path row). */
+export function handleCustomSourceTextInputKey(state: TuiState, key: string): CustomSourceTextInputKeyResult {
+  key = normalizeKey(key);
+  if (state.screen !== "customSource" || state.cursor !== 0) {
+    return { effect: { type: "none" }, preventDefault: false };
+  }
+  if (isDuplicateKeyEvent(key)) {
+    return { effect: { type: "none" }, preventDefault: true };
+  }
+
+  const direction = getNavigationDirection(key);
+  if (direction) {
+    moveCursor(state, key, state.recentCustomSources.length);
+    state.notice = "";
+    return { effect: { type: "none" }, preventDefault: true };
+  }
+
+  if (isAnyKey(key, "escape")) {
+    state.screen = "source";
+    state.cursor = 2;
+    return { effect: { type: "none" }, preventDefault: true };
+  }
+
+  if (isConfirmKey(key)) {
+    commitCustomSourceIfValid(state);
+    return { effect: { type: "none" }, preventDefault: true };
+  }
+
+  if (isPasteKey(key)) {
+    return { effect: { type: "pasteClipboard" }, preventDefault: true };
+  }
+
+  return { effect: { type: "none" }, preventDefault: false };
+}
+
+/** Sync TextInput value from cel-tui `onChange` while on the custom path screen. */
+export function applyCustomSourceTextInputChange(state: TuiState, value: string): void {
+  if (state.screen !== "customSource") return;
+  state.textInput = value;
+  state.cursor = 0;
+  state.notice = "";
+}
+
+function commitCustomSourceIfValid(state: TuiState): boolean {
+  const value = state.textInput.trim();
+  if (!value) {
+    state.notice = "Enter a custom source path first.";
+    return false;
+  }
+  state.customSource = value;
+  state.recentCustomSources = rememberCustomSource(state.recentCustomSources, value);
+  state.sourceMode = "custom";
+  state.destinationMode = "project";
+  state.screen = "dashboard";
+  state.cursor = 0;
+  state.notice = "";
+  return true;
+}
+
+function handleCustomSourceListKey(state: TuiState, key: string): TuiEffect {
   moveCursor(state, key, state.recentCustomSources.length);
   if (getNavigationDirection(key)) return { type: "none" };
 
@@ -325,25 +406,12 @@ function handleCustomSourceKey(state: TuiState, key: string): TuiEffect {
       const selectedRecent = state.recentCustomSources[state.cursor - 1];
       if (selectedRecent) state.textInput = selectedRecent;
     }
-
-    const value = state.textInput.trim();
-    if (!value) {
-      state.notice = "Enter a custom source path first.";
-      return { type: "none" };
-    }
-    state.customSource = value;
-    state.recentCustomSources = rememberCustomSource(state.recentCustomSources, value);
-    state.sourceMode = "custom";
-    state.destinationMode = "project";
-    state.screen = "dashboard";
-    state.cursor = 0;
-    state.notice = "";
+    commitCustomSourceIfValid(state);
     return { type: "none" };
   }
 
   if (isPasteKey(key)) return { type: "pasteClipboard" };
 
-  appendTextInput(state, key);
   return { type: "none" };
 }
 

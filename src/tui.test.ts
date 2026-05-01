@@ -11,6 +11,7 @@ mock.module("@cel-tui/core", () => ({
   VStack: (...args: unknown[]) => args,
   HStack: (...args: unknown[]) => args,
   Text: (...args: unknown[]) => args,
+  TextInput: (...args: unknown[]) => args,
   cel: {
     init: mock(() => {}),
     viewport: mock(() => {}),

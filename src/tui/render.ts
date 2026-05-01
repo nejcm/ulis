@@ -1,4 +1,4 @@
-import { HStack, Text, VStack, type Color } from "@cel-tui/core";
+import { HStack, Text, TextInput, VStack, type Color, type Node } from "@cel-tui/core";
 
 import { PLATFORM_DESCRIPTIONS, PLATFORM_LABELS, PLATFORMS, type Platform } from "../platforms.js";
 import {
@@ -28,14 +28,19 @@ const TITLE = [
 ].join("\n");
 const SUBTITLE = `ULIS - Unified LLM Interface Specification. Define AI configs once, then generate native configs for each tool.`;
 
-export function renderScreen(state: TuiState) {
+export interface CustomSourceHandlers {
+  readonly onCustomSourceChange: (value: string) => void;
+  readonly onCustomSourceKeyPress: (key: string) => boolean | undefined;
+}
+
+export function renderScreen(state: TuiState, customSourceHandlers?: CustomSourceHandlers) {
   switch (state.screen) {
     case "dashboard":
       return renderDashboard(state);
     case "source":
       return renderSourceSelection(state);
     case "customSource":
-      return renderCustomSource(state);
+      return renderCustomSource(state, customSourceHandlers);
     case "presets":
       return renderPresets(state);
     case "platforms":
@@ -114,26 +119,128 @@ function renderSourceSelection(state: TuiState) {
   ]);
 }
 
-function renderCustomSource(state: TuiState) {
-  const lines: UiLine[] = [selectableLine(state.cursor, 0, `Path: ${state.textInput || "_"}`), { text: "" }];
-
+function renderCustomSource(state: TuiState, handlers?: CustomSourceHandlers) {
+  const recentLines: UiLine[] = [];
   if (state.recentCustomSources.length > 0) {
-    lines.push({ text: "Recent custom sources", fgColor: "color06", bold: true });
+    recentLines.push({ text: "Recent custom sources", fgColor: "color06", bold: true });
     for (let index = 0; index < state.recentCustomSources.length; index++) {
       const source = state.recentCustomSources[index];
       if (!source) continue;
-      lines.push(selectableLine(state.cursor, index + 1, source));
+      recentLines.push(selectableLine(state.cursor, index + 1, source));
     }
-    lines.push({ text: "" });
+    recentLines.push({ text: "" });
   }
 
-  lines.push({
-    text:
-      state.notice || "Type to edit. Enter saves the current path. Use Up/Down to pick recent paths. Escape cancels.",
+  recentLines.push({
+    text: state.notice || "Edit the path above. Enter saves. Up/Down moves to recents when present. Escape cancels.",
     fgColor: state.notice ? "color03" : "color08",
   });
 
-  return renderCard("Custom Source Path", "Type a source directory path, then press Enter.", lines);
+  return renderCardShell("Custom Source Path", "Type a source directory path, then press Enter.", [
+    VStack(
+      {
+        width: "100%",
+        padding: { x: 1 },
+        alignItems: "stretch",
+      },
+      [
+        TextInput({
+          value: state.textInput,
+          focused: state.cursor === 0,
+          minHeight: 2,
+          maxHeight: 6,
+          width: "100%",
+          padding: { x: 1 },
+          placeholder: Text("Path to .ulis or a parent directory…", {
+            fgColor: "color08",
+            italic: true,
+          }),
+          onChange: handlers?.onCustomSourceChange ?? (() => undefined),
+          onKeyPress: handlers?.onCustomSourceKeyPress,
+        }),
+      ],
+    ),
+    ...recentLines.map(renderUiLine),
+  ]);
+}
+
+function renderUiLine(line: UiLine): Node {
+  return line.value == null
+    ? VStack(
+        {
+          width: "100%",
+          fgColor: line.fgColor,
+          padding: { x: 1 + (line.indent ?? 0) },
+          alignItems: "stretch",
+        },
+        [Text(line.text || " ", { bold: line.bold, wrap: "word" })],
+      )
+    : HStack(
+        {
+          width: "100%",
+          fgColor: line.fgColor,
+          padding: { x: 1 + (line.indent ?? 0) },
+          alignItems: "start",
+          justifyContent: "space-between",
+        },
+        [
+          Text(line.text || " ", { bold: line.bold, wrap: "word" }),
+          Text(line.value, { bold: line.bold, fgColor: "color06", wrap: "word" }),
+        ],
+      );
+}
+
+function renderCardShell(title: string, subtitle: string, children: readonly Node[]) {
+  return VStack(
+    {
+      width: "92%",
+      maxWidth: CARD_MAX_WIDTH,
+      fgColor: "color07",
+      gap: 0,
+      alignItems: "stretch",
+    },
+    [
+      VStack(
+        {
+          width: "100%",
+          padding: { x: 1, y: 1 },
+          alignItems: "stretch",
+        },
+        [Text(title, { bold: true, wrap: "word", fgColor: "color06" })],
+      ),
+      VStack(
+        {
+          width: "100%",
+          padding: { x: 1 },
+          alignItems: "stretch",
+        },
+        [Text(subtitle, { wrap: "word", fgColor: "color08" })],
+      ),
+      VStack(
+        {
+          width: "100%",
+          padding: { x: 1 },
+          alignItems: "stretch",
+        },
+        [Text(" ")],
+      ),
+      ...children,
+      VStack(
+        {
+          width: "100%",
+          fgColor: "color08",
+          padding: { x: 1 },
+          alignItems: "stretch",
+        },
+        [
+          Text(
+            "Controls: j/k or arrows to move, Enter to continue, Backspace to go back, x/space to toggle, q to quit",
+            { wrap: "word" },
+          ),
+        ],
+      ),
+    ],
+  );
 }
 
 function renderPresets(state: TuiState) {
@@ -226,80 +333,7 @@ function renderLogLines(state: TuiState): UiLine[] {
 }
 
 function renderCard(title: string, subtitle: string, lines: readonly UiLine[]) {
-  return VStack(
-    {
-      width: "92%",
-      maxWidth: CARD_MAX_WIDTH,
-      fgColor: "color07",
-      gap: 0,
-      alignItems: "stretch",
-    },
-    [
-      VStack(
-        {
-          width: "100%",
-          padding: { x: 1, y: 1 },
-          alignItems: "stretch",
-        },
-        [Text(title, { bold: true, wrap: "word", fgColor: "color06" })],
-      ),
-      VStack(
-        {
-          width: "100%",
-          padding: { x: 1 },
-          alignItems: "stretch",
-        },
-        [Text(subtitle, { wrap: "word", fgColor: "color08" })],
-      ),
-      VStack(
-        {
-          width: "100%",
-          padding: { x: 1 },
-          alignItems: "stretch",
-        },
-        [Text(" ")],
-      ),
-      ...lines.map((line) =>
-        line.value == null
-          ? VStack(
-              {
-                width: "100%",
-                fgColor: line.fgColor,
-                padding: { x: 1 + (line.indent ?? 0) },
-                alignItems: "stretch",
-              },
-              [Text(line.text || " ", { bold: line.bold, wrap: "word" })],
-            )
-          : HStack(
-              {
-                width: "100%",
-                fgColor: line.fgColor,
-                padding: { x: 1 + (line.indent ?? 0) },
-                alignItems: "start",
-                justifyContent: "space-between",
-              },
-              [
-                Text(line.text || " ", { bold: line.bold, wrap: "word" }),
-                Text(line.value, { bold: line.bold, fgColor: "color06", wrap: "word" }),
-              ],
-            ),
-      ),
-      VStack(
-        {
-          width: "100%",
-          fgColor: "color08",
-          padding: { x: 1 },
-          alignItems: "stretch",
-        },
-        [
-          Text(
-            "Controls: j/k or arrows to move, Enter to continue, Backspace to go back, x/space to toggle, q to quit",
-            { wrap: "word" },
-          ),
-        ],
-      ),
-    ],
-  );
+  return renderCardShell(title, subtitle, lines.map(renderUiLine));
 }
 
 function selectableLine(cursor: number, index: number, text: string): UiLine {
