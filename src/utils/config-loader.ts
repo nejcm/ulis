@@ -1,9 +1,50 @@
 import { join } from "node:path";
 
 import { parse as parseYaml } from "yaml";
-import type { z } from "zod";
+import { ZodError, type z } from "zod";
 
 import { fileExists, readFile } from "./fs.js";
+
+function formatSchemaError(cause: unknown): string {
+  if (cause instanceof ZodError) {
+    return cause.issues.map((i) => `${i.path.join(".") || "(root)"} — ${i.message}`).join("; ");
+  }
+  if (cause instanceof Error) return cause.message;
+  return String(cause);
+}
+
+/**
+ * Run `schema.parse(raw)` and attach `baseName` + resolved file path to validation errors.
+ */
+export function parseConfigOrThrow<T>(
+  schema: z.ZodType<T>,
+  raw: unknown,
+  baseName: string,
+  filePath: string | undefined,
+): T {
+  try {
+    return schema.parse(raw);
+  } catch (err) {
+    const location = filePath ?? `${baseName}.{yaml,yml,json}`;
+    throw new Error(`Failed to validate ${baseName} (${location}): ${formatSchemaError(err)}`);
+  }
+}
+
+function configCandidates(baseName: string): readonly string[] {
+  return [`${baseName}.yaml`, `${baseName}.yml`, `${baseName}.json`];
+}
+
+/**
+ * Absolute path to the first existing file that {@link loadConfigFile} would read
+ * (same `.yaml` → `.yml` → `.json` precedence).
+ */
+export function resolveLoadedConfigPath(dir: string, baseName: string): string | undefined {
+  for (const candidate of configCandidates(baseName)) {
+    const filePath = join(dir, candidate);
+    if (fileExists(filePath)) return filePath;
+  }
+  return undefined;
+}
 
 interface BaseValidatedConfigOptions<T> {
   readonly dir: string;
@@ -34,9 +75,7 @@ type OptionalValidatedConfigOptions<T> = BaseValidatedConfigOptions<T> & {
  * fallback for legacy JSON-based layouts.
  */
 export function loadConfigFile(dir: string, baseName: string): unknown | undefined {
-  const candidates = [`${baseName}.yaml`, `${baseName}.yml`, `${baseName}.json`];
-
-  for (const candidate of candidates) {
+  for (const candidate of configCandidates(baseName)) {
     const filePath = join(dir, candidate);
     if (!fileExists(filePath)) continue;
 
@@ -80,5 +119,6 @@ export function loadValidatedConfigFile<T>(
     return undefined;
   }
 
-  return options.schema.parse(raw);
+  const filePath = resolveLoadedConfigPath(options.dir, options.baseName);
+  return parseConfigOrThrow(options.schema, raw, options.baseName, filePath);
 }

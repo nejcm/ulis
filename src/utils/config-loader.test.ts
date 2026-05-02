@@ -96,10 +96,13 @@ describe("loadValidatedConfigFile", () => {
     );
   });
 
-  it("surfaces Zod validation failures from the validated helper", () => {
+  it("surfaces Zod validation failures from the validated helper with file path", () => {
     const root = createTempRoot();
+    const filePath = join(root, "config.yaml");
     writeConfig(root, "config.yaml", "count: 1\n");
 
-    expect(() => loadValidatedConfigFile({ dir: root, baseName: "config", schema: Schema, required: true })).toThrow();
+    expect(() => loadValidatedConfigFile({ dir: root, baseName: "config", schema: Schema, required: true })).toThrow(
+      `Failed to validate config (${filePath}):`,
+    );
   });
 });

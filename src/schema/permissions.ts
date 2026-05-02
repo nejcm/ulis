@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { CLAUDE_PERMISSION_MODES, CODEX_APPROVAL_MODES } from "../constants.js";
+import { emptyYamlAsEmptyObject } from "../utils/yaml.js";
 
 const PermissionActionSchema = z.enum(["allow", "ask", "deny"]);
 const PermissionRuleSchema = z.union([
@@ -8,8 +9,8 @@ const PermissionRuleSchema = z.union([
   z.record(z.string(), PermissionActionSchema), // pattern → action
 ]);
 
-export const PermissionsConfigSchema = z
-  .object({
+export const PermissionsConfigSchema = emptyYamlAsEmptyObject(
+  z.object({
     claude: z
       .object({
         defaultMode: z.enum(CLAUDE_PERMISSION_MODES).optional(),
@@ -63,7 +64,7 @@ export const PermissionsConfigSchema = z
         terminalAllowlist: z.array(z.string()).optional(),
       })
       .optional(),
-  })
-  .optional();
+  }),
+);
 
 export type PermissionsConfig = z.infer<typeof PermissionsConfigSchema>;

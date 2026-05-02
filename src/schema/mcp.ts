@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { emptyYamlAsEmptyObject } from "../utils/yaml.js";
+
 export const McpServerSchema = z.object({
   type: z.enum(["local", "remote"]),
   // For remote servers: transport type used when emitting to platforms that need it (e.g. Claude Code).
@@ -24,9 +26,11 @@ export const McpServerSchema = z.object({
   targets: z.array(z.string()).optional(),
 });
 
-export const McpConfigSchema = z.object({
-  servers: z.record(z.string(), McpServerSchema).default({}),
-});
+export const McpConfigSchema = emptyYamlAsEmptyObject(
+  z.object({
+    servers: z.record(z.string(), McpServerSchema).default({}),
+  }),
+);
 
 export type McpServer = z.infer<typeof McpServerSchema>;
 export type McpConfig = z.infer<typeof McpConfigSchema>;
