@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { emptyYamlAsEmptyObject } from "../utils/yaml";
+
 export const PluginSchema = z.object({
   name: z.string(),
   source: z.string(),
@@ -13,16 +15,15 @@ const PER_PLATFORM_PLUGINS_SCHEMA = z
   .optional()
   .nullable();
 
-export const PluginsConfigSchema = z
-  .object({
+export const PluginsConfigSchema = emptyYamlAsEmptyObject(
+  z.object({
     "*": PER_PLATFORM_PLUGINS_SCHEMA,
     claude: PER_PLATFORM_PLUGINS_SCHEMA,
     opencode: PER_PLATFORM_PLUGINS_SCHEMA,
     codex: PER_PLATFORM_PLUGINS_SCHEMA,
     cursor: PER_PLATFORM_PLUGINS_SCHEMA,
-  })
-  .optional()
-  .nullable();
+  }),
+);
 
 /**
  * @deprecated Use `PluginSchema` instead.

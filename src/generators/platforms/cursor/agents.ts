@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { ParsedAgent } from "../../../parsers/agent.js";
 import { buildPolicyCommentBlock } from "../../../utils/policy-comments.js";
 import { mapTools } from "../../../utils/tool-mapper.js";
-import { extraToYamlLines } from "../../shared/yaml.js";
+import { extraToYamlLines } from "../../shared/yaml";
 import type { FileArtifact } from "../../types.js";
 
 export function buildCursorAgentArtifact(agent: ParsedAgent): FileArtifact {

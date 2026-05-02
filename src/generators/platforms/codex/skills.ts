@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { ParsedSkill } from "../../../parsers/skill.js";
 import { fileExists, readFile } from "../../../utils/fs.js";
 import { toPlatformSkillMarkdown } from "../../../utils/skill-frontmatter.js";
-import { extraToYamlLines } from "../../shared/yaml.js";
+import { extraToYamlLines } from "../../shared/yaml";
 import type { FileArtifact } from "../../types.js";
 import { toYamlString } from "./format.js";
 

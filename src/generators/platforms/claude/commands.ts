@@ -2,7 +2,7 @@ import { join } from "node:path";
 
 import { parseCommands } from "../../../parsers/command.js";
 import { fileExists } from "../../../utils/fs.js";
-import { serializeYamlFrontmatter } from "../../shared/yaml.js";
+import { serializeYamlFrontmatter } from "../../shared/yaml";
 import type { FileArtifact } from "../../types.js";
 
 export function buildClaudeCommandArtifacts(sourceDir: string): FileArtifact[] {

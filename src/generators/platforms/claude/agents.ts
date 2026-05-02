@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { ParsedAgent } from "../../../parsers/agent.js";
 import { buildPolicyCommentBlock } from "../../../utils/policy-comments.js";
 import { mapTools } from "../../../utils/tool-mapper.js";
-import { extraToYamlLines, toYamlScalar } from "../../shared/yaml.js";
+import { extraToYamlLines, toYamlScalar } from "../../shared/yaml";
 import type { FileArtifact } from "../../types.js";
 
 /** Serialize the YAML frontmatter block for a Claude subagent. */
