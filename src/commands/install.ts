@@ -14,6 +14,8 @@ export interface InstallCmdOptions extends BuildCmdOptions {
   readonly yes?: boolean;
   readonly backup?: boolean;
   readonly rebuild?: boolean;
+  readonly runner?: "npx" | "bunx";
+  readonly extensions?: boolean;
 }
 
 /**
@@ -48,6 +50,8 @@ export async function installCmd(options: InstallCmdOptions = {}): Promise<void>
     rebuild: options.rebuild ?? true,
     logger: log,
     presets,
+    runner: options.runner,
+    installExtensions: options.extensions ?? true,
   });
 }
 

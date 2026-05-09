@@ -28,6 +28,12 @@ function resolvePackageVersion(): string {
   return "0.0.0";
 }
 
+function parseRunner(value: unknown): "npx" | "bunx" | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (value === "npx" || value === "bunx") return value;
+  throw new Error(`Invalid --runner: "${String(value)}". Expected "npx" or "bunx".`);
+}
+
 async function main(): Promise<void> {
   const cli = cac("ulis");
 
@@ -45,6 +51,8 @@ async function main(): Promise<void> {
     .option("--no-rebuild", "Skip the build step and install existing generated output")
     .option("--backup", "Back up existing platform dirs before overwriting")
     .option("--preset <names>", "Apply user-global or bundled preset(s) (comma-separated)")
+    .option("--runner <name>", "Package runner used for extension installs (npx | bunx)")
+    .option("--no-extensions", "Skip running entries from extensions.yaml")
     .action((options) =>
       installCmd({
         global: Boolean(options.global),
@@ -54,6 +62,8 @@ async function main(): Promise<void> {
         rebuild: options.rebuild !== false,
         backup: Boolean(options.backup),
         preset: options.preset,
+        runner: parseRunner(options.runner),
+        extensions: options.extensions !== false,
       }),
     );
 

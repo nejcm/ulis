@@ -5,6 +5,7 @@ import { basename, join, resolve } from "node:path";
 
 import { runBuild, type Logger } from "./build.js";
 import { ULIS_GENERATED_DIRNAME } from "./config.js";
+import { loadExtensions, mergeExtensionsConfigs } from "./parsers/extensions.js";
 import { loadPlugins } from "./parsers/plugins.js";
 import { loadSkills, mergeSkillsConfigs } from "./parsers/skills.js";
 import {
@@ -17,9 +18,12 @@ import {
   uniquePlatforms,
   type Platform,
 } from "./platforms.js";
-import { type PluginsConfig, type SkillsConfig } from "./schema.js";
+import { UlisConfigSchema, type ExtensionsConfig, type PluginsConfig, type SkillsConfig } from "./schema.js";
+import { loadValidatedConfigFile } from "./utils/config-loader.js";
 import { logger as defaultLogger } from "./utils/logger.js";
 import type { ResolvedPreset } from "./utils/resolve-presets.js";
+
+export type Runner = "npx" | "bunx";
 
 export interface InstallOptions {
   readonly platforms?: readonly Platform[];
@@ -43,6 +47,10 @@ export interface InstallOptions {
   readonly userHome?: string;
   /** Resolved presets to merge at build time and for external skill installs. */
   readonly presets?: readonly ResolvedPreset[];
+  /** Override the package runner used for `extensions.yaml` entries. */
+  readonly runner?: Runner;
+  /** When false, skip running extensions installers (`extensions.yaml`). */
+  readonly installExtensions?: boolean;
 }
 
 class InstallError extends Error {
@@ -136,6 +144,19 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
     ...(options.presets ?? []).map((preset) => loadSkills(preset.dir)),
     loadSkills(sourceDir),
   ]);
+  const extensionsConfig = mergeExtensionsConfigs([
+    ...(options.presets ?? []).map((preset) => loadExtensions(preset.dir)),
+    loadExtensions(sourceDir),
+  ]);
+
+  const installExtensionsEnabled = options.installExtensions ?? true;
+  const ulisConfig = loadValidatedConfigFile({
+    dir: sourceDir,
+    baseName: "config",
+    schema: UlisConfigSchema,
+    defaultValue: { version: 1, name: "ulis" },
+  });
+  const runner = resolveRunner({ cliFlag: options.runner, configValue: ulisConfig.runner });
 
   const timestamp = makeTimestamp();
   for (const platform of platforms) {
@@ -148,6 +169,9 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
       timestamp,
       plugins,
       skills: skillsConfig,
+      extensions: extensionsConfig,
+      runner,
+      installExtensionsEnabled,
       logger,
     };
     switch (platform) {
@@ -175,6 +199,14 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
     installSkills(allSkills, "*", destBase, globalInstall, logger);
   }
 
+  if (installExtensionsEnabled) {
+    const allExtensions = extensionsConfig["*"]?.extensions ?? [];
+    if (allExtensions.length > 0) {
+      logHeader(logger, "Installing Extensions");
+      installExtensions(allExtensions, "*", destBase, runner, logger);
+    }
+  }
+
   logHeader(logger, "Installation Complete");
   return platforms;
 }
@@ -188,6 +220,9 @@ interface InstallContext {
   readonly timestamp: string;
   readonly plugins: PluginsConfig;
   readonly skills: SkillsConfig;
+  readonly extensions: ExtensionsConfig;
+  readonly runner: Runner;
+  readonly installExtensionsEnabled: boolean;
   readonly logger?: Logger;
 }
 
@@ -204,6 +239,8 @@ function installOpencode(context: InstallContext): void {
   if (skills.length > 0) {
     installSkills(skills, "opencode", context.destBase, context.globalInstall, context.logger);
   }
+
+  runPlatformExtensions(context, "opencode");
 }
 
 function installClaude(context: InstallContext): void {
@@ -248,6 +285,8 @@ function installClaude(context: InstallContext): void {
   if (claudeSkills.length > 0) {
     installSkills(claudeSkills, "claude", context.destBase, context.globalInstall, context.logger);
   }
+
+  runPlatformExtensions(context, "claude");
 }
 
 function installCodex(context: InstallContext): void {
@@ -261,6 +300,8 @@ function installCodex(context: InstallContext): void {
   if (skills.length > 0) {
     installSkills(skills, "codex", context.destBase, context.globalInstall, context.logger);
   }
+
+  runPlatformExtensions(context, "codex");
 }
 
 function installCursor(context: InstallContext): void {
@@ -290,6 +331,8 @@ function installCursor(context: InstallContext): void {
   if (skills.length > 0) {
     installSkills(skills, "cursor", context.destBase, context.globalInstall, context.logger);
   }
+
+  runPlatformExtensions(context, "cursor");
 }
 
 function installForgecode(context: InstallContext): void {
@@ -325,6 +368,8 @@ function installForgecode(context: InstallContext): void {
       logSuccess(context.logger, ".mcp.json (copied)");
     }
   }
+
+  runPlatformExtensions(context, "forgecode");
 }
 
 function copyPlatformContents(
@@ -502,6 +547,68 @@ function installSkills(
     }
     logSuccess(logger, `${platform} skill: ${skill.key ?? skill.name}`);
   }
+}
+
+function runPlatformExtensions(context: InstallContext, platform: Platform): void {
+  if (!context.installExtensionsEnabled) return;
+  const entries = context.extensions[platform]?.extensions ?? [];
+  if (entries.length === 0) return;
+  installExtensions(entries, platform, context.destBase, context.runner, context.logger);
+}
+
+function installExtensions(
+  extensions: readonly { key?: string; name: string; args?: readonly string[] }[],
+  platform: Platform | "*",
+  installBaseDir: string,
+  runner: Runner,
+  logger?: Logger,
+): void {
+  if (extensions.length === 0) return;
+  if (!commandExists(runner)) {
+    logWarn(logger, `${runner} not found on PATH - skipping ${platform} extensions.`);
+    return;
+  }
+
+  for (const extension of extensions) {
+    const args = [extension.name, ...(extension.args ?? [])];
+    logInfo(logger, `Will run: ${runner} ${args.join(" ")}`);
+
+    const result = runCommand(runner, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      cwd: installBaseDir,
+      shell: process.platform === "win32",
+      encoding: "utf8",
+    });
+    if (result.status !== 0) {
+      const combined = `${result.stdout ?? ""}\n${result.stderr ?? ""}`
+        .replace(/\u001b\[[0-9;]*m/gu, "")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      const detail = combined[combined.length - 1] || result.error?.message || `exit ${result.status}`;
+      logWarn(logger, `Failed to install ${platform} extension: ${extension.key ?? extension.name} (${detail})`);
+      continue;
+    }
+    logSuccess(logger, `${platform} extension: ${extension.key ?? extension.name}`);
+  }
+}
+
+/**
+ * Resolve which package runner to use for `extensions.yaml` entries.
+ * Precedence: CLI flag → config.yaml → auto-detect (`bunx` if present, else `npx`).
+ */
+export function resolveRunner({
+  cliFlag,
+  configValue,
+  hasCommand = commandExists,
+}: {
+  cliFlag?: Runner;
+  configValue?: Runner;
+  hasCommand?: (cmd: string) => boolean;
+}): Runner {
+  if (cliFlag) return cliFlag;
+  if (configValue) return configValue;
+  return hasCommand("bunx") ? "bunx" : "npx";
 }
 
 function commandExists(command: string): boolean {
