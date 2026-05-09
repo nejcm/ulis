@@ -62,23 +62,6 @@ const PERMISSIONS_TEMPLATE = `# yaml-language-server: $schema={{schemaBase}}/per
 #   terminalAllowlist: []
 `;
 
-const PLUGINS_TEMPLATE = `# yaml-language-server: $schema={{schemaBase}}/plugins.schema.json
-
-# Declarative Claude Code marketplace plugin installs.
-# Only "claude" is meaningful here today — other platforms don't have a
-# marketplace concept. Skills live in skills.yaml.
-#
-# Example:
-#
-# claude:
-#   plugins:
-#     - name: frontend-design
-#       source: official
-#     - name: everything-claude-code
-#       source: github
-#       repo: affaan-m/everything-claude-code
-`;
-
 const SKILLS_TEMPLATE = `# yaml-language-server: $schema={{schemaBase}}/skills.schema.json
 
 # Declarative skill installs per platform (via the \`skills\` CLI).
@@ -151,10 +134,6 @@ export function renderMcp(context: ScaffoldContext): string {
 
 export function renderPermissions(context: ScaffoldContext): string {
   return substitute(PERMISSIONS_TEMPLATE, context);
-}
-
-export function renderPlugins(context: ScaffoldContext): string {
-  return substitute(PLUGINS_TEMPLATE, context);
 }
 
 export function renderSkills(context: ScaffoldContext): string {

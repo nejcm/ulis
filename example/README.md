@@ -13,7 +13,6 @@ ulis build --source example
 - `config.yaml` - minimal project metadata
 - `mcp.yaml` - MCP servers
 - `permissions.yaml` - per-platform permissions
-- `plugins.yaml` - plugin installs
 - `skills.yaml` - external skill installs
 - `agents/` - agent markdown files
 - `skills/` - skill directories (`SKILL.md`)

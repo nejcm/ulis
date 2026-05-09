@@ -10,7 +10,6 @@ import {
   renderExtensions,
   renderMcp,
   renderPermissions,
-  renderPlugins,
   renderRuleCodeStyle,
   renderSkills,
   type ScaffoldContext,
@@ -58,7 +57,6 @@ export async function initCmd(options: InitOptions = {}): Promise<void> {
   writeFileSync(join(targetDir, "config.yaml"), renderConfig(context));
   writeFileSync(join(targetDir, "mcp.yaml"), renderMcp(context));
   writeFileSync(join(targetDir, "permissions.yaml"), renderPermissions(context));
-  writeFileSync(join(targetDir, "plugins.yaml"), renderPlugins(context));
   writeFileSync(join(targetDir, "skills.yaml"), renderSkills(context));
   writeFileSync(join(targetDir, "extensions.yaml"), renderExtensions(context));
   writeFileSync(join(targetDir, "rules", "code-style.md"), renderRuleCodeStyle(context));

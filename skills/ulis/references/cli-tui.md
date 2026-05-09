@@ -88,7 +88,6 @@ Use the TUI when the user wants:
 - `config.yaml` for source metadata
 - `mcp.yaml` for MCP servers
 - `permissions.yaml` for per-platform permissions
-- `plugins.yaml` for Claude marketplace plugins
 - `skills.yaml` for external skill installs
 - `agents/` for agent markdown files
 - `skills/` for local skill directories

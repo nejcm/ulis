@@ -68,7 +68,6 @@ This creates:
 ├── config.yaml          # version + project name
 ├── mcp.yaml             # MCP server definitions
 ├── permissions.yaml     # per-platform access rules
-├── plugins.yaml         # Claude marketplace plugin installs
 ├── skills.yaml          # external skill installs (per platform)
 ├── extensions.yaml      # third-party CLI extension installs (per platform)
 ├── agents/              # agent definitions (.md with frontmatter)
@@ -201,7 +200,6 @@ You can define:
 - `config.yaml` – project identity
 - `mcp.yaml` – MCP servers shared across platforms
 - `permissions.yaml` – per-platform read/write/bash access rules
-- `plugins.yaml` – Claude Code marketplace plugins
 - `skills.yaml` – external skill installs
 - `extensions.yaml` – third-party CLI extension installs (run via `npx`/`bunx`)
 - `agents/*.md` – agents (prompt + frontmatter)
@@ -224,7 +222,7 @@ For the full field-level schema and examples, see [docs/REFERENCE.md](docs/REFER
 
 `settings.json`, `.claude.json`, `mcp.json`, and ForgeCode's `.forge/.mcp.json` are deep-merged so user content outside `ulis`-managed keys is preserved. With `--backup`, existing platform directories/files are copied aside before overwriting.
 
-`ulis install` runs phases in this order: **build → files → plugins → skills → extensions**. Extensions run last because they typically mutate the same files ulis just deployed.
+`ulis install` runs phases in this order: **build → files → skills → extensions**. Extensions run last because they typically mutate the same files ulis just deployed.
 
 ---
 
@@ -296,7 +294,7 @@ bun run build      # bundles dist/cli.js + regenerates dist/schemas + schemas/ (
 src/
   cli.ts                   # cac entry point (compiled to dist/cli.js)
   commands/                # init, install, build, tui
-  parsers/                 # agent, skill, mcp, plugins, permissions loaders
+  parsers/                 # agent, skill, mcp, permissions loaders
   generators/              # claude, opencode, codex, cursor, forgecode
   schema/                  # Zod schemas (ulis-config, agent, mcp, …)
   scaffold/                # inline templates used by `ulis init`

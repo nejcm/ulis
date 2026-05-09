@@ -24,7 +24,7 @@ ulis init [-g | --global]
 
 **Project mode:**
 
-1. Creates `./.ulis/` with `config.yaml`, `mcp.yaml`, `permissions.yaml`, `plugins.yaml`, `skills.yaml`, `extensions.yaml`, and empty `agents/`, `skills/`, `commands/`, `raw/` subfolders.
+1. Creates `./.ulis/` with `config.yaml`, `mcp.yaml`, `permissions.yaml`, `skills.yaml`, `extensions.yaml`, and empty `agents/`, `skills/`, `commands/`, `raw/` subfolders.
 2. Reads the project name from `./package.json` (falls back to the directory name).
 3. Appends `/.ulis/generated/` to `.gitignore` (creating the file if missing).
 4. Prints a hint suggesting you also gitignore `./.claude/`, `./.cursor/`, `./.codex/`, `./.opencode/`, and `./.forge/` if you don't want to commit generated configs.

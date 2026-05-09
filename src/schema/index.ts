@@ -3,7 +3,6 @@ export * from "./command.js";
 export * from "./extensions.js";
 export * from "./mcp.js";
 export * from "./permissions.js";
-export * from "./plugins.js";
 export * from "./preset.js";
 export * from "./rule.js";
 export * from "./shared.js";

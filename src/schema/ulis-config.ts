@@ -6,7 +6,7 @@ import { emptyYamlAsEmptyObject } from "../utils/yaml.js";
  * Top-level schema for `.ulis/config.yaml`.
  *
  * Kept intentionally minimal in v1. Platform- and agent-level options live
- * in their own files (`mcp.yaml`, `permissions.yaml`, `plugins.yaml`, and
+ * in their own files (`mcp.yaml`, `permissions.yaml`, and
  * per-agent/skill frontmatter).
  */
 export const UlisConfigSchema = emptyYamlAsEmptyObject(

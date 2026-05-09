@@ -15,7 +15,6 @@ This page shows small, copyable examples for each `.ulis/` source type. Put thes
 ├── config.yaml
 ├── mcp.yaml
 ├── permissions.yaml
-├── plugins.yaml
 ├── skills.yaml
 ├── agents/
 │   └── builder.md
@@ -279,20 +278,6 @@ cursor:
   terminalAllowlist:
     - bun
     - git status
-```
-
-## Plugins
-
-`plugins.yaml` declares Claude Code marketplace plugins. Sections can be platform-specific or use `"*"` as a shared section.
-
-```yaml
-claude:
-  plugins:
-    - name: frontend-design
-      source: official
-    - name: everything-claude-code
-      source: github
-      repo: affaan-m/everything-claude-code
 ```
 
 ## External Skills

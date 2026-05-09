@@ -14,9 +14,6 @@ For narrative explanation of how entities relate and how the build pipeline work
 ## MCP Config
 
 
-## Plugins Config
-
-
 ## Skills Config
 
 

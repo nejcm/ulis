@@ -1,13 +1,12 @@
 import { join } from "node:path";
 
-import type { McpConfig, PermissionsConfig, PluginsConfig, UlisConfig } from "../schema.js";
+import type { McpConfig, PermissionsConfig, UlisConfig } from "../schema.js";
 import { AgentFrontmatterSchema, RuleFrontmatterSchema, UlisConfigSchema } from "../schema.js";
 import { loadValidatedConfigFile } from "../utils/config-loader.js";
 import { ParseAggregateError, ParseError, readMarkdownDir } from "./_shared.js";
 import type { ParsedAgent } from "./agent.js";
 import { loadMcp } from "./mcp.js";
 import { loadPermissions } from "./permissions.js";
-import { loadPlugins } from "./plugins.js";
 import type { ParsedRule } from "./rule.js";
 import type { ParsedSkill } from "./skill.js";
 import { collectSkills } from "./skill.js";
@@ -29,7 +28,6 @@ export interface ParsedProject {
   readonly rules: readonly ParsedRule[];
   readonly mcp: McpConfig;
   readonly permissions: PermissionsConfig | undefined;
-  readonly plugins: PluginsConfig | undefined;
   readonly ulisConfig: UlisConfig;
   readonly sourceDir: string;
 }
@@ -77,7 +75,6 @@ export function parseProject(sourceDir: string): ParsedProject {
     rules: rulesResult.items,
     mcp: loadMcp(sourceDir),
     permissions: loadPermissions(sourceDir),
-    plugins: loadPlugins(sourceDir),
     ulisConfig,
     sourceDir,
   };

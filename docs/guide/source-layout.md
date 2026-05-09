@@ -11,7 +11,6 @@ The canonical source tree lives in `.ulis/` (or `~/.ulis/` in global mode).
 ├── config.yaml
 ├── mcp.yaml
 ├── permissions.yaml
-├── plugins.yaml
 ├── skills.yaml
 ├── agents/
 ├── skills/
@@ -25,7 +24,6 @@ The canonical source tree lives in `.ulis/` (or `~/.ulis/` in global mode).
 - `config.yaml`: source version and project name.
 - `mcp.yaml`: MCP server definitions and optional target restrictions.
 - `permissions.yaml`: per-platform access policies.
-- `plugins.yaml`: Claude plugin installs.
 - `skills.yaml`: external skill installs per platform.
 
 ## Content directories

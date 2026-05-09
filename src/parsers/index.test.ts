@@ -33,7 +33,7 @@ describe("parseProject (happy path)", () => {
     expect(p.rules).toEqual([]);
   });
 
-  it("includes mcp, permissions, plugins, ulisConfig, and sourceDir", () => {
+  it("includes mcp, permissions, ulisConfig, and sourceDir", () => {
     const p = parseProject(fixturesDir);
     expect(Object.keys(p.mcp.servers)).toContain("test-local");
     expect(p.ulisConfig.name).toBe("fixtures");

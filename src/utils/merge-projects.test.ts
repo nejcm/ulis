@@ -11,7 +11,6 @@ function project(overrides: Partial<ParsedProject> = {}): ParsedProject {
     rules: [],
     mcp: { servers: {} },
     permissions: undefined,
-    plugins: undefined,
     ulisConfig: { version: 1, name },
     sourceDir: `/tmp/${name}`,
     ...overrides,

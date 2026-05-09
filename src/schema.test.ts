@@ -3,7 +3,6 @@ import { describe, expect, it } from "bun:test";
 import {
   AgentFrontmatterSchema,
   McpConfigSchema,
-  PluginsConfigSchema,
   SkillFrontmatterSchema,
   SkillsConfigSchema,
 } from "./schema.js";
@@ -292,36 +291,6 @@ describe("McpConfigSchema", () => {
         servers: { bad: { type: "websocket", targets: [] } },
       }),
     ).toThrow();
-  });
-});
-
-describe("PluginsConfigSchema", () => {
-  it("parses valid plugins config with claude section", () => {
-    const result = PluginsConfigSchema.parse({
-      claude: {
-        plugins: [{ name: "foo", source: "official" }],
-      },
-    });
-    expect(result?.claude?.plugins?.[0]?.name).toBe("foo");
-  });
-
-  it("parses config with both wildcard and claude sections", () => {
-    const result = PluginsConfigSchema.parse({
-      "*": { plugins: [] },
-      claude: {
-        plugins: [{ name: "frontend-design", source: "official" }],
-      },
-    });
-    expect(result?.claude?.plugins?.[0]?.source).toBe("official");
-  });
-
-  it("parses per-platform plugin sections", () => {
-    const result = PluginsConfigSchema.parse({
-      opencode: { plugins: [{ name: "oc-plugin", source: "official" }] },
-      codex: { plugins: [] },
-      cursor: { plugins: [] },
-    });
-    expect(result?.opencode?.plugins?.[0]?.name).toBe("oc-plugin");
   });
 });
 

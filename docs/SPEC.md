@@ -19,7 +19,6 @@ ULIS is a CLI (`ulis`) that lets you define AI agent configurations **once** and
 │   SKILL.md                  ├── codex/    (config.toml, agents/*.toml, AGENTS.md)
 ├── mcp.yaml          ─────►  ├── cursor/   (agents/*.mdc, skills/, mcp.json)
 │                             └── forgecode/ (AGENTS.md, .forge/agents, .forge/skills, .forge/.mcp.json)
-├── plugins.yaml         (Claude marketplace plugins)
 ├── skills.yaml          (external skill installs)
 ├── extensions.yaml      (third-party CLI extension installs via npx/bunx)
 ├── permissions.yaml
@@ -37,13 +36,13 @@ The generated tree is then copied to the per-platform destination (`./.claude/`,
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  Source: .ulis/  (or ~/.ulis/)                          │
-│  agents/  skills/  mcp.yaml  plugins.yaml  skills.yaml  │
+│  agents/  skills/  mcp.yaml  skills.yaml                │
 └────────────────────────┬────────────────────────────────┘
                          │ gray-matter + Zod parse
                          ▼
 ┌─────────────────────────────────────────────────────────┐
 │  Canonical bundle                                       │
-│  ParsedAgent[]  ParsedSkill[]  McpConfig  PluginsConfig │
+│  ParsedAgent[]  ParsedSkill[]  McpConfig                │
 └──────────┬──────────┬──────────┬──────────┬────────────┘
            │          │          │          │
     generateClaude  generateOpencode  generateCodex  generateCursor  generateForgecode
@@ -193,21 +192,9 @@ Defined once in `.ulis/mcp.yaml` (JSON is also accepted for backwards compatibil
 
 Environment variables use `${VAR}` syntax everywhere. The build translates to platform-specific syntax (OpenCode headers use `{env:VAR}`).
 
-### 3.4 Plugin / Skill / Extension registry entries
+### 3.4 Skill / Extension registry entries
 
-Declarative installs are split into three files:
-
-**`.ulis/plugins.yaml`** — Claude Code marketplace plugins (`claude plugin add --from`):
-
-```yaml
-claude:
-  plugins:
-    - name: frontend-design
-      source: official
-    - name: everything-claude-code
-      source: github
-      repo: affaan-m/everything-claude-code
-```
+Declarative installs are split into two files:
 
 **`.ulis/skills.yaml`** — external skills installed via `npx skills@latest add`, keyed by platform or the `"*"` wildcard:
 
@@ -234,7 +221,6 @@ opencode:
 | ----------------- | -------------- | ---------------------------------------------------------------------------------------- |
 | `skills.yaml`     | `"*"`          | `skills` are installed for **all** platforms via `npx skills@latest add -a <each-agent>` |
 | `skills.yaml`     | `"<platform>"` | `skills` are installed for that platform only (`-a <agent-name>`)                        |
-| `plugins.yaml`    | `"claude"`     | `plugins` are installed via `claude plugin add --from <source>`                          |
 | `extensions.yaml` | `"*"`          | each `extensions` entry runs once via the resolved runner (e.g. `bunx <name> <args>`)    |
 | `extensions.yaml` | `"<platform>"` | runs the entry only when that platform is part of the install target set                 |
 
@@ -246,14 +232,6 @@ Each `skills` entry supports:
 | ------ | -------- | ---------------------------------------------------------------------- |
 | `name` | yes      | Package name, `owner/repo/skill`, or full URL                          |
 | `args` | no       | Additional CLI arguments forwarded verbatim to `npx skills@latest add` |
-
-Each `plugins` entry (Claude only) supports:
-
-| Field    | Required | Description                                     |
-| -------- | -------- | ----------------------------------------------- |
-| `name`   | yes      | Plugin identifier                               |
-| `source` | yes      | `"official"` or `"github"`                      |
-| `repo`   | no       | `"owner/repo"` — required when `source: github` |
 
 **`.ulis/extensions.yaml`** — third-party CLI extensions invoked through a package runner. Useful for self-installing packages (e.g. `bunx codex-supermemory@latest install`) that wire themselves into a target tool's config files:
 
@@ -280,7 +258,7 @@ Each `extensions` entry supports:
 
 **Runner resolution** (precedence): `--runner` CLI flag → `runner` field in `config.yaml` → auto-detect (`bunx` if available on PATH, else `npx`).
 
-Extensions run **last** in the install pipeline (`build → files → plugins → skills → extensions`) because most self-installing extensions mutate the very files ulis just deployed. Each entry runs every time `ulis install` runs (no caching in v1). Failures log a warning and the install continues.
+Extensions run **last** in the install pipeline (`build → files → skills → extensions`) because most self-installing extensions mutate the very files ulis just deployed. Each entry runs every time `ulis install` runs (no caching in v1). Failures log a warning and the install continues.
 
 ### 3.5 Hook
 
@@ -308,7 +286,6 @@ Hooks are native to Claude Code only. On other targets they are silently dropped
 | Git worktree isolation               |        ✓        |          —           |       —       |    —    |     —      |
 | Local MCP servers                    |        ✓        |          ✓           |       ✓       |    ✓    |     ✓      |
 | Remote MCP servers                   |        ✓        |          ✓           | localFallback |    ✓    |     ✓      |
-| Marketplace plugins                  |        ✓        |    ✓ (TS plugins)    |       —       |    —    |     —      |
 | Fine-grained tool permissions        |        ✓        |          ✓           |       —       |    —    | tools list |
 | `contextHints` enforcement           |     comment     |       comment        |    comment    | comment |  comment   |
 | `toolPolicy.avoid`                   | disallowedTools |       comment        |    comment    | comment |  comment   |
@@ -337,9 +314,8 @@ ulis install --global --yes    # build + deploy from ~/.ulis/
 const agents = parseAgents(join(sourceDir, "agents"));
 const skills = parseSkills(join(sourceDir, "skills"));
 const mcp = loadMcp(sourceDir);
-const plugins = loadPlugins(sourceDir);
 
-generateClaude(agents, skills, mcp, plugins, sourceDir, join(generatedDir, "claude"));
+generateClaude(agents, skills, mcp, sourceDir, join(generatedDir, "claude"));
 generateOpencode(agents, skills, mcp, sourceDir, join(generatedDir, "opencode"));
 generateCodex(agents, skills, mcp, sourceDir, join(generatedDir, "codex"));
 generateCursor(agents, skills, mcp, sourceDir, join(generatedDir, "cursor"));

@@ -16,7 +16,6 @@ import type { FileArtifact, ProjectBundle } from "../src/generators/types.js";
 import { parseAgents } from "../src/parsers/agent.js";
 import { loadMcp } from "../src/parsers/mcp.js";
 import { loadPermissions } from "../src/parsers/permissions.js";
-import { loadPlugins } from "../src/parsers/plugins.js";
 import { parseRules } from "../src/parsers/rule.js";
 import { parseSkills } from "../src/parsers/skill.js";
 import type { Platform } from "../src/platforms.js";
@@ -34,7 +33,6 @@ function buildProject(): ProjectBundle {
     rules: parseRules(join(fixturesDir, "rules")),
     mcp: loadMcp(fixturesDir),
     permissions: loadPermissions(fixturesDir),
-    plugins: loadPlugins(fixturesDir),
     ulisConfig: UlisConfigSchema.parse({ version: 1, name: "fixtures" }),
     sourceDir: fixturesDir,
   };

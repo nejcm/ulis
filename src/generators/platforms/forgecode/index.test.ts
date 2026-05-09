@@ -14,7 +14,6 @@ function createProject(sourceDir: string, rules: readonly ParsedRule[]): Project
     rules,
     mcp: { servers: {} },
     permissions: undefined,
-    plugins: undefined,
     ulisConfig: { version: 1, name: "test", unsupportedPlatformRules: "inject" },
     sourceDir,
   };

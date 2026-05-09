@@ -6,7 +6,6 @@ import { basename, join, resolve } from "node:path";
 import { runBuild, type Logger } from "./build.js";
 import { ULIS_GENERATED_DIRNAME } from "./config.js";
 import { loadExtensions, mergeExtensionsConfigs } from "./parsers/extensions.js";
-import { loadPlugins } from "./parsers/plugins.js";
 import { loadSkills, mergeSkillsConfigs } from "./parsers/skills.js";
 import {
   isSamePath,
@@ -18,7 +17,7 @@ import {
   uniquePlatforms,
   type Platform,
 } from "./platforms.js";
-import { UlisConfigSchema, type ExtensionsConfig, type PluginsConfig, type SkillsConfig } from "./schema.js";
+import { UlisConfigSchema, type ExtensionsConfig, type SkillsConfig } from "./schema.js";
 import { loadValidatedConfigFile } from "./utils/config-loader.js";
 import { logger as defaultLogger } from "./utils/logger.js";
 import type { ResolvedPreset } from "./utils/resolve-presets.js";
@@ -139,7 +138,6 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
     runBuild({ targets: platforms, sourceDir, outputDir, logger, presets: options.presets });
   }
 
-  const plugins = loadPlugins(sourceDir);
   const skillsConfig = mergeSkillsConfigs([
     ...(options.presets ?? []).map((preset) => loadSkills(preset.dir)),
     loadSkills(sourceDir),
@@ -167,7 +165,6 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
       globalInstall,
       backup,
       timestamp,
-      plugins,
       skills: skillsConfig,
       extensions: extensionsConfig,
       runner,
@@ -218,7 +215,6 @@ interface InstallContext {
   readonly globalInstall: boolean;
   readonly backup: boolean;
   readonly timestamp: string;
-  readonly plugins: PluginsConfig;
   readonly skills: SkillsConfig;
   readonly extensions: ExtensionsConfig;
   readonly runner: Runner;
@@ -279,7 +275,6 @@ function installClaude(context: InstallContext): void {
   }
 
   copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["settings.json", ".claude.json"]));
-  installClaudePlugins(context.plugins, context.logger);
 
   const claudeSkills = context.skills.claude?.skills ?? [];
   if (claudeSkills.length > 0) {
@@ -472,32 +467,6 @@ function backupFile(targetPath: string, context: InstallContext): void {
   logInfo(context.logger, `[backup] ${targetPath} -> ${backupPath}`);
 }
 
-function installClaudePlugins(plugins: PluginsConfig, logger?: Logger): void {
-  const claudePlugins = plugins?.claude?.plugins ?? [];
-  if (claudePlugins.length === 0) return;
-
-  if (!commandExists("claude")) {
-    logWarn(logger, "claude CLI not found - install marketplace plugins manually.");
-    return;
-  }
-
-  for (const plugin of claudePlugins) {
-    const source = plugin.source === "github" && plugin.repo ? plugin.repo : plugin.name;
-    const result = runCommand("claude", ["plugin", "add", "--from", source], {
-      stdio: ["ignore", "ignore", "pipe"],
-      shell: process.platform === "win32",
-      encoding: "utf8",
-    });
-    if (result.status === 0) {
-      logSuccess(logger, `Plugin: ${plugin.name}`);
-    } else {
-      const detail =
-        normalizeProcessOutput(result.stderr).split("\n").pop() || result.error?.message || `exit ${result.status}`;
-      logWarn(logger, `Failed to install plugin: ${plugin.name} (${detail})`);
-    }
-  }
-}
-
 // map platform key to skills argument agent name
 // only platforms supported by the `skills` CLI are listed here
 const SKILL_PLATFORM_AGENT_NAMES: Partial<Record<Platform, string>> = {
@@ -674,16 +643,6 @@ function runCommand(command: string, args: readonly string[], options: Parameter
   } catch (error) {
     throw new InstallError(`Failed to run command: ${command} ${args.join(" ")}`, error);
   }
-}
-
-function normalizeProcessOutput(value: string | Buffer | undefined): string {
-  if (typeof value === "string") {
-    return value.trim();
-  }
-  if (!value) {
-    return "";
-  }
-  return value.toString("utf8").trim();
 }
 
 function logHeader(logger: Logger | undefined, message: string): void {
