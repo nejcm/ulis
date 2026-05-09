@@ -1,5 +1,6 @@
 export * from "./agent.js";
 export * from "./command.js";
+export * from "./extensions.js";
 export * from "./mcp.js";
 export * from "./permissions.js";
 export * from "./plugins.js";

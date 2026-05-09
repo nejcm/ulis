@@ -23,6 +23,12 @@ export const UlisConfigSchema = emptyYamlAsEmptyObject(
      * - `exclude`: Skip rules entirely for unsupported platforms.
      */
     unsupportedPlatformRules: z.enum(["inject", "exclude"]).default("inject").optional(),
+    /**
+     * Package runner used to execute extension installers (`extensions.yaml`).
+     * Falls back to auto-detect (`bunx` if available, else `npx`) when omitted.
+     * Overridden by the `--runner` CLI flag.
+     */
+    runner: z.enum(["npx", "bunx"]).optional(),
   }),
 );
 
