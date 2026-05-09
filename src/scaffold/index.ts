@@ -99,6 +99,31 @@ const SKILLS_TEMPLATE = `# yaml-language-server: $schema={{schemaBase}}/skills.s
 #       args: ["--skill", "mcp-builder"]
 `;
 
+const EXTENSIONS_TEMPLATE = `# yaml-language-server: $schema={{schemaBase}}/extensions.schema.json
+
+# Declarative extension installs per platform.
+#
+# Each entry is run via a package runner (\`npx\` by default, \`bunx\` if
+# \`--runner bunx\` or \`runner: bunx\` in config.yaml is set, or auto-detected
+# when \`bunx\` is on PATH).
+#
+# - "*"      applies to every platform
+# - "claude" / "codex" / "cursor" / "opencode" / "forgecode" scope to one platform
+#
+# Example:
+#
+# codex:
+#   extensions:
+#     - key: supermemory
+#       name: codex-supermemory@latest
+#       args: ["install"]
+#
+# claude:
+#   extensions:
+#     - name: some-claude-helper@1.2.3
+#       args: ["setup", "--yes"]
+`;
+
 const RULE_CODE_STYLE_TEMPLATE = `# Code Style
 
 - Use 2-space indentation
@@ -134,6 +159,10 @@ export function renderPlugins(context: ScaffoldContext): string {
 
 export function renderSkills(context: ScaffoldContext): string {
   return substitute(SKILLS_TEMPLATE, context);
+}
+
+export function renderExtensions(context: ScaffoldContext): string {
+  return substitute(EXTENSIONS_TEMPLATE, context);
 }
 
 export function renderRuleCodeStyle(_context: ScaffoldContext): string {

@@ -7,10 +7,18 @@ For narrative explanation of how entities relate and how the build pipeline work
 
 ## Agent
 
+
 ## Skill
+
 
 ## MCP Config
 
+
 ## Plugins Config
 
+
 ## Skills Config
+
+
+## Extensions Config
+

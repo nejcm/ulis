@@ -11,6 +11,7 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 
 import {
   AgentFrontmatterSchema,
+  ExtensionsConfigSchema,
   McpConfigSchema,
   PluginsConfigSchema,
   SkillFrontmatterSchema,
@@ -113,6 +114,7 @@ const sections = [
   renderSection("MCP Config", McpConfigSchema),
   renderSection("Plugins Config", PluginsConfigSchema),
   renderSection("Skills Config", SkillsConfigSchema),
+  renderSection("Extensions Config", ExtensionsConfigSchema),
 ];
 
 const header = `# ULIS Field Reference
