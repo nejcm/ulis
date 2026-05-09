@@ -21,8 +21,9 @@ ULIS is a CLI (`ulis`) that lets you define AI agent configurations **once** and
 │                             └── forgecode/ (AGENTS.md, .forge/agents, .forge/skills, .forge/.mcp.json)
 ├── plugins.yaml         (Claude marketplace plugins)
 ├── skills.yaml          (external skill installs)
+├── extensions.yaml      (third-party CLI extension installs via npx/bunx)
 ├── permissions.yaml
-└── config.yaml          ◄─── minimal: version + name (room to grow)
+└── config.yaml          ◄─── version + name + optional `runner: npx | bunx`
 ```
 
 The generated tree is then copied to the per-platform destination (`./.claude/`, `./.forge/`, etc.) by `ulis install`.
@@ -192,9 +193,9 @@ Defined once in `.ulis/mcp.yaml` (JSON is also accepted for backwards compatibil
 
 Environment variables use `${VAR}` syntax everywhere. The build translates to platform-specific syntax (OpenCode headers use `{env:VAR}`).
 
-### 3.4 Plugin / Skill registry entries
+### 3.4 Plugin / Skill / Extension registry entries
 
-Declarative installs are split into two files:
+Declarative installs are split into three files:
 
 **`.ulis/plugins.yaml`** — Claude Code marketplace plugins (`claude plugin add --from`):
 
@@ -229,11 +230,13 @@ opencode:
 
 **Key semantics:**
 
-| File           | Key            | Effect during `ulis install`                                                             |
-| -------------- | -------------- | ---------------------------------------------------------------------------------------- |
-| `skills.yaml`  | `"*"`          | `skills` are installed for **all** platforms via `npx skills@latest add -a <each-agent>` |
-| `skills.yaml`  | `"<platform>"` | `skills` are installed for that platform only (`-a <agent-name>`)                        |
-| `plugins.yaml` | `"claude"`     | `plugins` are installed via `claude plugin add --from <source>`                          |
+| File              | Key            | Effect during `ulis install`                                                             |
+| ----------------- | -------------- | ---------------------------------------------------------------------------------------- |
+| `skills.yaml`     | `"*"`          | `skills` are installed for **all** platforms via `npx skills@latest add -a <each-agent>` |
+| `skills.yaml`     | `"<platform>"` | `skills` are installed for that platform only (`-a <agent-name>`)                        |
+| `plugins.yaml`    | `"claude"`     | `plugins` are installed via `claude plugin add --from <source>`                          |
+| `extensions.yaml` | `"*"`          | each `extensions` entry runs once via the resolved runner (e.g. `bunx <name> <args>`)    |
+| `extensions.yaml` | `"<platform>"` | runs the entry only when that platform is part of the install target set                 |
 
 Skills are installed **system-globally** — `npx skills@latest add` writes directly into each agent's known config directory. No files are staged in this repo.
 
@@ -251,6 +254,33 @@ Each `plugins` entry (Claude only) supports:
 | `name`   | yes      | Plugin identifier                               |
 | `source` | yes      | `"official"` or `"github"`                      |
 | `repo`   | no       | `"owner/repo"` — required when `source: github` |
+
+**`.ulis/extensions.yaml`** — third-party CLI extensions invoked through a package runner. Useful for self-installing packages (e.g. `bunx codex-supermemory@latest install`) that wire themselves into a target tool's config files:
+
+```yaml
+codex:
+  extensions:
+    - key: supermemory
+      name: codex-supermemory@latest
+      args: ["install"]
+
+claude:
+  extensions:
+    - name: some-claude-helper@1.2.3
+      args: ["setup", "--yes"]
+```
+
+Each `extensions` entry supports:
+
+| Field  | Required | Description                                                                  |
+| ------ | -------- | ---------------------------------------------------------------------------- |
+| `name` | yes      | Package spec (e.g. `codex-supermemory@latest`); passed verbatim to the runner |
+| `args` | no       | Arguments appended after `name` in the runner invocation                      |
+| `key`  | no       | Friendly identifier used in `ulis install` log lines                          |
+
+**Runner resolution** (precedence): `--runner` CLI flag → `runner` field in `config.yaml` → auto-detect (`bunx` if available on PATH, else `npx`).
+
+Extensions run **last** in the install pipeline (`build → files → plugins → skills → extensions`) because most self-installing extensions mutate the very files ulis just deployed. Each entry runs every time `ulis install` runs (no caching in v1). Failures log a warning and the install continues.
 
 ### 3.5 Hook
 

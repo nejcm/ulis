@@ -24,7 +24,7 @@ ulis init [-g | --global]
 
 **Project mode:**
 
-1. Creates `./.ulis/` with `config.yaml`, `mcp.yaml`, `permissions.yaml`, `plugins.yaml`, `skills.yaml`, and empty `agents/`, `skills/`, `commands/`, `raw/` subfolders.
+1. Creates `./.ulis/` with `config.yaml`, `mcp.yaml`, `permissions.yaml`, `plugins.yaml`, `skills.yaml`, `extensions.yaml`, and empty `agents/`, `skills/`, `commands/`, `raw/` subfolders.
 2. Reads the project name from `./package.json` (falls back to the directory name).
 3. Appends `/.ulis/generated/` to `.gitignore` (creating the file if missing).
 4. Prints a hint suggesting you also gitignore `./.claude/`, `./.cursor/`, `./.codex/`, `./.opencode/`, and `./.forge/` if you don't want to commit generated configs.
@@ -59,6 +59,7 @@ Run `build` and then deploy the generated configs onto the target platform direc
 ```bash
 ulis install [-g | --global] [--source <path>] [--target <platforms>]
              [-y | --yes] [--no-rebuild] [--backup] [--preset <names>]
+             [--runner <npx|bunx>] [--no-extensions]
 ```
 
 | Flag                   | Effect                                                                                                                                                     |
@@ -70,6 +71,8 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 | `--no-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`.                                                                                   |
 | `--backup`             | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.                                                                          |
 | `--preset <names>`     | Same resolution as `ulis build --preset` (user-global directory, then bundled).                                                                            |
+| `--runner <name>`      | Package runner used for `extensions.yaml` entries. `npx` or `bunx`. Overrides `runner` in `config.yaml`. Default: auto-detect (`bunx` if present).         |
+| `--no-extensions`      | Skip running entries from `extensions.yaml`. Useful in CI where network installs are not desired.                                                          |
 
 **Preset resolution:** Each name maps to a directory. ULIS checks `~/.ulis/presets/<name>/` first; if that folder is missing, it uses the matching bundled preset next to the CLI (`dist/presets/` when installed). A preset in your home tree with the same folder name **shadows** the bundled one. Multiple `--preset` values merge **left to right**, then the base source (from `--source`, `./.ulis/`, or `~/.ulis/`) is applied last — **the base wins on conflicts**. Interactive runs prompt to continue when a name is missing; with `--yes`, missing presets fail immediately.
 

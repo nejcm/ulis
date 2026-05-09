@@ -3,6 +3,7 @@ import { createInterface } from "node:readline";
 
 import { analyzeProject, type Logger } from "../build.js";
 import { initCmd } from "../commands/init.js";
+import { loadExtensions } from "../parsers/extensions.js";
 import { planSource, selectedPresets, type TuiAction, type TuiState } from "./state.js";
 
 interface RuntimeDependencies {
@@ -22,10 +23,15 @@ export async function runTuiAction(state: TuiState, action: Exclude<TuiAction, "
     logger.info(`Source: ${planned.sourceDir}`);
     if (presets.length > 0) logger.info(`Presets: ${presets.map((preset) => preset.name).join(", ")}`);
     const analysis = analyzeProject({ sourceDir: planned.sourceDir, presets, logger });
+    const extensionsConfig = loadExtensions(planned.sourceDir);
+    const extensionCount = Object.values(extensionsConfig).reduce(
+      (acc, entry) => acc + (entry?.extensions?.length ?? 0),
+      0,
+    );
     logger.success(
       `Validated ${analysis.project.agents.length} agents, ${analysis.project.skills.length} skills, ${
         Object.keys(analysis.project.mcp.servers).length
-      } MCP servers`,
+      } MCP servers, ${extensionCount} extensions`,
     );
     return;
   }
