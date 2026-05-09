@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import type { Logger } from "./build.js";
-import { runInstall } from "./install.js";
+import { resolveRunner, runInstall } from "./install.js";
 
 const tmpRoots: string[] = [];
 
@@ -90,5 +90,66 @@ describe("runInstall", () => {
 
     expect(read(join(projectDir, ".forge", "AGENTS.md"))).toBe("Forge global instructions.\n");
     expect(existsSync(join(projectDir, "AGENTS.md"))).toBe(false);
+  });
+
+  it("skips extension installs when installExtensions is false", () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    createForgecodeOutput(outputDir);
+    write(
+      join(sourceDir, "extensions.yaml"),
+      ["forgecode:", "  extensions:", "    - name: this-package-does-not-exist@latest", ""].join("\n"),
+    );
+
+    const logs: string[] = [];
+    const recordingLogger: Logger = {
+      info(msg) {
+        logs.push(`info:${msg}`);
+      },
+      success() {},
+      warn(msg) {
+        logs.push(`warn:${msg}`);
+      },
+      error() {},
+      dim() {},
+      header() {},
+    };
+
+    runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["forgecode"],
+      rebuild: false,
+      installExtensions: false,
+      logger: recordingLogger,
+    });
+
+    expect(logs.some((line) => line.includes("Will run:"))).toBe(false);
+    expect(logs.some((line) => line.includes("this-package-does-not-exist"))).toBe(false);
+  });
+});
+
+describe("resolveRunner", () => {
+  it("prefers the CLI flag over config and auto-detect", () => {
+    expect(resolveRunner({ cliFlag: "bunx", configValue: "npx", hasCommand: () => true })).toBe("bunx");
+    expect(resolveRunner({ cliFlag: "npx", configValue: "bunx", hasCommand: () => true })).toBe("npx");
+  });
+
+  it("falls back to config.yaml when no CLI flag is set", () => {
+    expect(resolveRunner({ configValue: "bunx", hasCommand: () => false })).toBe("bunx");
+    expect(resolveRunner({ configValue: "npx", hasCommand: () => true })).toBe("npx");
+  });
+
+  it("auto-detects bunx when present and falls back to npx otherwise", () => {
+    expect(resolveRunner({ hasCommand: (cmd) => cmd === "bunx" })).toBe("bunx");
+    expect(resolveRunner({ hasCommand: () => false })).toBe("npx");
   });
 });

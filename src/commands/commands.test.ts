@@ -39,8 +39,10 @@ describe("commands", () => {
     await initCmd();
 
     expect(existsSync(join(projectRoot, ".ulis", "config.yaml"))).toBe(true);
+    expect(existsSync(join(projectRoot, ".ulis", "extensions.yaml"))).toBe(true);
     expect(existsSync(join(projectRoot, ".ulis", "agents", ".gitkeep"))).toBe(true);
     expect(readFileSync(join(projectRoot, ".ulis", "config.yaml"), "utf8")).toContain("name: command-test");
+    expect(readFileSync(join(projectRoot, ".ulis", "extensions.yaml"), "utf8")).toContain("extensions");
     expect(readFileSync(join(projectRoot, ".gitignore"), "utf8")).toContain("/.ulis/generated/");
   });
 
