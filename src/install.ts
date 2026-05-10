@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 import { runBuild, type Logger } from "./build.js";
 import { ULIS_GENERATED_DIRNAME } from "./config.js";
@@ -19,6 +19,7 @@ import {
 } from "./platforms.js";
 import { UlisConfigSchema, type ExtensionsConfig, type SkillsConfig } from "./schema.js";
 import { loadValidatedConfigFile } from "./utils/config-loader.js";
+import { mergeConfigValues, readMergeableConfig, writeMergeableConfig } from "./utils/config-merger.js";
 import { logger as defaultLogger } from "./utils/logger.js";
 import type { ResolvedPreset } from "./utils/resolve-presets.js";
 
@@ -242,11 +243,17 @@ interface InstallContext {
 
 function installOpencode(context: InstallContext): void {
   const targetDir = platformConfigDir("opencode", context.destBase, context.userHome);
+  const sourceDir = join(context.outputDir, "opencode");
+  const sourceConfig = join(sourceDir, "opencode.json");
+  const targetConfig = join(targetDir, "opencode.json");
+
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.opencode}`);
   backupDirectory(targetDir, context);
+  const preservedConfig = preserveConfigPaths(targetConfig, [["mcp"]]);
 
-  rmSync(targetDir, { recursive: true, force: true });
-  cpSync(join(context.outputDir, "opencode"), targetDir, { recursive: true });
+  removePath(targetDir);
+  copyPath(sourceDir, targetDir);
+  writeMergedNativeConfig(sourceConfig, targetConfig, preservedConfig, "opencode.json", context.logger);
   logSuccess(context.logger, `OpenCode -> ${targetDir}`);
 
   const skills = context.skills.opencode?.skills ?? [];
@@ -268,29 +275,12 @@ function installClaude(context: InstallContext): void {
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.claude}`);
   backupDirectory(targetDir, context);
   backupFile(targetRootConfig, context);
+  const preservedSettings = preserveConfigPaths(targetSettings, [["hooks"]]);
+  const preservedRootConfig = preserveConfigPaths(targetRootConfig, [["mcpServers"]]);
   ensureDir(targetDir);
 
-  if (existsSync(generatedSettings)) {
-    if (existsSync(targetSettings)) {
-      const merged = mergeSettingsJson(targetSettings, generatedSettings);
-      writeJson(targetSettings, merged);
-      logSuccess(context.logger, "settings.json (merged)");
-    } else {
-      cpSync(generatedSettings, targetSettings);
-      logSuccess(context.logger, "settings.json (copied)");
-    }
-  }
-
-  if (existsSync(generatedRootConfig)) {
-    if (existsSync(targetRootConfig)) {
-      const merged = mergeSettingsJson(targetRootConfig, generatedRootConfig);
-      writeJson(targetRootConfig, merged);
-      logSuccess(context.logger, ".claude.json (merged)");
-    } else {
-      cpSync(generatedRootConfig, targetRootConfig);
-      logSuccess(context.logger, ".claude.json (copied)");
-    }
-  }
+  writeMergedNativeConfig(generatedSettings, targetSettings, preservedSettings, "settings.json", context.logger);
+  writeMergedNativeConfig(generatedRootConfig, targetRootConfig, preservedRootConfig, ".claude.json", context.logger);
 
   copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["settings.json", ".claude.json"]));
 
@@ -304,10 +294,16 @@ function installClaude(context: InstallContext): void {
 
 function installCodex(context: InstallContext): void {
   const targetDir = platformConfigDir("codex", context.destBase, context.userHome);
+  const sourceDir = join(context.outputDir, "codex");
+  const sourceConfig = join(sourceDir, "config.toml");
+  const targetConfig = join(targetDir, "config.toml");
+
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.codex}`);
   backupDirectory(targetDir, context);
+  const preservedConfig = preserveConfigPaths(targetConfig, [["projects"], ["hooks"], ["mcp_servers"]]);
   ensureDir(targetDir);
-  copyPlatformContents(join(context.outputDir, "codex"), targetDir, context.logger);
+  copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["config.toml"]));
+  writeMergedNativeConfig(sourceConfig, targetConfig, preservedConfig, "config.toml", context.logger);
 
   const skills = context.skills.codex?.skills ?? [];
   if (skills.length > 0) {
@@ -325,18 +321,10 @@ function installCursor(context: InstallContext): void {
 
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.cursor}`);
   backupDirectory(targetDir, context);
+  const preservedMcp = preserveConfigPaths(targetMcp, [["mcpServers"]]);
   ensureDir(targetDir);
 
-  if (existsSync(generatedMcp)) {
-    if (existsSync(targetMcp)) {
-      const merged = mergeCursorMcpJson(targetMcp, generatedMcp);
-      writeJson(targetMcp, merged);
-      logSuccess(context.logger, "mcp.json (merged)");
-    } else {
-      cpSync(generatedMcp, targetMcp);
-      logSuccess(context.logger, "mcp.json (copied)");
-    }
-  }
+  writeMergedNativeConfig(generatedMcp, targetMcp, preservedMcp, "mcp.json", context.logger);
 
   copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["mcp.json"]));
 
@@ -358,10 +346,11 @@ function installForgecode(context: InstallContext): void {
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.forgecode}`);
   backupDirectory(targetForgeDir, context);
   backupFile(targetMcp, context);
+  const preservedMcp = preserveConfigPaths(targetMcp, [["mcpServers"]]);
   ensureDir(targetForgeDir);
 
   if (existsSync(sourceForgeDir)) {
-    copyPlatformContents(sourceForgeDir, targetForgeDir, context.logger);
+    copyPlatformContents(sourceForgeDir, targetForgeDir, context.logger, new Set([".mcp.json"]));
   }
 
   copyPlatformContents(
@@ -371,16 +360,7 @@ function installForgecode(context: InstallContext): void {
     new Set([resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project)]),
   );
 
-  if (existsSync(sourceMcp)) {
-    if (existsSync(targetMcp)) {
-      const merged = mergeCursorMcpJson(targetMcp, sourceMcp);
-      writeJson(targetMcp, merged);
-      logSuccess(context.logger, ".mcp.json (merged)");
-    } else {
-      cpSync(sourceMcp, targetMcp);
-      logSuccess(context.logger, ".mcp.json (copied)");
-    }
-  }
+  writeMergedNativeConfig(sourceMcp, targetMcp, preservedMcp, ".mcp.json", context.logger);
 
   runPlatformExtensions(context, "forgecode");
 }
@@ -410,58 +390,79 @@ function copyPlatformContents(
   }
 }
 
-function mergeSettingsJson(existingPath: string, generatedPath: string): Record<string, unknown> {
-  const existing = readJson(existingPath);
-  const generated = readJson(generatedPath);
-  return deepMerge(existing, generated);
+function preserveConfigPaths(filePath: string, paths: readonly (readonly string[])[]): unknown | undefined {
+  if (!existsSync(filePath)) return undefined;
+  try {
+    const preserved = pickConfigPaths(readMergeableConfig(filePath), paths);
+    return Object.keys(preserved).length > 0 ? preserved : undefined;
+  } catch (error) {
+    throw new InstallError(`Failed to parse existing native config at ${filePath}`, error);
+  }
 }
 
-function deepMerge<T>(base: T, override: unknown): T {
-  if (!isPlainObject(base) || !isPlainObject(override)) {
-    return override === undefined ? base : (override as T);
+function pickConfigPaths(source: unknown, paths: readonly (readonly string[])[]): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const path of paths) {
+    const value = getConfigPath(source, path);
+    if (value !== undefined) setConfigPath(result, path, value);
   }
+  return result;
+}
 
-  const result: Record<string, unknown> = { ...base };
-  for (const [key, value] of Object.entries(override)) {
-    if (value === undefined) continue;
-    if (isPlainObject(value) && isPlainObject(result[key])) {
-      result[key] = deepMerge(result[key], value);
+function getConfigPath(source: unknown, path: readonly string[]): unknown {
+  let current = source;
+  for (const key of path) {
+    if (!isPlainObject(current) || !(key in current)) return undefined;
+    current = current[key];
+  }
+  return current;
+}
+
+function setConfigPath(target: Record<string, unknown>, path: readonly string[], value: unknown): void {
+  let current = target;
+  for (const key of path.slice(0, -1)) {
+    const next = current[key];
+    if (isPlainObject(next)) {
+      current = next;
     } else {
-      result[key] = value;
+      const created: Record<string, unknown> = {};
+      current[key] = created;
+      current = created;
     }
   }
-  return result as T;
+  current[path[path.length - 1]!] = value;
 }
 
-function mergeCursorMcpJson(existingPath: string, generatedPath: string): Record<string, unknown> {
-  const existing = readJson(existingPath);
-  const generated = readJson(generatedPath);
-  const existingServers = isPlainObject(existing.mcpServers) ? existing.mcpServers : {};
-  const generatedServers = isPlainObject(generated.mcpServers) ? generated.mcpServers : {};
-
-  return {
-    ...existing,
-    mcpServers: {
-      ...existingServers,
-      ...generatedServers,
-    },
-  };
-}
-
-function readJson(filePath: string): Record<string, unknown> {
+function writeMergedNativeConfig(
+  generatedPath: string,
+  targetPath: string,
+  preservedExisting: unknown | undefined,
+  label: string,
+  logger?: Logger,
+): void {
   try {
-    return JSON.parse(readFileSync(filePath, "utf8")) as Record<string, unknown>;
-  } catch (error) {
-    throw new InstallError(`Failed to parse JSON at ${filePath}`, error);
-  }
-}
+    if (!existsSync(generatedPath)) {
+      if (preservedExisting !== undefined) {
+        writeMergeableConfig(targetPath, preservedExisting);
+        logSuccess(logger, `${label} (preserved)`);
+      } else if (existsSync(targetPath)) {
+        removePath(targetPath);
+        logSuccess(logger, `${label} (removed)`);
+      }
+      return;
+    }
 
-function writeJson(filePath: string, value: Record<string, unknown>): void {
-  try {
-    ensureDir(dirnameOf(filePath));
-    writeFileSync(filePath, JSON.stringify(value, null, 2));
+    if (preservedExisting === undefined) {
+      cpSync(generatedPath, targetPath);
+      logSuccess(logger, `${label} (copied)`);
+      return;
+    }
+
+    const generated = readMergeableConfig(generatedPath);
+    writeMergeableConfig(targetPath, mergeConfigValues(preservedExisting, generated));
+    logSuccess(logger, `${label} (merged)`);
   } catch (error) {
-    throw new InstallError(`Failed to write JSON at ${filePath}`, error);
+    throw new InstallError(`Failed to merge native config ${generatedPath} -> ${targetPath}`, error);
   }
 }
 
@@ -620,10 +621,6 @@ function ensureDir(dirPath: string): void {
   } catch (error) {
     throw new InstallError(`Failed to create directory: ${dirPath}`, error);
   }
-}
-
-function dirnameOf(filePath: string): string {
-  return filePath.slice(0, filePath.length - basename(filePath).length).replace(/[\\/]$/u, "");
 }
 
 function makeTimestamp(): string {

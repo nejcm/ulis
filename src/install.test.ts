@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import type { Logger } from "./build.js";
 import { __test, resolveRunner, runInstall } from "./install.js";
+import { readMergeableConfig } from "./utils/config-merger.js";
 
 const tmpRoots: string[] = [];
 
@@ -45,6 +46,314 @@ afterEach(() => {
 });
 
 describe("runInstall", () => {
+  it("preserves allowlisted Codex config sections for project installs", () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(
+      join(outputDir, "codex", "config.toml"),
+      [
+        'approval_policy = "never"',
+        "",
+        "[hooks]",
+        'pre = ["raw"]',
+        "",
+        '[projects."/shared"]',
+        'trust_level = "untrusted"',
+        "",
+        "[mcp_servers.shared]",
+        'command = "new"',
+        'args = ["generated"]',
+        "",
+        "[mcp_servers.generated]",
+        'command = "node"',
+      ].join("\n"),
+    );
+    write(
+      join(projectDir, ".codex", "config.toml"),
+      [
+        'model = "old"',
+        "",
+        "[hooks]",
+        'pre = ["existing"]',
+        "",
+        '[projects."/keep"]',
+        'trust_level = "trusted"',
+        "",
+        '[projects."/shared"]',
+        'trust_level = "trusted"',
+        "",
+        "[mcp_servers.keep]",
+        'command = "old"',
+        "",
+        "[mcp_servers.shared]",
+        'command = "old"',
+      ].join("\n"),
+    );
+
+    runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["codex"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(readMergeableConfig(join(projectDir, ".codex", "config.toml"))).toEqual({
+      approval_policy: "never",
+      hooks: { pre: ["raw"] },
+      projects: {
+        "/keep": { trust_level: "trusted" },
+        "/shared": { trust_level: "untrusted" },
+      },
+      mcp_servers: {
+        keep: { command: "old" },
+        shared: { command: "new", args: ["generated"] },
+        generated: { command: "node" },
+      },
+    });
+  });
+
+  it("preserves allowlisted Codex config sections for global installs", () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "codex", "config.toml"), 'approval_policy = "on-request"\n');
+    write(
+      join(userHome, ".codex", "config.toml"),
+      ['model = "old"', "", '[projects."/global"]', 'trust_level = "trusted"'].join("\n"),
+    );
+
+    runInstall({
+      sourceDir,
+      outputDir,
+      destBase: userHome,
+      userHome,
+      platforms: ["codex"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(readMergeableConfig(join(userHome, ".codex", "config.toml"))).toEqual({
+      approval_policy: "on-request",
+      projects: { "/global": { trust_level: "trusted" } },
+    });
+  });
+
+  it("preserves allowlisted integration maps across platform installs", () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(
+      join(outputDir, "claude", "settings.json"),
+      JSON.stringify({ permissions: { allow: ["Bash(git status)"] } }, null, 2),
+    );
+    write(
+      join(outputDir, "claude", ".claude.json"),
+      JSON.stringify({ mcpServers: { shared: { command: "generated" } } }, null, 2),
+    );
+    write(
+      join(outputDir, "cursor", "mcp.json"),
+      JSON.stringify({ mcpServers: { shared: { command: "generated" } } }, null, 2),
+    );
+    write(
+      join(outputDir, "forgecode", ".forge", ".mcp.json"),
+      JSON.stringify({ mcpServers: { shared: { command: "generated" } } }, null, 2),
+    );
+    write(
+      join(outputDir, "opencode", "opencode.json"),
+      JSON.stringify({ model: "generated", mcp: { shared: { command: ["generated"] } } }, null, 2),
+    );
+    write(
+      join(projectDir, ".claude", "settings.json"),
+      JSON.stringify({ env: { OLD: "1" }, hooks: { PreToolUse: [{ matcher: "existing" }] } }, null, 2),
+    );
+    write(
+      join(projectDir, ".claude.json"),
+      JSON.stringify(
+        { other: true, mcpServers: { existing: { command: "old" }, shared: { command: "old" } } },
+        null,
+        2,
+      ),
+    );
+    write(
+      join(projectDir, ".cursor", "mcp.json"),
+      JSON.stringify(
+        { other: true, mcpServers: { existing: { command: "old" }, shared: { command: "old" } } },
+        null,
+        2,
+      ),
+    );
+    write(
+      join(projectDir, ".forge", ".mcp.json"),
+      JSON.stringify(
+        { other: true, mcpServers: { existing: { command: "old" }, shared: { command: "old" } } },
+        null,
+        2,
+      ),
+    );
+    write(
+      join(projectDir, ".opencode", "opencode.json"),
+      JSON.stringify({ model: "old", mcp: { existing: { command: ["old"] }, shared: { command: ["old"] } } }, null, 2),
+    );
+
+    runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["claude", "cursor", "forgecode", "opencode"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(JSON.parse(read(join(projectDir, ".claude", "settings.json")))).toEqual({
+      hooks: { PreToolUse: [{ matcher: "existing" }] },
+      permissions: { allow: ["Bash(git status)"] },
+    });
+    expect(JSON.parse(read(join(projectDir, ".claude.json")))).toEqual({
+      mcpServers: { existing: { command: "old" }, shared: { command: "generated" } },
+    });
+    expect(JSON.parse(read(join(projectDir, ".cursor", "mcp.json")))).toEqual({
+      mcpServers: { existing: { command: "old" }, shared: { command: "generated" } },
+    });
+    expect(JSON.parse(read(join(projectDir, ".forge", ".mcp.json")))).toEqual({
+      mcpServers: { existing: { command: "old" }, shared: { command: "generated" } },
+    });
+    expect(JSON.parse(read(join(projectDir, ".opencode", "opencode.json")))).toEqual({
+      model: "generated",
+      mcp: { existing: { command: ["old"] }, shared: { command: ["generated"] } },
+    });
+  });
+
+  it("preserves OpenCode allowlisted config when generated config is absent", () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "opencode", "AGENTS.md"), "Generated instructions.\n");
+    write(
+      join(projectDir, ".opencode", "opencode.json"),
+      JSON.stringify({ model: "old", mcp: { existing: { command: ["old"] } } }, null, 2),
+    );
+
+    runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["opencode"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(read(join(projectDir, ".opencode", "AGENTS.md"))).toBe("Generated instructions.\n");
+    expect(JSON.parse(read(join(projectDir, ".opencode", "opencode.json")))).toEqual({
+      mcp: { existing: { command: ["old"] } },
+    });
+  });
+
+  it("drops existing native config when generated config is absent and no allowlisted keys exist", () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "opencode", "AGENTS.md"), "Generated instructions.\n");
+    write(join(projectDir, ".opencode", "opencode.json"), JSON.stringify({ model: "old" }, null, 2));
+
+    runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["opencode"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(read(join(projectDir, ".opencode", "AGENTS.md"))).toBe("Generated instructions.\n");
+    expect(existsSync(join(projectDir, ".opencode", "opencode.json"))).toBe(false);
+  });
+
+  it("removes stale Codex config when generated config is absent and no allowlisted keys exist", () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "codex", "AGENTS.md"), "Generated instructions.\n");
+    write(join(projectDir, ".codex", "config.toml"), 'model = "old"\n');
+
+    runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["codex"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(read(join(projectDir, ".codex", "AGENTS.md"))).toBe("Generated instructions.\n");
+    expect(existsSync(join(projectDir, ".codex", "config.toml"))).toBe(false);
+  });
+
+  it("backs up existing config before failing to parse preserved native config", () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "codex", "config.toml"), 'approval_policy = "never"\n');
+    write(join(projectDir, ".codex", "config.toml"), "[invalid\n");
+
+    expect(() =>
+      runInstall({
+        sourceDir,
+        outputDir,
+        destBase: projectDir,
+        userHome,
+        platforms: ["codex"],
+        rebuild: false,
+        backup: true,
+        logger: silentLogger,
+      }),
+    ).toThrow("Failed to parse existing native config");
+
+    expect(readdirSync(projectDir).some((entry) => entry.startsWith(".codex.") && entry.endsWith(".backup"))).toBe(
+      true,
+    );
+  });
+
   it("installs ForgeCode AGENTS.md into the Forge home directory for global installs", () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
