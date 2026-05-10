@@ -68,6 +68,16 @@ describe("commands", () => {
     expect(existsSync(join(projectRoot, ".ulis", "generated"))).toBe(false);
   });
 
+  it("buildCmd with an empty target does not default to all platforms", async () => {
+    const projectRoot = createTempRoot();
+    copyFixtureSource(projectRoot);
+    process.chdir(projectRoot);
+
+    await buildCmd({ target: "" });
+
+    expect(existsSync(join(projectRoot, ".ulis", "generated"))).toBe(false);
+  });
+
   it("installCmd installs generated config into the project platform directory", async () => {
     const projectRoot = createTempRoot();
     copyFixtureSource(projectRoot);
@@ -78,6 +88,20 @@ describe("commands", () => {
     expect(existsSync(join(projectRoot, ".claude", "agents", "worker.md"))).toBe(true);
     expect(existsSync(join(projectRoot, ".claude.json"))).toBe(true);
     expect(readFileSync(join(projectRoot, ".claude", "agents", "worker.md"), "utf8")).toContain("A minimal test agent");
+  });
+
+  it("installCmd with an empty target does not install platform configs", async () => {
+    const projectRoot = createTempRoot();
+    copyFixtureSource(projectRoot);
+    process.chdir(projectRoot);
+
+    await installCmd({ yes: true, target: "" });
+
+    expect(existsSync(join(projectRoot, ".claude"))).toBe(false);
+    expect(existsSync(join(projectRoot, ".codex"))).toBe(false);
+    expect(existsSync(join(projectRoot, ".cursor"))).toBe(false);
+    expect(existsSync(join(projectRoot, ".opencode"))).toBe(false);
+    expect(existsSync(join(projectRoot, ".forge"))).toBe(false);
   });
 
   it("installCmd with --yes fails fast for missing presets without prompting", async () => {

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import type { Logger } from "./build.js";
-import { resolveRunner, runInstall } from "./install.js";
+import { __test, resolveRunner, runInstall } from "./install.js";
 
 const tmpRoots: string[] = [];
 
@@ -38,6 +38,7 @@ function createForgecodeOutput(outputDir: string): void {
 }
 
 afterEach(() => {
+  __test.resetRuntimeDependencies();
   for (const root of tmpRoots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
   }
@@ -134,6 +135,83 @@ describe("runInstall", () => {
 
     expect(logs.some((line) => line.includes("Will run:"))).toBe(false);
     expect(logs.some((line) => line.includes("this-package-does-not-exist"))).toBe(false);
+  });
+
+  it("scopes wildcard skill installs to selected project platforms", () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "codex", "AGENTS.md"), "Codex instructions.\n");
+    write(join(sourceDir, "skills.yaml"), ['"*":', "  skills:", "    - name: test/skill", ""].join("\n"));
+
+    const commands: Array<{ command: string; args: readonly string[] }> = [];
+    __test.setRuntimeDependencies({
+      runCommand(command, args) {
+        commands.push({ command, args });
+        return { status: 0, stdout: "", stderr: "" } as never;
+      },
+    });
+
+    runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["codex"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    const skillsCommands = commands.filter((command) => command.command === "npx");
+    expect(skillsCommands).toHaveLength(1);
+    expect(skillsCommands[0]!.args).toContain("codex");
+    expect(skillsCommands[0]!.args).toContain("--project");
+    expect(skillsCommands[0]!.args).not.toContain("opencode");
+    expect(skillsCommands[0]!.args).not.toContain("claude-code");
+    expect(skillsCommands[0]!.args).not.toContain("cursor");
+  });
+
+  it("scopes wildcard skill installs to selected global platforms", () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "claude", "settings.json"), "{}\n");
+    write(join(sourceDir, "skills.yaml"), ['"*":', "  skills:", "    - name: test/skill", ""].join("\n"));
+
+    const commands: Array<{ command: string; args: readonly string[] }> = [];
+    __test.setRuntimeDependencies({
+      runCommand(command, args) {
+        commands.push({ command, args });
+        return { status: 0, stdout: "", stderr: "" } as never;
+      },
+    });
+
+    runInstall({
+      sourceDir,
+      outputDir,
+      destBase: userHome,
+      userHome,
+      platforms: ["claude"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    const skillsCommands = commands.filter((command) => command.command === "npx");
+    expect(skillsCommands).toHaveLength(1);
+    expect(skillsCommands[0]!.args).toContain("claude-code");
+    expect(skillsCommands[0]!.args).toContain("-g");
+    expect(skillsCommands[0]!.args).not.toContain("--project");
+    expect(skillsCommands[0]!.args).not.toContain("opencode");
+    expect(skillsCommands[0]!.args).not.toContain("codex");
+    expect(skillsCommands[0]!.args).not.toContain("cursor");
   });
 });
 

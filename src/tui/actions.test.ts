@@ -148,10 +148,32 @@ describe("tui actions child process flow", () => {
 
     const args = spawnCalls[0]!.args;
     expect(args).toContain("install");
+    expect(args).toContain("--target");
+    expect(args).toContain("codex");
     expect(args).toContain("--yes");
     expect(args).toContain("--global");
     expect(args).toContain("--no-rebuild");
     expect(args).toContain("--backup");
+  });
+
+  it("forwards an empty target when no platforms are selected", async () => {
+    installRuntimeFakes();
+    spawnCalls.length = 0;
+    spawnedChildren.length = 0;
+    const state = createInitialState();
+    state.platforms = [];
+    const logger = createLogger();
+
+    const run = runTuiAction(state, "build", logger);
+    const child = spawnedChildren[0];
+    expect(child).toBeDefined();
+    child!.emitClose(0);
+    await run;
+
+    const args = spawnCalls[0]!.args;
+    const targetIndex = args.indexOf("--target");
+    expect(targetIndex).toBeGreaterThan(-1);
+    expect(args[targetIndex + 1]).toBe("");
   });
 
   it("forwards sanitized stdout/stderr lines to logger", async () => {

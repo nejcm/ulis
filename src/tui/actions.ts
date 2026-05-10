@@ -76,7 +76,7 @@ async function runActionInChildProcess(
   }
 
   const args = [...process.execArgv, entryScript, action, "--source", planSource(state).sourceDir];
-  if (state.platforms.length > 0) args.push("--target", state.platforms.join(","));
+  args.push("--target", state.platforms.join(","));
   if (presetNames.length > 0) args.push("--preset", presetNames.join(","));
 
   if (action === "install") {

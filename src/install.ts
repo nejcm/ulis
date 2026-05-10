@@ -52,6 +52,24 @@ export interface InstallOptions {
   readonly installExtensions?: boolean;
 }
 
+type RunCommand = (
+  command: string,
+  args: readonly string[],
+  options: Parameters<typeof spawnSync>[2],
+) => ReturnType<typeof spawnSync>;
+
+interface RuntimeDependencies {
+  readonly runCommand: RunCommand;
+}
+
+const defaultRuntimeDependencies: RuntimeDependencies = {
+  runCommand(command, args, options) {
+    return spawnSync(command, [...args], options);
+  },
+};
+
+let runtimeDependencies: RuntimeDependencies = { ...defaultRuntimeDependencies };
+
 class InstallError extends Error {
   constructor(
     message: string,
@@ -193,7 +211,7 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
   const allSkills = skillsConfig["*"]?.skills ?? [];
   if (allSkills.length > 0) {
     logHeader(logger, "Installing External Skills");
-    installSkills(allSkills, "*", destBase, globalInstall, logger);
+    installSkills(allSkills, "*", destBase, globalInstall, logger, platforms);
   }
 
   if (installExtensionsEnabled) {
@@ -482,10 +500,17 @@ function installSkills(
   installBaseDir: string,
   globalInstall: boolean,
   logger?: Logger,
+  selectedPlatforms: readonly Platform[] = [],
 ): void {
   if (skills.length === 0) return;
   const agentNames =
-    platform === "*" ? Object.values(SKILL_PLATFORM_AGENT_NAMES) : [SKILL_PLATFORM_AGENT_NAMES[platform] ?? platform];
+    platform === "*"
+      ? selectedPlatforms.flatMap((selectedPlatform) => {
+          const agentName = SKILL_PLATFORM_AGENT_NAMES[selectedPlatform];
+          return agentName ? [agentName] : [];
+        })
+      : [SKILL_PLATFORM_AGENT_NAMES[platform] ?? platform];
+  if (agentNames.length === 0) return;
   const agentFlags = ["-a", ...agentNames];
 
   for (const skill of skills) {
@@ -639,7 +664,7 @@ function copyPath(sourcePath: string, targetPath: string): void {
 
 function runCommand(command: string, args: readonly string[], options: Parameters<typeof spawnSync>[2]) {
   try {
-    return spawnSync(command, [...args], options);
+    return runtimeDependencies.runCommand(command, args, options);
   } catch (error) {
     throw new InstallError(`Failed to run command: ${command} ${args.join(" ")}`, error);
   }
@@ -660,3 +685,12 @@ function logSuccess(logger: Logger | undefined, message: string): void {
 function logWarn(logger: Logger | undefined, message: string): void {
   logger?.warn(message);
 }
+
+export const __test = {
+  setRuntimeDependencies(overrides: Partial<RuntimeDependencies>): void {
+    runtimeDependencies = { ...runtimeDependencies, ...overrides };
+  },
+  resetRuntimeDependencies(): void {
+    runtimeDependencies = { ...defaultRuntimeDependencies };
+  },
+};
