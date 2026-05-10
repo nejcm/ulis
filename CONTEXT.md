@@ -10,3 +10,5 @@
 - **Validate**: Parse and validate a source plus selected presets without writing generated files.
 - **Install**: Deploy generated platform configs to a destination, optionally rebuilding first.
 - **Backup**: A TUI and CLI install option that copies existing target config files or directories before replacing or merging them.
+- **Raw Fragment**: A user-owned native config file under `raw/` that is merged into generated output after platform generation; raw values win at the same path.
+- **Native Integration**: An allowlisted destination-native config section for external integrations that ULIS preserves during install, such as MCP servers, hooks, or Codex trusted projects.

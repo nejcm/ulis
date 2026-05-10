@@ -25,7 +25,7 @@ ULIS is a CLI (`ulis`) that lets you define AI agent configurations **once** and
 └── config.yaml          ◄─── version + name + optional `runner: npx | bunx`
 ```
 
-The generated tree is then copied to the per-platform destination (`./.claude/`, `./.forge/`, etc.) by `ulis install`.
+`ulis install` deploys the generated tree to the per-platform destination (`./.claude/`, `./.forge/`, etc.), preserving only allowlisted existing native integration sections such as MCP servers, hooks, and trusted projects.
 
 **Why it exists:** Claude Code, OpenCode, Codex, Cursor, and ForgeCode all have incompatible config formats. Without ULIS you maintain separate, drift-prone config trees. ULIS keeps one source of truth and compiles it.
 
@@ -68,7 +68,7 @@ Errors abort the build (exit code 1, no files written). Warnings print and the b
 
 `config.yaml` holds the minimum CLI metadata (`version`, `name`).
 
-Platform adapter defaults are internal to ULIS. If you need platform-native output customization, place partial config files under `raw/` (for example `raw/opencode/opencode.json` or `raw/codex/config.toml`). These are **deep-merged** into the generated output — raw values win on conflict, arrays are concatenated, and all generated keys not touched by the raw file are preserved. See [Source Layout — Raw overrides](./guide/source-layout.md#raw-overrides) for the full rules.
+Platform adapter defaults are internal to ULIS. If you need platform-native output customization, place partial config files under `raw/` (for example `raw/opencode/opencode.json` or `raw/codex/config.toml`). These are merged into the generated output — objects merge recursively, and raw arrays or scalars replace generated values at the same path. See [Source Layout — Raw overrides](./guide/source-layout.md#raw-overrides) for the full rules.
 
 Capability mismatches are handled with **best-effort + comments**: if a target lacks native support for a field, the value is emitted as a comment in the generated file so reviewers can see it, and the build continues (no hard failure).
 

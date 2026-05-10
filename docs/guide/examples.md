@@ -346,7 +346,7 @@ network_access = false
 Always read `docs/SPEC.md` before changing generator behavior.
 ```
 
-Config files (`.json`, `.toml`, `.yaml`, `.yml`) are deep-merged into generated files with the same relative path. Other files are copied as-is.
+Config files (`.json`, `.toml`, `.yaml`, `.yml`) are merged into generated files with the same relative path. Objects merge recursively; raw arrays and scalars replace generated values at the same path. Other files are copied as-is.
 
 ## Presets
 
