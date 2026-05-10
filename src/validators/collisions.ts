@@ -19,7 +19,7 @@ export function validateCollisions(
       agents.map((a) => a.name),
       "agent",
       "Duplicate agent name",
-      `Rename one of the colliding files in the ulis agents/ folder`,
+      `Rename one of the colliding files in the ulis agents/ folder (or its \`name:\` frontmatter)`,
     ),
   );
 

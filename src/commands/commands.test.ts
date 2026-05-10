@@ -90,6 +90,29 @@ describe("commands", () => {
     expect(readFileSync(join(projectRoot, ".claude", "agents", "worker.md"), "utf8")).toContain("A minimal test agent");
   });
 
+  it("installCmd installs Claude agents using explicit frontmatter names", async () => {
+    const projectRoot = createTempRoot();
+    copyFixtureSource(projectRoot);
+    writeFileSync(
+      join(projectRoot, ".ulis", "agents", "local-file.md"),
+      [
+        "---",
+        "name: refactoring-specialist",
+        "description: Refactor safely",
+        "tools: Read, Write, Edit, Bash, Glob, Grep",
+        "model: sonnet",
+        "---",
+        "You are a refactoring specialist.",
+      ].join("\n"),
+    );
+    process.chdir(projectRoot);
+
+    await installCmd({ yes: true, target: "claude" });
+
+    expect(existsSync(join(projectRoot, ".claude", "agents", "refactoring-specialist.md"))).toBe(true);
+    expect(existsSync(join(projectRoot, ".claude", "agents", "local-file.md"))).toBe(false);
+  });
+
   it("installCmd with an empty target does not install platform configs", async () => {
     const projectRoot = createTempRoot();
     copyFixtureSource(projectRoot);

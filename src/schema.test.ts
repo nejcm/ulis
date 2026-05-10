@@ -23,6 +23,36 @@ describe("AgentFrontmatterSchema", () => {
     expect(tools.bash).toBe(false); // default
   });
 
+  it("accepts a safe explicit agent name", () => {
+    const result = AgentFrontmatterSchema.parse({
+      name: "refactoring-specialist",
+      description: "A test agent",
+      tools: { read: true },
+    });
+    expect(result.name).toBe("refactoring-specialist");
+  });
+
+  it("rejects explicit agent names that are not safe slugs", () => {
+    for (const name of [
+      "../config",
+      "team/worker",
+      "TeamWorker",
+      "réfactoring",
+      "worker١",
+      "worker--copy",
+      "-worker",
+      "worker-",
+    ]) {
+      expect(() =>
+        AgentFrontmatterSchema.parse({
+          name,
+          description: "A test agent",
+          tools: { read: true },
+        }),
+      ).toThrow();
+    }
+  });
+
   it("accepts precise model id", () => {
     const result = AgentFrontmatterSchema.parse({
       description: "x",

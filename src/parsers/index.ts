@@ -4,7 +4,7 @@ import type { McpConfig, PermissionsConfig, UlisConfig } from "../schema.js";
 import { AgentFrontmatterSchema, RuleFrontmatterSchema, UlisConfigSchema } from "../schema.js";
 import { loadValidatedConfigFile } from "../utils/config-loader.js";
 import { ParseAggregateError, ParseError, readMarkdownDir } from "./_shared.js";
-import type { ParsedAgent } from "./agent.js";
+import { resolveAgentName, type ParsedAgent } from "./agent.js";
 import { loadMcp } from "./mcp.js";
 import { loadPermissions } from "./permissions.js";
 import type { ParsedRule } from "./rule.js";
@@ -44,7 +44,7 @@ export function parseProject(sourceDir: string): ParsedProject {
     join(sourceDir, "agents"),
     AgentFrontmatterSchema,
     "agent",
-    (name, frontmatter, body) => ({ name, frontmatter, body }),
+    (fileName, frontmatter, body) => ({ name: resolveAgentName(fileName, frontmatter), frontmatter, body }),
   );
   allErrors.push(...agentsResult.errors);
 

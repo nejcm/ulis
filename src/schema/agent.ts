@@ -25,7 +25,12 @@ const CursorModelSchema = knownStringSchema(CURSOR_MODELS);
 export const AgentFrontmatterSchema = z
   .object({
     // IDENTITY
-    name: z.string().optional(), // can be derived from filename
+    name: z
+      .string()
+      .min(1)
+      .max(64)
+      .regex(/^(?!-)(?!.*--)(?!.*-$)[a-z0-9-]+$/u)
+      .optional(), // can be derived from filename
     description: z.string(),
 
     // MODEL CONFIG
