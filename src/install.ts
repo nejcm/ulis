@@ -300,7 +300,14 @@ function installCodex(context: InstallContext): void {
 
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.codex}`);
   backupDirectory(targetDir, context);
-  const preservedConfig = preserveConfigPaths(targetConfig, [["projects"], ["hooks"], ["mcp_servers"]]);
+  const preservedConfig = preserveConfigPaths(targetConfig, [
+    ["projects"],
+    ["hooks"],
+    ["mcp_servers"],
+    ["tui"],
+    ["notice"],
+    ["features"],
+  ]);
   ensureDir(targetDir);
   copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["config.toml"]));
   writeMergedNativeConfig(sourceConfig, targetConfig, preservedConfig, "config.toml", context.logger);

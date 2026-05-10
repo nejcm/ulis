@@ -25,7 +25,7 @@ ULIS is a CLI (`ulis`) that lets you define AI agent configurations **once** and
 └── config.yaml          ◄─── version + name + optional `runner: npx | bunx`
 ```
 
-`ulis install` deploys the generated tree to the per-platform destination (`./.claude/`, `./.forge/`, etc.), preserving only allowlisted existing native integration sections such as MCP servers, hooks, and trusted projects.
+`ulis install` deploys the generated tree to the per-platform destination (`./.claude/`, `./.forge/`, etc.), preserving only allowlisted existing native sections such as MCP servers, hooks, trusted projects, and Codex `tui`, `notice`, and `features`.
 
 **Why it exists:** Claude Code, OpenCode, Codex, Cursor, and ForgeCode all have incompatible config formats. Without ULIS you maintain separate, drift-prone config trees. ULIS keeps one source of truth and compiles it.
 

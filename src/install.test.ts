@@ -59,9 +59,13 @@ describe("runInstall", () => {
       join(outputDir, "codex", "config.toml"),
       [
         'approval_policy = "never"',
+        'notice = "generated"',
         "",
         "[hooks]",
         'pre = ["raw"]',
+        "",
+        "[features]",
+        "web_search = true",
         "",
         '[projects."/shared"]',
         'trust_level = "untrusted"',
@@ -78,9 +82,17 @@ describe("runInstall", () => {
       join(projectDir, ".codex", "config.toml"),
       [
         'model = "old"',
+        'notice = "existing"',
         "",
         "[hooks]",
         'pre = ["existing"]',
+        "",
+        "[features]",
+        "web_search = false",
+        "responses = true",
+        "",
+        "[tui]",
+        'notifications = ["agent-turn-complete"]',
         "",
         '[projects."/keep"]',
         'trust_level = "trusted"',
@@ -108,7 +120,10 @@ describe("runInstall", () => {
 
     expect(readMergeableConfig(join(projectDir, ".codex", "config.toml"))).toEqual({
       approval_policy: "never",
+      notice: "generated",
       hooks: { pre: ["raw"] },
+      features: { web_search: true, responses: true },
+      tui: { notifications: ["agent-turn-complete"] },
       projects: {
         "/keep": { trust_level: "trusted" },
         "/shared": { trust_level: "untrusted" },
@@ -131,7 +146,19 @@ describe("runInstall", () => {
     write(join(outputDir, "codex", "config.toml"), 'approval_policy = "on-request"\n');
     write(
       join(userHome, ".codex", "config.toml"),
-      ['model = "old"', "", '[projects."/global"]', 'trust_level = "trusted"'].join("\n"),
+      [
+        'model = "old"',
+        'notice = "existing"',
+        "",
+        "[features]",
+        "responses = true",
+        "",
+        "[tui]",
+        "show_raw_agent_reasoning = true",
+        "",
+        '[projects."/global"]',
+        'trust_level = "trusted"',
+      ].join("\n"),
     );
 
     runInstall({
@@ -146,6 +173,9 @@ describe("runInstall", () => {
 
     expect(readMergeableConfig(join(userHome, ".codex", "config.toml"))).toEqual({
       approval_policy: "on-request",
+      notice: "existing",
+      features: { responses: true },
+      tui: { show_raw_agent_reasoning: true },
       projects: { "/global": { trust_level: "trusted" } },
     });
   });

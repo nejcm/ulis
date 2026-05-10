@@ -78,13 +78,13 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 
 **Install strategy per platform:**
 
-| Platform  | Managed dirs (replaced)                       | Existing native integrations preserved               |
-| --------- | --------------------------------------------- | ---------------------------------------------------- |
-| Claude    | `agents/`, `commands/`, `rules/`, `hooks/`, … | `settings.json` `hooks`, `.claude.json` `mcpServers` |
-| OpenCode  | target dir contents                           | `opencode.json` `mcp`                                |
-| Codex     | target dir contents                           | `config.toml` `projects`, `hooks`, `mcp_servers`     |
-| Cursor    | `agents/` (`.mdc` files)                      | `mcp.json` `mcpServers`                              |
-| ForgeCode | `.forge/agents`, `.forge/skills`, `AGENTS.md` | `.forge/.mcp.json` `mcpServers`                      |
+| Platform  | Managed dirs (replaced)                       | Existing native integrations preserved                                        |
+| --------- | --------------------------------------------- | ----------------------------------------------------------------------------- |
+| Claude    | `agents/`, `commands/`, `rules/`, `hooks/`, … | `settings.json` `hooks`, `.claude.json` `mcpServers`                          |
+| OpenCode  | target dir contents                           | `opencode.json` `mcp`                                                         |
+| Codex     | target dir contents                           | `config.toml` `projects`, `hooks`, `mcp_servers`, `tui`, `notice`, `features` |
+| Cursor    | `agents/` (`.mdc` files)                      | `mcp.json` `mcpServers`                                                       |
+| ForgeCode | `.forge/agents`, `.forge/skills`, `AGENTS.md` | `.forge/.mcp.json` `mcpServers`                                               |
 
 Install preserves only the allowlisted native integration sections above. Generated output wins on the same integration name/path, and raw fragments win through the generated output because raw is merged during build. Existing non-allowlisted native config values are removed. If `--backup` is set, backups are created before parsing preserved native config.
 
