@@ -38,6 +38,14 @@ function createForgecodeOutput(outputDir: string): void {
   write(join(outputDir, "forgecode", ".forge", ".mcp.json"), JSON.stringify({ mcpServers: {} }, null, 2));
 }
 
+async function waitFor(condition: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (condition()) return;
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+  throw new Error("Timed out waiting for condition.");
+}
+
 afterEach(() => {
   __test.resetRuntimeDependencies();
   for (const root of tmpRoots.splice(0)) {
@@ -46,7 +54,7 @@ afterEach(() => {
 });
 
 describe("runInstall", () => {
-  it("preserves allowlisted Codex config sections for project installs", () => {
+  it("preserves allowlisted Codex config sections for project installs", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -108,7 +116,7 @@ describe("runInstall", () => {
       ].join("\n"),
     );
 
-    runInstall({
+    await runInstall({
       sourceDir,
       outputDir,
       destBase: projectDir,
@@ -136,7 +144,7 @@ describe("runInstall", () => {
     });
   });
 
-  it("preserves allowlisted Codex config sections for global installs", () => {
+  it("preserves allowlisted Codex config sections for global installs", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -161,7 +169,7 @@ describe("runInstall", () => {
       ].join("\n"),
     );
 
-    runInstall({
+    await runInstall({
       sourceDir,
       outputDir,
       destBase: userHome,
@@ -180,7 +188,7 @@ describe("runInstall", () => {
     });
   });
 
-  it("preserves allowlisted integration maps across platform installs", () => {
+  it("preserves allowlisted integration maps across platform installs", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -242,7 +250,7 @@ describe("runInstall", () => {
       JSON.stringify({ model: "old", mcp: { existing: { command: ["old"] }, shared: { command: ["old"] } } }, null, 2),
     );
 
-    runInstall({
+    await runInstall({
       sourceDir,
       outputDir,
       destBase: projectDir,
@@ -271,7 +279,7 @@ describe("runInstall", () => {
     });
   });
 
-  it("preserves OpenCode allowlisted config when generated config is absent", () => {
+  it("preserves OpenCode allowlisted config when generated config is absent", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -286,7 +294,7 @@ describe("runInstall", () => {
       JSON.stringify({ model: "old", mcp: { existing: { command: ["old"] } } }, null, 2),
     );
 
-    runInstall({
+    await runInstall({
       sourceDir,
       outputDir,
       destBase: projectDir,
@@ -302,7 +310,7 @@ describe("runInstall", () => {
     });
   });
 
-  it("drops existing native config when generated config is absent and no allowlisted keys exist", () => {
+  it("drops existing native config when generated config is absent and no allowlisted keys exist", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -314,7 +322,7 @@ describe("runInstall", () => {
     write(join(outputDir, "opencode", "AGENTS.md"), "Generated instructions.\n");
     write(join(projectDir, ".opencode", "opencode.json"), JSON.stringify({ model: "old" }, null, 2));
 
-    runInstall({
+    await runInstall({
       sourceDir,
       outputDir,
       destBase: projectDir,
@@ -328,7 +336,7 @@ describe("runInstall", () => {
     expect(existsSync(join(projectDir, ".opencode", "opencode.json"))).toBe(false);
   });
 
-  it("removes stale Codex config when generated config is absent and no allowlisted keys exist", () => {
+  it("removes stale Codex config when generated config is absent and no allowlisted keys exist", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -340,7 +348,7 @@ describe("runInstall", () => {
     write(join(outputDir, "codex", "AGENTS.md"), "Generated instructions.\n");
     write(join(projectDir, ".codex", "config.toml"), 'model = "old"\n');
 
-    runInstall({
+    await runInstall({
       sourceDir,
       outputDir,
       destBase: projectDir,
@@ -354,7 +362,7 @@ describe("runInstall", () => {
     expect(existsSync(join(projectDir, ".codex", "config.toml"))).toBe(false);
   });
 
-  it("backs up existing config before failing to parse preserved native config", () => {
+  it("backs up existing config before failing to parse preserved native config", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -366,7 +374,7 @@ describe("runInstall", () => {
     write(join(outputDir, "codex", "config.toml"), 'approval_policy = "never"\n');
     write(join(projectDir, ".codex", "config.toml"), "[invalid\n");
 
-    expect(() =>
+    await expect(
       runInstall({
         sourceDir,
         outputDir,
@@ -377,14 +385,14 @@ describe("runInstall", () => {
         backup: true,
         logger: silentLogger,
       }),
-    ).toThrow("Failed to parse existing native config");
+    ).rejects.toThrow("Failed to parse existing native config");
 
     expect(readdirSync(projectDir).some((entry) => entry.startsWith(".codex.") && entry.endsWith(".backup"))).toBe(
       true,
     );
   });
 
-  it("installs ForgeCode AGENTS.md into the Forge home directory for global installs", () => {
+  it("installs ForgeCode AGENTS.md into the Forge home directory for global installs", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -393,7 +401,7 @@ describe("runInstall", () => {
     mkdirSync(userHome, { recursive: true });
     createForgecodeOutput(outputDir);
 
-    runInstall({
+    await runInstall({
       sourceDir,
       outputDir,
       destBase: userHome,
@@ -407,7 +415,7 @@ describe("runInstall", () => {
     expect(existsSync(join(userHome, "AGENTS.md"))).toBe(false);
   });
 
-  it("installs ForgeCode AGENTS.md into the Forge project config directory for project installs", () => {
+  it("installs ForgeCode AGENTS.md into the Forge project config directory for project installs", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -418,7 +426,7 @@ describe("runInstall", () => {
     mkdirSync(userHome, { recursive: true });
     createForgecodeOutput(outputDir);
 
-    runInstall({
+    await runInstall({
       sourceDir,
       outputDir,
       destBase: projectDir,
@@ -432,7 +440,7 @@ describe("runInstall", () => {
     expect(existsSync(join(projectDir, "AGENTS.md"))).toBe(false);
   });
 
-  it("skips extension installs when installExtensions is false", () => {
+  it("skips extension installs when installExtensions is false", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -461,7 +469,7 @@ describe("runInstall", () => {
       header() {},
     };
 
-    runInstall({
+    await runInstall({
       sourceDir,
       outputDir,
       destBase: projectDir,
@@ -476,7 +484,7 @@ describe("runInstall", () => {
     expect(logs.some((line) => line.includes("this-package-does-not-exist"))).toBe(false);
   });
 
-  it("scopes wildcard skill installs to selected project platforms", () => {
+  it("scopes wildcard skill installs to selected project platforms", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -494,9 +502,13 @@ describe("runInstall", () => {
         commands.push({ command, args });
         return { status: 0, stdout: "", stderr: "" } as never;
       },
+      async runAsyncCommand(command, args) {
+        commands.push({ command, args });
+        return { status: 0, stdout: "", stderr: "" };
+      },
     });
 
-    runInstall({
+    await runInstall({
       sourceDir,
       outputDir,
       destBase: projectDir,
@@ -515,7 +527,7 @@ describe("runInstall", () => {
     expect(skillsCommands[0]!.args).not.toContain("cursor");
   });
 
-  it("scopes wildcard skill installs to selected global platforms", () => {
+  it("scopes wildcard skill installs to selected global platforms", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -531,9 +543,13 @@ describe("runInstall", () => {
         commands.push({ command, args });
         return { status: 0, stdout: "", stderr: "" } as never;
       },
+      async runAsyncCommand(command, args) {
+        commands.push({ command, args });
+        return { status: 0, stdout: "", stderr: "" };
+      },
     });
 
-    runInstall({
+    await runInstall({
       sourceDir,
       outputDir,
       destBase: userHome,
@@ -551,6 +567,127 @@ describe("runInstall", () => {
     expect(skillsCommands[0]!.args).not.toContain("opencode");
     expect(skillsCommands[0]!.args).not.toContain("codex");
     expect(skillsCommands[0]!.args).not.toContain("cursor");
+  });
+
+  it("runs external skill installs with bounded concurrency", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "codex", "AGENTS.md"), "Codex instructions.\n");
+    write(
+      join(sourceDir, "skills.yaml"),
+      [
+        "codex:",
+        "  skills:",
+        "    - name: skill/one",
+        "    - name: skill/two",
+        "    - name: skill/three",
+        "    - name: skill/four",
+        "    - name: skill/five",
+        "",
+      ].join("\n"),
+    );
+
+    let activeCommands = 0;
+    let maxActiveCommands = 0;
+    const commands: Array<{ command: string; args: readonly string[] }> = [];
+    const releases: Array<() => void> = [];
+    __test.setRuntimeDependencies({
+      async runAsyncCommand(command, args) {
+        commands.push({ command, args });
+        activeCommands += 1;
+        maxActiveCommands = Math.max(maxActiveCommands, activeCommands);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        activeCommands -= 1;
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    const install = runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["codex"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    await waitFor(() => commands.length === 4);
+    expect(maxActiveCommands).toBe(4);
+    for (const release of releases.splice(0)) release();
+    await waitFor(() => commands.length === 5);
+    for (const release of releases.splice(0)) release();
+    await install;
+
+    expect(commands.filter((command) => command.command === "npx")).toHaveLength(5);
+    expect(maxActiveCommands).toBe(4);
+  });
+
+  it("continues queued skill installs after a failure without streaming child output", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "codex", "AGENTS.md"), "Codex instructions.\n");
+    write(
+      join(sourceDir, "skills.yaml"),
+      ["codex:", "  skills:", "    - name: skill/bad", "    - name: skill/good", ""].join("\n"),
+    );
+
+    const logs: string[] = [];
+    const recordingLogger: Logger = {
+      info(msg) {
+        logs.push(`info:${msg}`);
+      },
+      success(msg) {
+        logs.push(`success:${msg}`);
+      },
+      warn(msg) {
+        logs.push(`warn:${msg}`);
+      },
+      error() {},
+      dim(msg) {
+        logs.push(`dim:${msg}`);
+      },
+      header() {},
+    };
+    __test.setRuntimeDependencies({
+      async runAsyncCommand(_command, args) {
+        if (args.includes("skill/bad")) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return { status: 1, stdout: "stdout noise\n", stderr: "first detail\nlast detail\n" };
+        }
+        return { status: 0, stdout: "success noise\n", stderr: "" };
+      },
+    });
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["codex"],
+      rebuild: false,
+      logger: recordingLogger,
+    });
+
+    expect(logs).toContain("warn:Failed to install codex skill: skill/bad (last detail)");
+    expect(logs).toContain("success:codex skill: skill/good");
+    expect(logs.indexOf("warn:Failed to install codex skill: skill/bad (last detail)")).toBeLessThan(
+      logs.indexOf("success:codex skill: skill/good"),
+    );
+    expect(logs).not.toContain("dim:stdout noise");
+    expect(logs).not.toContain("warn:first detail");
   });
 });
 

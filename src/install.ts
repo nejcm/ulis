@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -59,13 +59,34 @@ type RunCommand = (
   options: Parameters<typeof spawnSync>[2],
 ) => ReturnType<typeof spawnSync>;
 
+interface AsyncCommandResult {
+  readonly status: number | null;
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly error?: Error;
+}
+
+type SkillInstallLog =
+  | { readonly level: "success"; readonly message: string }
+  | { readonly level: "warn"; readonly message: string };
+
+type RunAsyncCommand = (
+  command: string,
+  args: readonly string[],
+  options: Parameters<typeof spawn>[2],
+) => Promise<AsyncCommandResult>;
+
 interface RuntimeDependencies {
   readonly runCommand: RunCommand;
+  readonly runAsyncCommand: RunAsyncCommand;
 }
 
 const defaultRuntimeDependencies: RuntimeDependencies = {
   runCommand(command, args, options) {
     return spawnSync(command, [...args], options);
+  },
+  runAsyncCommand(command, args, options) {
+    return runAsyncCommand(command, args, options);
   },
 };
 
@@ -123,7 +144,7 @@ export function loadDotEnv(rootDir: string, env: NodeJS.ProcessEnv = process.env
 /**
  * Install generated per-platform configs from source to destination base directory.
  */
-export function runInstall(options: InstallOptions): readonly Platform[] {
+export async function runInstall(options: InstallOptions): Promise<readonly Platform[]> {
   const logger = options.logger ?? defaultLogger;
   const sourceDir = resolve(options.sourceDir);
   const destBase = resolve(options.destBase);
@@ -192,19 +213,19 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
     };
     switch (platform) {
       case "opencode":
-        installOpencode(context);
+        await installOpencode(context);
         break;
       case "claude":
-        installClaude(context);
+        await installClaude(context);
         break;
       case "codex":
-        installCodex(context);
+        await installCodex(context);
         break;
       case "cursor":
-        installCursor(context);
+        await installCursor(context);
         break;
       case "forgecode":
-        installForgecode(context);
+        await installForgecode(context);
         break;
     }
   }
@@ -212,7 +233,7 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
   const allSkills = skillsConfig["*"]?.skills ?? [];
   if (allSkills.length > 0) {
     logHeader(logger, "Installing External Skills");
-    installSkills(allSkills, "*", destBase, globalInstall, logger, platforms);
+    await installSkills(allSkills, "*", destBase, globalInstall, logger, platforms);
   }
 
   if (installExtensionsEnabled) {
@@ -241,7 +262,7 @@ interface InstallContext {
   readonly logger?: Logger;
 }
 
-function installOpencode(context: InstallContext): void {
+async function installOpencode(context: InstallContext): Promise<void> {
   const targetDir = platformConfigDir("opencode", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "opencode");
   const sourceConfig = join(sourceDir, "opencode.json");
@@ -258,13 +279,13 @@ function installOpencode(context: InstallContext): void {
 
   const skills = context.skills.opencode?.skills ?? [];
   if (skills.length > 0) {
-    installSkills(skills, "opencode", context.destBase, context.globalInstall, context.logger);
+    await installSkills(skills, "opencode", context.destBase, context.globalInstall, context.logger);
   }
 
   runPlatformExtensions(context, "opencode");
 }
 
-function installClaude(context: InstallContext): void {
+async function installClaude(context: InstallContext): Promise<void> {
   const targetDir = platformConfigDir("claude", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "claude");
   const generatedSettings = join(sourceDir, "settings.json");
@@ -286,13 +307,13 @@ function installClaude(context: InstallContext): void {
 
   const claudeSkills = context.skills.claude?.skills ?? [];
   if (claudeSkills.length > 0) {
-    installSkills(claudeSkills, "claude", context.destBase, context.globalInstall, context.logger);
+    await installSkills(claudeSkills, "claude", context.destBase, context.globalInstall, context.logger);
   }
 
   runPlatformExtensions(context, "claude");
 }
 
-function installCodex(context: InstallContext): void {
+async function installCodex(context: InstallContext): Promise<void> {
   const targetDir = platformConfigDir("codex", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "codex");
   const sourceConfig = join(sourceDir, "config.toml");
@@ -314,13 +335,13 @@ function installCodex(context: InstallContext): void {
 
   const skills = context.skills.codex?.skills ?? [];
   if (skills.length > 0) {
-    installSkills(skills, "codex", context.destBase, context.globalInstall, context.logger);
+    await installSkills(skills, "codex", context.destBase, context.globalInstall, context.logger);
   }
 
   runPlatformExtensions(context, "codex");
 }
 
-function installCursor(context: InstallContext): void {
+async function installCursor(context: InstallContext): Promise<void> {
   const targetDir = platformConfigDir("cursor", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "cursor");
   const generatedMcp = join(sourceDir, "mcp.json");
@@ -337,13 +358,13 @@ function installCursor(context: InstallContext): void {
 
   const skills = context.skills.cursor?.skills ?? [];
   if (skills.length > 0) {
-    installSkills(skills, "cursor", context.destBase, context.globalInstall, context.logger);
+    await installSkills(skills, "cursor", context.destBase, context.globalInstall, context.logger);
   }
 
   runPlatformExtensions(context, "cursor");
 }
 
-function installForgecode(context: InstallContext): void {
+async function installForgecode(context: InstallContext): Promise<void> {
   const sourceDir = join(context.outputDir, "forgecode");
   const sourceForgeDir = join(sourceDir, resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project));
   const sourceMcp = join(sourceForgeDir, ".mcp.json");
@@ -502,14 +523,16 @@ const SKILL_PLATFORM_AGENT_NAMES: Partial<Record<Platform, string>> = {
   cursor: "cursor",
 };
 
-function installSkills(
+const SKILL_INSTALL_CONCURRENCY = 4;
+
+async function installSkills(
   skills: readonly { key?: string; name: string; args?: readonly string[] }[],
   platform: Platform | "*",
   installBaseDir: string,
   globalInstall: boolean,
   logger?: Logger,
   selectedPlatforms: readonly Platform[] = [],
-): void {
+): Promise<void> {
   if (skills.length === 0) return;
   const agentNames =
     platform === "*"
@@ -521,7 +544,7 @@ function installSkills(
   if (agentNames.length === 0) return;
   const agentFlags = ["-a", ...agentNames];
 
-  for (const skill of skills) {
+  const results = await runBounded(skills, SKILL_INSTALL_CONCURRENCY, async (skill): Promise<SkillInstallLog> => {
     const npxArgs = [
       "skills@latest",
       "add",
@@ -531,11 +554,11 @@ function installSkills(
       "--yes",
       ...(skill.args ?? []),
     ];
-    const result = runCommand("npx", npxArgs, {
+    logInfo(logger, `Installing ${platform} skill: ${skill.key ?? skill.name}`);
+    const result = await runSkillCommand("npx", npxArgs, {
       stdio: ["ignore", "pipe", "pipe"],
       cwd: installBaseDir,
       shell: process.platform === "win32",
-      encoding: "utf8",
     });
     if (result.status !== 0) {
       const combined = `${result.stdout ?? ""}\n${result.stderr ?? ""}`
@@ -544,11 +567,38 @@ function installSkills(
         .map((line) => line.trim())
         .filter((line) => line.length > 0);
       const detail = combined[combined.length - 1] || result.error?.message || `exit ${result.status}`;
-      logWarn(logger, `Failed to install ${platform} skill: ${skill.key ?? skill.name} (${detail})`);
-      continue;
+      return {
+        level: "warn",
+        message: `Failed to install ${platform} skill: ${skill.key ?? skill.name} (${detail})`,
+      };
     }
-    logSuccess(logger, `${platform} skill: ${skill.key ?? skill.name}`);
+    return { level: "success", message: `${platform} skill: ${skill.key ?? skill.name}` };
+  });
+
+  for (const result of results) {
+    if (result.level === "warn") logWarn(logger, result.message);
+    else logSuccess(logger, result.message);
   }
+}
+
+async function runBounded<T, U>(
+  items: readonly T[],
+  concurrency: number,
+  runItem: (item: T) => Promise<U>,
+): Promise<readonly U[]> {
+  let nextIndex = 0;
+  const results: U[] = [];
+  const workerCount = Math.min(concurrency, items.length);
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const itemIndex = nextIndex;
+      const item = items[itemIndex]!;
+      nextIndex += 1;
+      results[itemIndex] = await runItem(item);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 function runPlatformExtensions(context: InstallContext, platform: Platform): void {
@@ -672,6 +722,47 @@ function runCommand(command: string, args: readonly string[], options: Parameter
   } catch (error) {
     throw new InstallError(`Failed to run command: ${command} ${args.join(" ")}`, error);
   }
+}
+
+async function runSkillCommand(
+  command: string,
+  args: readonly string[],
+  options: Parameters<typeof spawn>[2],
+): Promise<AsyncCommandResult> {
+  try {
+    return await runtimeDependencies.runAsyncCommand(command, args, options);
+  } catch (error) {
+    throw new InstallError(`Failed to run command: ${command} ${args.join(" ")}`, error);
+  }
+}
+
+function runAsyncCommand(
+  command: string,
+  args: readonly string[],
+  options: Parameters<typeof spawn>[2],
+): Promise<AsyncCommandResult> {
+  return new Promise((resolve) => {
+    const child = spawn(command, [...args], options);
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout?.on("data", (chunk: Buffer | string) => stdout.push(Buffer.from(chunk)));
+    child.stderr?.on("data", (chunk: Buffer | string) => stderr.push(Buffer.from(chunk)));
+    child.on("error", (error) => {
+      resolve({
+        status: 1,
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8"),
+        error,
+      });
+    });
+    child.on("close", (status) => {
+      resolve({
+        status,
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8"),
+      });
+    });
+  });
 }
 
 function logHeader(logger: Logger | undefined, message: string): void {

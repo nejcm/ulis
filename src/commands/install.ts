@@ -41,7 +41,7 @@ export async function installCmd(options: InstallCmdOptions = {}): Promise<void>
     }
   }
 
-  runInstall({
+  await runInstall({
     sourceDir,
     destBase,
     globalInstall: mode === "global",
