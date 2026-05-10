@@ -162,6 +162,30 @@ describe("Codex generator", () => {
     expect(get(m, "config.toml")).toContain("[mcp_servers.test-local]");
   });
 
+  it("does not emit implicit root config defaults", () => {
+    const config = get(m, "config.toml");
+    expect(config).not.toContain("model =");
+    expect(config).not.toContain("model_reasoning_effort =");
+    expect(config).not.toContain("[windows]");
+    expect(config).not.toContain("startup_timeout_sec");
+  });
+
+  it("keeps explicit Codex permission config", () => {
+    const result = generate("codex", {
+      ...buildProject(),
+      permissions: {
+        codex: {
+          approvalMode: "on-request",
+          sandbox: "workspace-write",
+        },
+      },
+    });
+    const config = result!.artifacts.find((artifact) => artifact.path === "config.toml")!.contents as string;
+    expect(config).toContain('approval_policy = "on-request"');
+    expect(config).toContain("[windows]");
+    expect(config).toContain('sandbox = "workspace-write"');
+  });
+
   it("generates agent TOML with policy comments", () => {
     const toml = get(m, "agents/worker.toml");
     expect(toml).toContain('name = "worker"');

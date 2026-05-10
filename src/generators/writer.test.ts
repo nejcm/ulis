@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { readMergeableConfig } from "../utils/config-merger.js";
 import type { GenerationResult } from "./types.js";
 import { writeResult } from "./writer.js";
 
@@ -140,22 +141,81 @@ describe("writeResult", () => {
     expect(existsSync(join(outDir, "missing"))).toBe(false);
   });
 
-  it("merges raw directories after artifacts", () => {
+  it("merges raw directories after artifacts with raw replacing same-path values", () => {
     const root = createTempRoot();
     const outDir = join(root, "out");
     const rawDir = join(root, "raw");
-    write(join(rawDir, "config.json"), JSON.stringify({ raw: true }));
+    write(
+      join(rawDir, "config.json"),
+      JSON.stringify({ list: ["raw"], nested: { keepRaw: true, replace: "raw" }, raw: true }),
+    );
 
     writeResult(
       {
-        artifacts: [{ path: "config.json", contents: JSON.stringify({ generated: true }) }],
+        artifacts: [
+          {
+            path: "config.json",
+            contents: JSON.stringify({
+              generated: true,
+              list: ["generated"],
+              nested: { keepGenerated: true, replace: "generated" },
+            }),
+          },
+        ],
         post: { rawDirs: [rawDir], aliasFiles: [], skillDirs: [] },
       },
       outDir,
       "claude",
     );
 
-    expect(JSON.parse(read(join(outDir, "config.json")))).toEqual({ generated: true, raw: true });
+    expect(JSON.parse(read(join(outDir, "config.json")))).toEqual({
+      generated: true,
+      list: ["raw"],
+      nested: { keepGenerated: true, keepRaw: true, replace: "raw" },
+      raw: true,
+    });
+  });
+
+  it("merges raw TOML with replacement semantics", () => {
+    const root = createTempRoot();
+    const outDir = join(root, "out");
+    const rawDir = join(root, "raw");
+    write(
+      join(rawDir, "config.toml"),
+      ['items = ["raw"]', "", "[mcp_servers.local]", 'args = ["raw"]', "", "[mcp_servers.raw]", 'command = "bun"'].join(
+        "\n",
+      ),
+    );
+
+    writeResult(
+      {
+        artifacts: [
+          {
+            path: "config.toml",
+            contents: [
+              'model = "generated"',
+              'items = ["generated"]',
+              "",
+              "[mcp_servers.local]",
+              'command = "node"',
+              'args = ["generated"]',
+            ].join("\n"),
+          },
+        ],
+        post: { rawDirs: [rawDir], aliasFiles: [], skillDirs: [] },
+      },
+      outDir,
+      "codex",
+    );
+
+    expect(readMergeableConfig(join(outDir, "config.toml"))).toEqual({
+      model: "generated",
+      items: ["raw"],
+      mcp_servers: {
+        local: { command: "node", args: ["raw"] },
+        raw: { command: "bun" },
+      },
+    });
   });
 
   it("appends after raw merges and then writes aliases", () => {
