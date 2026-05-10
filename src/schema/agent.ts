@@ -14,7 +14,13 @@ import {
   PERMISSION_LEVELS,
 } from "../constants.js";
 import { ALL_MODELS, CLAUDE_MODELS, CODEX_MODELS, CURSOR_MODELS, OPENCODE_MODELS } from "../models.js";
-import { HooksSchema, ToolPermissionsSchema } from "./shared.js";
+import { HooksSchema, ToolPermissionsSchema, knownStringSchema } from "./shared.js";
+
+const ModelSchema = knownStringSchema(ALL_MODELS);
+const ClaudeModelSchema = knownStringSchema(CLAUDE_MODELS);
+const OpenCodeModelSchema = knownStringSchema(OPENCODE_MODELS);
+const CodexModelSchema = knownStringSchema(CODEX_MODELS);
+const CursorModelSchema = knownStringSchema(CURSOR_MODELS);
 
 export const AgentFrontmatterSchema = z
   .object({
@@ -23,7 +29,7 @@ export const AgentFrontmatterSchema = z
     description: z.string(),
 
     // MODEL CONFIG
-    model: z.enum(ALL_MODELS).optional(),
+    model: ModelSchema.optional(),
     temperature: z.number().min(0).max(1).optional(),
     effort: z.enum(EFFORT_LEVELS).optional(),
 
@@ -84,7 +90,7 @@ export const AgentFrontmatterSchema = z
         claude: z
           .looseObject({
             enabled: z.boolean().default(true),
-            model: z.enum(CLAUDE_MODELS).optional(),
+            model: ClaudeModelSchema.optional(),
             permissionMode: z.enum(CLAUDE_PERMISSION_MODES).optional(),
             disallowedTools: z.array(z.string()).optional(),
             initialPrompt: z.string().optional(),
@@ -93,7 +99,7 @@ export const AgentFrontmatterSchema = z
         opencode: z
           .looseObject({
             enabled: z.boolean().default(true),
-            model: z.enum(OPENCODE_MODELS).optional(),
+            model: OpenCodeModelSchema.optional(),
             mode: z.enum(OPENCODE_AGENT_MODES).default("subagent"),
             top_p: z.number().min(0).max(1).optional(),
             rate_limit_per_hour: z.number().optional(),
@@ -110,7 +116,7 @@ export const AgentFrontmatterSchema = z
         codex: z
           .looseObject({
             enabled: z.boolean().default(true),
-            model: z.enum(CODEX_MODELS).optional(),
+            model: CodexModelSchema.optional(),
             sandbox_mode: z.string().optional(),
             model_reasoning_effort: z.string().optional(),
             nickname_candidates: z.array(z.string()).optional(),
@@ -120,7 +126,7 @@ export const AgentFrontmatterSchema = z
         cursor: z
           .looseObject({
             enabled: z.boolean().default(true),
-            model: z.enum(CURSOR_MODELS).optional(),
+            model: CursorModelSchema.optional(),
             readonly: z.boolean().optional(),
             is_background: z.boolean().optional(),
           })

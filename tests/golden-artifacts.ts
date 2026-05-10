@@ -89,7 +89,7 @@ You are a minimal worker agent used for testing.
   },
   codex: {
     "config.toml": `model = "gpt-5.4"
-model_reasoning_effort = "high"
+model_reasoning_effort = "medium"
 
 [windows]
 sandbox = "elevated"

@@ -89,8 +89,8 @@ Body text.
 `;
 
   const invalidAgent = `---
-description: An agent with an invalid model
-model: not-a-valid-model-name
+description: An agent with an invalid model type
+model: 123
 tools:
   read: true
 ---

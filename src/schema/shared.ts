@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+export function knownStringSchema<T extends readonly [string, ...string[]]>(values: T) {
+  return z.union([z.enum(values), z.string()]);
+}
+
 export const ToolPermissionsSchema = z
   .object({
     read: z.boolean().default(true),

@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import {
   AgentFrontmatterSchema,
+  CommandFrontmatterSchema,
   McpConfigSchema,
   SkillFrontmatterSchema,
   SkillsConfigSchema,
@@ -31,14 +32,13 @@ describe("AgentFrontmatterSchema", () => {
     expect(result.model).toBe("sonnet");
   });
 
-  it("rejects unknown model id", () => {
-    expect(() =>
-      AgentFrontmatterSchema.parse({
-        description: "x",
-        tools: {},
-        model: "gpt-4",
-      }),
-    ).toThrow();
+  it("accepts freeform model id", () => {
+    const result = AgentFrontmatterSchema.parse({
+      description: "x",
+      tools: {},
+      model: "future-model-id",
+    });
+    expect(result.model).toBe("future-model-id");
   });
 
   it("rejects missing description", () => {
@@ -141,6 +141,38 @@ describe("AgentFrontmatterSchema", () => {
     });
     expect(result.platforms?.claude?.permissionMode).toBe("plan");
     expect(result.platforms?.opencode?.rate_limit_per_hour).toBe(20);
+  });
+
+  it("accepts freeform platform model ids", () => {
+    const result = AgentFrontmatterSchema.parse({
+      description: "x",
+      tools: {},
+      platforms: {
+        claude: { model: "claude-future-model" },
+        opencode: { model: "provider/future-model" },
+        codex: { model: "gpt-future" },
+        cursor: { model: "cursor-future" },
+      },
+    });
+    expect(result.platforms?.claude?.model).toBe("claude-future-model");
+    expect(result.platforms?.opencode?.model).toBe("provider/future-model");
+    expect(result.platforms?.codex?.model).toBe("gpt-future");
+    expect(result.platforms?.cursor?.model).toBe("cursor-future");
+  });
+
+  it("rejects non-string platform model ids", () => {
+    expect(() =>
+      AgentFrontmatterSchema.parse({
+        description: "x",
+        tools: {},
+        platforms: {
+          claude: { model: 123 },
+          opencode: { model: 123 },
+          codex: { model: 123 },
+          cursor: { model: 123 },
+        },
+      }),
+    ).toThrow();
   });
 });
 
@@ -247,6 +279,72 @@ describe("SkillFrontmatterSchema", () => {
     expect((result?.platforms?.claude as Record<string, unknown>).extra_claude_field).toBe("hello");
     expect((result?.platforms?.cursor as Record<string, unknown>).cursor_custom).toBe(true);
     expect((result?.platforms as Record<string, unknown>).unknown_platform).toBeDefined();
+  });
+
+  it("accepts freeform root and platform model ids", () => {
+    const result = SkillFrontmatterSchema.parse({
+      name: "x-skill",
+      description: "x",
+      model: "future-root-model",
+      platforms: {
+        claude: { model: "claude-future-model" },
+        opencode: { model: "provider/future-model" },
+        codex: { model: "gpt-future" },
+        cursor: { model: "cursor-future" },
+      },
+    });
+    expect(result?.model).toBe("future-root-model");
+    expect(result?.platforms?.claude?.model).toBe("claude-future-model");
+    expect(result?.platforms?.opencode?.model).toBe("provider/future-model");
+    expect(result?.platforms?.codex?.model).toBe("gpt-future");
+    expect(result?.platforms?.cursor?.model).toBe("cursor-future");
+  });
+
+  it("rejects non-string platform model ids", () => {
+    expect(() =>
+      SkillFrontmatterSchema.parse({
+        name: "x-skill",
+        description: "x",
+        platforms: {
+          claude: { model: 123 },
+          opencode: { model: 123 },
+          codex: { model: 123 },
+          cursor: { model: 123 },
+        },
+      }),
+    ).toThrow();
+  });
+});
+
+describe("CommandFrontmatterSchema", () => {
+  it("accepts freeform root and opencode model ids", () => {
+    const result = CommandFrontmatterSchema.parse({
+      description: "x",
+      model: "future-root-model",
+      platforms: {
+        opencode: { model: "provider/future-model" },
+      },
+    });
+    expect(result.model).toBe("future-root-model");
+    expect(result.platforms?.opencode?.model).toBe("provider/future-model");
+  });
+
+  it("rejects non-string root and opencode model ids", () => {
+    expect(() =>
+      CommandFrontmatterSchema.parse({
+        description: "x",
+        model: 123,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      CommandFrontmatterSchema.parse({
+        description: "x",
+        platforms: {
+          opencode: { model: 123 },
+        },
+      }),
+    ).toThrow();
   });
 });
 

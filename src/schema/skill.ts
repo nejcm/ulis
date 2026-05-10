@@ -2,7 +2,13 @@ import { z } from "zod";
 
 import { EFFORT_LEVELS, SHELL_TYPES, SKILL_ISOLATION_MODES } from "../constants.js";
 import { ALL_MODELS, CLAUDE_MODELS, CODEX_MODELS, CURSOR_MODELS, OPENCODE_MODELS } from "../models.js";
-import { HooksSchema, ToolPermissionsSchema } from "./shared.js";
+import { HooksSchema, ToolPermissionsSchema, knownStringSchema } from "./shared.js";
+
+const ModelSchema = knownStringSchema(ALL_MODELS);
+const ClaudeModelSchema = knownStringSchema(CLAUDE_MODELS);
+const OpenCodeModelSchema = knownStringSchema(OPENCODE_MODELS);
+const CodexModelSchema = knownStringSchema(CODEX_MODELS);
+const CursorModelSchema = knownStringSchema(CURSOR_MODELS);
 
 export const SkillFrontmatterSchema = z
   .object({
@@ -26,7 +32,7 @@ export const SkillFrontmatterSchema = z
     allowImplicitInvocation: z.boolean().default(true), // false = Codex explicit-only ($name)
 
     // EXECUTION
-    model: z.enum(ALL_MODELS).optional(),
+    model: ModelSchema.optional(),
     effort: z.enum(EFFORT_LEVELS).optional(),
     isolation: z.enum(SKILL_ISOLATION_MODES).optional(), // fork = Claude `context: fork`
 
@@ -50,20 +56,20 @@ export const SkillFrontmatterSchema = z
         claude: z
           .looseObject({
             enabled: z.boolean().default(true),
-            model: z.enum(CLAUDE_MODELS).optional(),
+            model: ClaudeModelSchema.optional(),
             shell: z.enum(SHELL_TYPES).optional(),
           })
           .optional(),
         opencode: z
           .looseObject({
             enabled: z.boolean().default(true),
-            model: z.enum(OPENCODE_MODELS).optional(),
+            model: OpenCodeModelSchema.optional(),
           })
           .optional(),
         codex: z
           .looseObject({
             enabled: z.boolean().default(true),
-            model: z.enum(CODEX_MODELS).optional(),
+            model: CodexModelSchema.optional(),
             // UI/branding (maps to agents/openai.yaml `interface` block)
             displayName: z.string().optional(),
             shortDescription: z.string().optional(),
@@ -88,7 +94,7 @@ export const SkillFrontmatterSchema = z
         cursor: z
           .looseObject({
             enabled: z.boolean().default(true),
-            model: z.enum(CURSOR_MODELS).optional(),
+            model: CursorModelSchema.optional(),
           })
           .optional(),
         forgecode: z

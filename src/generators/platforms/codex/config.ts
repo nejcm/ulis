@@ -4,7 +4,7 @@ import type { ProjectBundle } from "../../types.js";
 import { toTomlString } from "./format.js";
 
 const CODEX_DEFAULT_MODEL = "gpt-5.4";
-const CODEX_DEFAULT_MODEL_REASONING_EFFORT = "high";
+const CODEX_DEFAULT_MODEL_REASONING_EFFORT = "medium";
 const CODEX_DEFAULT_SANDBOX = "elevated";
 const CODEX_DEFAULT_MCP_STARTUP_TIMEOUT_SEC = 20;
 
