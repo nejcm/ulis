@@ -250,8 +250,8 @@ claude:
 
 Each `extensions` entry supports:
 
-| Field  | Required | Description                                                                  |
-| ------ | -------- | ---------------------------------------------------------------------------- |
+| Field  | Required | Description                                                                   |
+| ------ | -------- | ----------------------------------------------------------------------------- |
 | `name` | yes      | Package spec (e.g. `codex-supermemory@latest`); passed verbatim to the runner |
 | `args` | no       | Arguments appended after `name` in the runner invocation                      |
 | `key`  | no       | Friendly identifier used in `ulis install` log lines                          |

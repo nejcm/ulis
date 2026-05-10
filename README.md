@@ -233,9 +233,9 @@ Third-party CLI extensions that wire themselves into a target tool — for examp
 ```yaml
 codex:
   extensions:
-    - key: supermemory                 # optional, used in logs
+    - key: supermemory # optional, used in logs
       name: codex-supermemory@latest
-      args: ["install"]                # optional
+      args: ["install"] # optional
 
 claude:
   extensions:

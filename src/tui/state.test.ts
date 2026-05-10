@@ -518,6 +518,13 @@ describe("tui state", () => {
     expect(handleTuiKey(state, "\u0003")).toEqual({ type: "exit", code: 0 });
   });
 
+  it("q stops the running workflow instead of quitting", () => {
+    const state = createInitialState();
+    state.screen = "running";
+
+    expect(handleTuiKey(state, "q")).toEqual({ type: "cancelRunning" });
+  });
+
   it("normalizes ANSI down sequence to move cursor", () => {
     const state = createInitialState();
 

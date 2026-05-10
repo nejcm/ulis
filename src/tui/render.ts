@@ -69,7 +69,11 @@ export function renderScreen(state: TuiState, customSourceHandlers?: CustomSourc
 function renderRunning(state: TuiState) {
   const frames = ["|", "/", "-", "\\"];
   const spinner = frames[state.runningSpinnerFrame % frames.length] ?? "|";
-  return renderCard(`Running ${spinner}`, "The selected workflow is in progress.", renderLogLines(state));
+  return renderCard(
+    `Running ${spinner}`,
+    "The selected workflow is in progress. Press q to stop.",
+    renderLogLines(state),
+  );
 }
 
 function renderDashboard(state: TuiState) {

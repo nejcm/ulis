@@ -8,6 +8,7 @@ const actionsModule = (await import(`./actions.ts?real=${Date.now()}`)) as {
     state: ReturnType<typeof createInitialState>,
     action: "validate" | "build" | "install",
     logger: ReturnType<typeof createLogger>,
+    options?: { signal?: AbortSignal },
   ) => Promise<void>;
   __test: {
     setRuntimeDependencies: (overrides: Record<string, unknown>) => void;
@@ -26,6 +27,7 @@ const spawnCalls: Array<{
 const spawnedChildren: Array<{
   stdout: EventEmitter;
   stderr: EventEmitter;
+  killed: () => boolean;
   emitClose: (code: number | null) => void;
   emitError: (error: Error) => void;
 }> = [];
@@ -41,10 +43,19 @@ function installRuntimeFakes(): void {
       const emitter = new EventEmitter();
       const stdout = new EventEmitter();
       const stderr = new EventEmitter();
-      const child = Object.assign(emitter, { stdout, stderr });
+      let killed = false;
+      const child = Object.assign(emitter, {
+        stdout,
+        stderr,
+        kill: () => {
+          killed = true;
+          return true;
+        },
+      });
       spawnedChildren.push({
         stdout,
         stderr,
+        killed: () => killed,
         emitClose: (code: number | null) => emitter.emit("close", code),
         emitError: (error: Error) => emitter.emit("error", error),
       });
@@ -172,6 +183,22 @@ describe("tui actions child process flow", () => {
     spawnedChildren[0]!.emitClose(2);
 
     await expect(run).rejects.toThrow("build exited with code 2");
+  });
+
+  it("kills the child process when the action signal is aborted", async () => {
+    installRuntimeFakes();
+    spawnCalls.length = 0;
+    spawnedChildren.length = 0;
+    const state = createInitialState();
+    const logger = createLogger();
+    const controller = new AbortController();
+
+    const run = runTuiAction(state, "install", logger, { signal: controller.signal });
+    const child = spawnedChildren[0]!;
+    controller.abort();
+
+    await expect(run).rejects.toThrow("install stopped by user");
+    expect(child.killed()).toBe(true);
   });
 
   it("throws when CLI entry script cannot be resolved", async () => {

@@ -55,6 +55,7 @@ export interface TuiState {
 export type TuiEffect =
   | { readonly type: "none" }
   | { readonly type: "exit"; readonly code: number }
+  | { readonly type: "cancelRunning" }
   | { readonly type: "start"; readonly action: Exclude<TuiAction, "init"> }
   | { readonly type: "initSource" }
   | { readonly type: "pasteClipboard" };
@@ -194,7 +195,7 @@ export interface CustomSourceTextInputKeyResult {
 
 export function handleTuiKey(state: TuiState, key: string): TuiEffect {
   key = normalizeKey(key);
-  if (state.screen === "running") return { type: "none" };
+  if (state.screen === "running") return isAnyKey(key, "q") ? { type: "cancelRunning" } : { type: "none" };
   if (isDuplicateKeyEvent(key)) return { type: "none" };
 
   if (isAnyKey(key, "ctrl+c", "q") && state.screen !== "customSource") {

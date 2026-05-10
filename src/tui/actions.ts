@@ -11,10 +11,19 @@ interface RuntimeDependencies {
   createInterface: typeof createInterface;
 }
 
+interface RunTuiActionOptions {
+  readonly signal?: AbortSignal;
+}
+
 const defaultRuntimeDependencies: RuntimeDependencies = { spawn, createInterface };
 let runtimeDependencies: RuntimeDependencies = { ...defaultRuntimeDependencies };
 
-export async function runTuiAction(state: TuiState, action: Exclude<TuiAction, "init">, logger: Logger): Promise<void> {
+export async function runTuiAction(
+  state: TuiState,
+  action: Exclude<TuiAction, "init">,
+  logger: Logger,
+  options: RunTuiActionOptions = {},
+): Promise<void> {
   const planned = planSource(state);
   const presets = selectedPresets(state);
 
@@ -41,6 +50,7 @@ export async function runTuiAction(state: TuiState, action: Exclude<TuiAction, "
     action,
     logger,
     presets.map((preset) => preset.name),
+    options.signal,
   );
 }
 
@@ -58,6 +68,7 @@ async function runActionInChildProcess(
   action: Exclude<TuiAction, "init" | "validate">,
   logger: Logger,
   presetNames: readonly string[],
+  signal?: AbortSignal,
 ): Promise<void> {
   const entryScript = process.argv[1];
   if (!entryScript) {
@@ -80,6 +91,15 @@ async function runActionInChildProcess(
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, ULIS_NON_INTERACTIVE: "1" },
     });
+    const abort = () => {
+      child.kill();
+      reject(new Error(`${action} stopped by user.`));
+    };
+    if (signal?.aborted) {
+      abort();
+      return;
+    }
+    signal?.addEventListener("abort", abort, { once: true });
 
     const stdout = runtimeDependencies.createInterface({ input: child.stdout });
     stdout.on("line", (line) => {
@@ -95,6 +115,7 @@ async function runActionInChildProcess(
 
     child.on("error", (error) => reject(error));
     child.on("close", (code) => {
+      signal?.removeEventListener("abort", abort);
       stdout.close();
       stderr.close();
       if (code === 0) resolve();

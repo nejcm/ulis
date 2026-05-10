@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, mock } from "bun:test";
 
 const celRender = mock(() => {});
 
-const runTuiActionMock = mock(() => {});
+const runTuiActionMock = mock((..._args: unknown[]) => {});
 const initializeMissingSourceMock = mock(async () => {});
 const readClipboardTextMock = mock(() => "");
 
@@ -67,6 +67,27 @@ describe("tui effect flow", () => {
     expect(state.resultTitle).toBe("Validate Failed");
     expect(state.resultMessage).toBe("kaboom");
     expect(state.logs.some((line: string) => line.includes("[error] kaboom"))).toBe(true);
+  });
+
+  it("stops a running action when cancelRunning is handled", async () => {
+    let capturedSignal: AbortSignal | undefined;
+    runTuiActionMock.mockImplementation((...args: unknown[]) => {
+      const options = args[3] as { signal: AbortSignal };
+      capturedSignal = options.signal;
+      return new Promise((_resolve, reject) => {
+        options.signal.addEventListener("abort", () => reject(new Error("aborted")));
+      });
+    });
+
+    const run = __test.handleEffect({ type: "start", action: "install" });
+    await Promise.resolve();
+    await __test.handleEffect({ type: "cancelRunning" });
+    await run;
+
+    const state = __test.getState();
+    expect(capturedSignal?.aborted).toBe(true);
+    expect(state.screen).toBe("result");
+    expect(state.resultTitle).toBe("Install Stopped");
   });
 
   it("handles initSource effect, clears pendingAction, and resumes the pending action", async () => {
