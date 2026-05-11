@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { runBuild, type Logger } from "./build.js";
 import { ULIS_GENERATED_DIRNAME } from "./config.js";
 import { loadExtensions, mergeExtensionsConfigs } from "./parsers/extensions.js";
+import { enabledSkillsFor, parseSkills, type ParsedSkill } from "./parsers/skill.js";
 import { loadSkills, mergeSkillsConfigs } from "./parsers/skills.js";
 import {
   isSamePath,
@@ -25,6 +26,7 @@ import {
   writePreservedNativeConfigs,
   type CapturedPreservedNativeConfig,
 } from "./utils/config-merger.js";
+import { copySkillDirs } from "./utils/fs.js";
 import { logger as defaultLogger } from "./utils/logger.js";
 import type { ResolvedPreset } from "./utils/resolve-presets.js";
 
@@ -214,7 +216,6 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
       globalInstall,
       backup,
       timestamp,
-      skills: skillsConfig,
       extensions: extensionsConfig,
       runner,
       installExtensionsEnabled,
@@ -239,6 +240,17 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
     }
   }
 
+  if (linkMode === "symlink") {
+    await installLinkedLocalSkills({ sourceDir, outputDir, destBase, globalInstall, platforms, logger });
+  }
+
+  for (const platform of platforms) {
+    const platformSkills = skillsConfig[platform]?.skills ?? [];
+    if (platformSkills.length > 0) {
+      await installSkills(platformSkills, platform, destBase, globalInstall, logger);
+    }
+  }
+
   const allSkills = skillsConfig["*"]?.skills ?? [];
   if (allSkills.length > 0) {
     logHeader(logger, "Installing External Skills");
@@ -246,6 +258,24 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
   }
 
   if (installExtensionsEnabled) {
+    for (const platform of platforms) {
+      runPlatformExtensions(
+        {
+          outputDir,
+          destBase,
+          userHome,
+          globalInstall,
+          backup,
+          timestamp,
+          extensions: extensionsConfig,
+          runner,
+          installExtensionsEnabled,
+          logger,
+        },
+        platform,
+      );
+    }
+
     const allExtensions = extensionsConfig["*"]?.extensions ?? [];
     if (allExtensions.length > 0) {
       logHeader(logger, "Installing Extensions");
@@ -264,7 +294,6 @@ interface InstallContext {
   readonly globalInstall: boolean;
   readonly backup: boolean;
   readonly timestamp: string;
-  readonly skills: SkillsConfig;
   readonly extensions: ExtensionsConfig;
   readonly runner: Runner;
   readonly installExtensionsEnabled: boolean;
@@ -283,13 +312,6 @@ async function installOpencode(context: InstallContext): Promise<void> {
   copyPath(sourceDir, targetDir);
   writePlatformPreservedNativeConfigs("opencode", preservedConfigs, context);
   logSuccess(context.logger, `OpenCode -> ${targetDir}`);
-
-  const skills = context.skills.opencode?.skills ?? [];
-  if (skills.length > 0) {
-    await installSkills(skills, "opencode", context.destBase, context.globalInstall, context.logger);
-  }
-
-  runPlatformExtensions(context, "opencode");
 }
 
 async function installClaude(context: InstallContext): Promise<void> {
@@ -306,13 +328,6 @@ async function installClaude(context: InstallContext): Promise<void> {
   writePlatformPreservedNativeConfigs("claude", preservedConfigs, context);
 
   copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["settings.json", ".claude.json"]));
-
-  const claudeSkills = context.skills.claude?.skills ?? [];
-  if (claudeSkills.length > 0) {
-    await installSkills(claudeSkills, "claude", context.destBase, context.globalInstall, context.logger);
-  }
-
-  runPlatformExtensions(context, "claude");
 }
 
 async function installCodex(context: InstallContext): Promise<void> {
@@ -325,13 +340,6 @@ async function installCodex(context: InstallContext): Promise<void> {
   ensureDir(targetDir);
   copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["config.toml"]));
   writePlatformPreservedNativeConfigs("codex", preservedConfigs, context);
-
-  const skills = context.skills.codex?.skills ?? [];
-  if (skills.length > 0) {
-    await installSkills(skills, "codex", context.destBase, context.globalInstall, context.logger);
-  }
-
-  runPlatformExtensions(context, "codex");
 }
 
 async function installCursor(context: InstallContext): Promise<void> {
@@ -346,13 +354,6 @@ async function installCursor(context: InstallContext): Promise<void> {
   writePlatformPreservedNativeConfigs("cursor", preservedConfigs, context);
 
   copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["mcp.json"]));
-
-  const skills = context.skills.cursor?.skills ?? [];
-  if (skills.length > 0) {
-    await installSkills(skills, "cursor", context.destBase, context.globalInstall, context.logger);
-  }
-
-  runPlatformExtensions(context, "cursor");
 }
 
 async function installForgecode(context: InstallContext): Promise<void> {
@@ -379,8 +380,6 @@ async function installForgecode(context: InstallContext): Promise<void> {
   );
 
   writePlatformPreservedNativeConfigs("forgecode", preservedConfigs, context);
-
-  runPlatformExtensions(context, "forgecode");
 }
 
 function copyPlatformContents(
@@ -464,6 +463,101 @@ const SKILL_PLATFORM_AGENT_NAMES: Partial<Record<Platform, string>> = {
 };
 
 const SKILL_INSTALL_CONCURRENCY = 4;
+const LINKED_LOCAL_SKILLS_DIR = ".linked-local-skills";
+
+interface LinkedLocalSkillsOptions {
+  readonly sourceDir: string;
+  readonly outputDir: string;
+  readonly destBase: string;
+  readonly globalInstall: boolean;
+  readonly platforms: readonly Platform[];
+  readonly logger?: Logger;
+}
+
+interface LinkedSkillGroup {
+  readonly skillNames: readonly string[];
+  readonly agentNames: readonly string[];
+}
+
+async function installLinkedLocalSkills(options: LinkedLocalSkillsOptions): Promise<void> {
+  const skills = parseSkills(join(options.sourceDir, "skills"));
+  if (skills.length === 0) return;
+
+  const groups = groupLinkedLocalSkills(skills, options.platforms);
+  if (groups.length === 0) return;
+
+  const stagedDir = join(options.outputDir, LINKED_LOCAL_SKILLS_DIR);
+  removePath(stagedDir);
+  copySkillDirs(
+    skills.filter((skill) => groups.some((group) => group.skillNames.includes(skill.name))),
+    stagedDir,
+  );
+
+  logHeader(options.logger, "Installing Linked Local Skills");
+  for (const group of groups) {
+    const npxArgs = [
+      "skills@latest",
+      "add",
+      stagedDir,
+      "-a",
+      ...group.agentNames,
+      "--skill",
+      ...group.skillNames,
+      ...(options.globalInstall ? ["-g"] : ["--project"]),
+      "--yes",
+    ];
+    logInfo(options.logger, `Installing linked local skills: ${group.skillNames.join(", ")}`);
+    const result = await runSkillCommand("npx", npxArgs, {
+      stdio: ["ignore", "pipe", "pipe"],
+      cwd: options.destBase,
+      shell: process.platform === "win32",
+    });
+    if (result.status !== 0) {
+      logWarn(
+        options.logger,
+        `Failed to install linked local skills: ${group.skillNames.join(", ")} (${formatCommandFailure(result)})`,
+      );
+      continue;
+    }
+    logSuccess(options.logger, `linked local skills: ${group.skillNames.join(", ")}`);
+  }
+}
+
+function groupLinkedLocalSkills(
+  skills: readonly ParsedSkill[],
+  platforms: readonly Platform[],
+): readonly LinkedSkillGroup[] {
+  const groups = new Map<string, { skillNames: string[]; agentNames: readonly string[] }>();
+
+  for (const skill of skills) {
+    const agentNames = platforms
+      .filter((platform) => isLinkedLocalSkillEligible(skill, platform))
+      .map((platform) => SKILL_PLATFORM_AGENT_NAMES[platform])
+      .filter((agentName): agentName is string => agentName != null);
+    if (agentNames.length === 0) continue;
+
+    const key = agentNames.join("\0");
+    const group = groups.get(key) ?? { skillNames: [], agentNames };
+    group.skillNames.push(skill.name);
+    groups.set(key, group);
+  }
+
+  return [...groups.values()].map((group) => ({
+    skillNames: group.skillNames,
+    agentNames: group.agentNames,
+  }));
+}
+
+function isLinkedLocalSkillEligible(skill: ParsedSkill, platform: Platform): boolean {
+  if (!enabledSkillsFor([skill], platform).includes(skill)) return false;
+  if (!SKILL_PLATFORM_AGENT_NAMES[platform]) return false;
+
+  const platformConfig = skill.frontmatter?.platforms?.[platform] as Record<string, unknown> | undefined;
+  const realPlatformKeys = Object.keys(platformConfig ?? {}).filter((key) => key !== "enabled");
+  if (realPlatformKeys.length > 0) return false;
+
+  return platform !== "codex" || skill.frontmatter?.allowImplicitInvocation !== false;
+}
 
 async function installSkills(
   skills: readonly { key?: string; name: string; args?: readonly string[] }[],
@@ -501,15 +595,9 @@ async function installSkills(
       shell: process.platform === "win32",
     });
     if (result.status !== 0) {
-      const combined = `${result.stdout ?? ""}\n${result.stderr ?? ""}`
-        .replace(/\u001b\[[0-9;]*m/gu, "")
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0);
-      const detail = combined[combined.length - 1] || result.error?.message || `exit ${result.status}`;
       return {
         level: "warn",
-        message: `Failed to install ${platform} skill: ${skill.key ?? skill.name} (${detail})`,
+        message: `Failed to install ${platform} skill: ${skill.key ?? skill.name} (${formatCommandFailure(result)})`,
       };
     }
     return { level: "success", message: `${platform} skill: ${skill.key ?? skill.name}` };
@@ -572,13 +660,10 @@ function installExtensions(
       encoding: "utf8",
     });
     if (result.status !== 0) {
-      const combined = `${result.stdout ?? ""}\n${result.stderr ?? ""}`
-        .replace(/\u001b\[[0-9;]*m/gu, "")
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0);
-      const detail = combined[combined.length - 1] || result.error?.message || `exit ${result.status}`;
-      logWarn(logger, `Failed to install ${platform} extension: ${extension.key ?? extension.name} (${detail})`);
+      logWarn(
+        logger,
+        `Failed to install ${platform} extension: ${extension.key ?? extension.name} (${formatCommandFailure(result)})`,
+      );
       continue;
     }
     logSuccess(logger, `${platform} extension: ${extension.key ?? extension.name}`);
@@ -610,6 +695,17 @@ function commandExists(command: string): boolean {
     shell: process.platform === "win32",
   });
   return result.status === 0;
+}
+
+function formatCommandFailure(result: { stdout?: unknown; stderr?: unknown; status?: unknown; error?: Error }): string {
+  const stdout = typeof result.stdout === "string" ? result.stdout : "";
+  const stderr = typeof result.stderr === "string" ? result.stderr : "";
+  const combined = `${stdout}\n${stderr}`
+    .replace(/\u001b\[[0-9;]*m/gu, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  return combined[combined.length - 1] || result.error?.message || `exit ${result.status}`;
 }
 
 function ensureDir(dirPath: string): void {
