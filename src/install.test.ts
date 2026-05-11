@@ -763,6 +763,8 @@ describe("runInstall", () => {
     const stagedSkill = read(join(outputDir, ".linked-local-skills", "shared", "SKILL.md"));
     expect(stagedSkill).toContain("description: Shared skill");
     expect(stagedSkill).not.toContain("platforms:");
+    expect(existsSync(join(projectDir, ".codex", "skills", "shared"))).toBe(false);
+    expect(existsSync(join(projectDir, ".codex", "skills", "explicit-only"))).toBe(true);
   });
 });
 

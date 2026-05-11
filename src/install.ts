@@ -241,7 +241,15 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
   }
 
   if (linkMode === "symlink") {
-    await installLinkedLocalSkills({ sourceDir, outputDir, destBase, globalInstall, platforms, logger });
+    const linkedGroups = await installLinkedLocalSkills({
+      sourceDir,
+      outputDir,
+      destBase,
+      globalInstall,
+      platforms,
+      logger,
+    });
+    removeNativeLinkedSkillCopies(linkedGroups, { destBase, userHome });
   }
 
   for (const platform of platforms) {
@@ -476,15 +484,16 @@ interface LinkedLocalSkillsOptions {
 
 interface LinkedSkillGroup {
   readonly skillNames: readonly string[];
+  readonly platforms: readonly Platform[];
   readonly agentNames: readonly string[];
 }
 
-async function installLinkedLocalSkills(options: LinkedLocalSkillsOptions): Promise<void> {
+async function installLinkedLocalSkills(options: LinkedLocalSkillsOptions): Promise<readonly LinkedSkillGroup[]> {
   const skills = parseSkills(join(options.sourceDir, "skills"));
-  if (skills.length === 0) return;
+  if (skills.length === 0) return [];
 
   const groups = groupLinkedLocalSkills(skills, options.platforms);
-  if (groups.length === 0) return;
+  if (groups.length === 0) return [];
 
   const stagedDir = join(options.outputDir, LINKED_LOCAL_SKILLS_DIR);
   removePath(stagedDir);
@@ -494,6 +503,7 @@ async function installLinkedLocalSkills(options: LinkedLocalSkillsOptions): Prom
   );
 
   logHeader(options.logger, "Installing Linked Local Skills");
+  const installedGroups: LinkedSkillGroup[] = [];
   for (const group of groups) {
     const npxArgs = [
       "skills@latest",
@@ -520,32 +530,67 @@ async function installLinkedLocalSkills(options: LinkedLocalSkillsOptions): Prom
       continue;
     }
     logSuccess(options.logger, `linked local skills: ${group.skillNames.join(", ")}`);
+    installedGroups.push(group);
   }
+  return installedGroups;
 }
 
 function groupLinkedLocalSkills(
   skills: readonly ParsedSkill[],
   platforms: readonly Platform[],
 ): readonly LinkedSkillGroup[] {
-  const groups = new Map<string, { skillNames: string[]; agentNames: readonly string[] }>();
+  const groups = new Map<
+    string,
+    { skillNames: string[]; platforms: readonly Platform[]; agentNames: readonly string[] }
+  >();
 
   for (const skill of skills) {
-    const agentNames = platforms
-      .filter((platform) => isLinkedLocalSkillEligible(skill, platform))
+    const linkedPlatforms = platforms.filter((platform) => isLinkedLocalSkillEligible(skill, platform));
+    const agentNames = linkedPlatforms
       .map((platform) => SKILL_PLATFORM_AGENT_NAMES[platform])
       .filter((agentName): agentName is string => agentName != null);
     if (agentNames.length === 0) continue;
 
     const key = agentNames.join("\0");
-    const group = groups.get(key) ?? { skillNames: [], agentNames };
+    const group = groups.get(key) ?? { skillNames: [], platforms: linkedPlatforms, agentNames };
     group.skillNames.push(skill.name);
     groups.set(key, group);
   }
 
   return [...groups.values()].map((group) => ({
     skillNames: group.skillNames,
+    platforms: group.platforms,
     agentNames: group.agentNames,
   }));
+}
+
+function removeNativeLinkedSkillCopies(
+  groups: readonly LinkedSkillGroup[],
+  context: Pick<InstallContext, "destBase" | "userHome">,
+): void {
+  for (const group of groups) {
+    for (const platform of group.platforms) {
+      const skillsDir = nativeSkillCopiesDir(platform, context.destBase, context.userHome);
+      if (!skillsDir) continue;
+      for (const skillName of group.skillNames) {
+        removePath(join(skillsDir, skillName));
+      }
+    }
+  }
+}
+
+function nativeSkillCopiesDir(platform: Platform, destBase: string, userHome: string): string | undefined {
+  const targetDir = platformConfigDir(platform, destBase, userHome);
+  switch (platform) {
+    case "codex":
+    case "cursor":
+    case "opencode":
+      return join(targetDir, "skills");
+    case "forgecode":
+      return join(targetDir, "skills");
+    case "claude":
+      return undefined;
+  }
 }
 
 function isLinkedLocalSkillEligible(skill: ParsedSkill, platform: Platform): boolean {

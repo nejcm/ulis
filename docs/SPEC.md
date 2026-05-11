@@ -71,7 +71,7 @@ Errors abort the build (exit code 1, no files written). Warnings print and the b
 `install.linkMode` controls local skill installation:
 
 - `copy` (default): ULIS copies generated local skill directories into each selected platform config.
-- `symlink`: ULIS stages eligible local skills as native-safe skill directories, then delegates installation to `npx skills@latest add <staged-dir>` so the skills library owns `.agents/skills/`, OS-specific symlinks or junctions, and copy fallback behavior.
+- `symlink`: ULIS stages eligible local skills as native-safe skill directories, then delegates installation to `npx skills@latest add <staged-dir>` so the skills library owns `.agents/skills/`, OS-specific symlinks or junctions, and copy fallback behavior. Successful linked installs remove duplicate generated native skill copies; failed linked installs leave generated copies in place.
 
 Linked install applies only to local skills. Agents and platform config files remain generated per platform because their native formats differ.
 
