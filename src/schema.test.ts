@@ -6,6 +6,7 @@ import {
   McpConfigSchema,
   SkillFrontmatterSchema,
   SkillsConfigSchema,
+  UlisConfigSchema,
 } from "./schema.js";
 
 describe("AgentFrontmatterSchema", () => {
@@ -447,5 +448,23 @@ describe("SkillsConfigSchema", () => {
     expect(result.codex?.skills[0].args).toEqual(["--yes"]);
     expect(result.cursor?.skills).toHaveLength(0);
     expect(result.forgecode?.skills[0].name).toBe("forgecode-skill");
+  });
+});
+
+describe("UlisConfigSchema", () => {
+  it("accepts omitted install config", () => {
+    const result = UlisConfigSchema.parse({ version: 1, name: "test" });
+
+    expect(result.install).toBeUndefined();
+  });
+
+  it("parses symlink install link mode", () => {
+    const result = UlisConfigSchema.parse({
+      version: 1,
+      name: "test",
+      install: { linkMode: "symlink" },
+    });
+
+    expect(result.install?.linkMode).toBe("symlink");
   });
 });

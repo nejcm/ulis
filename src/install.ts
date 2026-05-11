@@ -17,7 +17,7 @@ import {
   uniquePlatforms,
   type Platform,
 } from "./platforms.js";
-import { UlisConfigSchema, type ExtensionsConfig, type SkillsConfig } from "./schema.js";
+import { UlisConfigSchema, type ExtensionsConfig, type InstallLinkMode, type SkillsConfig } from "./schema.js";
 import { loadValidatedConfigFile } from "./utils/config-loader.js";
 import {
   capturePreservedNativeConfigs,
@@ -54,6 +54,8 @@ export interface InstallOptions {
   readonly presets?: readonly ResolvedPreset[];
   /** Override the package runner used for `extensions.yaml` entries. */
   readonly runner?: Runner;
+  /** Override local skill install mode from config.yaml. */
+  readonly linkMode?: InstallLinkMode;
   /** When false, skip running extensions installers (`extensions.yaml`). */
   readonly installExtensions?: boolean;
 }
@@ -200,6 +202,8 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
     defaultValue: { version: 1, name: "ulis" },
   });
   const runner = resolveRunner({ cliFlag: options.runner, configValue: ulisConfig.runner });
+  const linkMode = options.linkMode ?? ulisConfig.install?.linkMode ?? "copy";
+  logInfo(logger, `Local skill link mode: ${linkMode}`);
 
   const timestamp = makeTimestamp();
   for (const platform of platforms) {

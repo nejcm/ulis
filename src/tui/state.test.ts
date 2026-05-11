@@ -223,15 +223,25 @@ describe("tui state", () => {
   it("installReview start returns start effect", () => {
     const state = createInitialState();
     state.screen = "installReview";
-    state.cursor = 2;
+    state.cursor = 3;
 
     expect(handleTuiKey(state, "enter")).toEqual({ type: "start", action: "install" });
+  });
+
+  it("installReview toggles local skill link mode", () => {
+    const state = createInitialState();
+    state.screen = "installReview";
+    state.cursor = 2;
+
+    handleTuiKey(state, "enter");
+
+    expect(state.linkMode).toBe("symlink");
   });
 
   it("installReview back navigates to dashboard", () => {
     const state = createInitialState();
     state.screen = "installReview";
-    state.cursor = 3;
+    state.cursor = 4;
 
     handleTuiKey(state, "enter");
 
