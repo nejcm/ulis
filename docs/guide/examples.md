@@ -45,6 +45,11 @@ name: my-project
 # For targets without a native rules directory, append a rules index to the
 # main instructions file. Use "exclude" to skip rules for those targets.
 unsupportedPlatformRules: inject
+
+install:
+  # "copy" keeps local skills copied into each platform. "symlink" lets the
+  # skills library install eligible local skills through .agents/skills.
+  linkMode: copy
 ```
 
 ## Agents
@@ -282,7 +287,7 @@ cursor:
 
 ## External Skills
 
-`skills.yaml` installs external skills through `npx skills@latest add`. This is separate from local skills under `skills/<name>/SKILL.md`.
+`skills.yaml` installs external skills through `npx skills@latest add`. This is separate from local skills under `skills/<name>/SKILL.md`; local skills can also use the skills library when `install.linkMode: symlink` is enabled.
 
 ```yaml
 "*":
