@@ -214,12 +214,30 @@ describe("runInstall", () => {
       JSON.stringify({ mcpServers: { shared: { command: "generated" } } }, null, 2),
     );
     write(
+      join(outputDir, "forgecode", ".forge.toml"),
+      ["max_conversations = 200", "", "[updates]", "enabled = false"].join("\n"),
+    );
+    write(
       join(outputDir, "opencode", "opencode.json"),
       JSON.stringify({ model: "generated", mcp: { shared: { command: ["generated"] } } }, null, 2),
     );
     write(
       join(projectDir, ".claude", "settings.json"),
-      JSON.stringify({ env: { OLD: "1" }, hooks: { PreToolUse: [{ matcher: "existing" }] } }, null, 2),
+      JSON.stringify(
+        {
+          env: { OLD: "1" },
+          hooks: { PreToolUse: [{ matcher: "existing" }] },
+          statusLine: { type: "command", command: "bash ~/.claude/statusline.sh" },
+          enabledPlugins: { "plugin@example": true },
+          extraKnownMarketplaces: { example: { source: { source: "github", repo: "owner/repo" } } },
+          autoUpdatesChannel: "latest",
+          agentPushNotifEnabled: true,
+          theme: "dark",
+          mcpServers: { old: { command: "old" } },
+        },
+        null,
+        2,
+      ),
     );
     write(
       join(projectDir, ".claude.json"),
@@ -246,6 +264,10 @@ describe("runInstall", () => {
       ),
     );
     write(
+      join(projectDir, ".forge", ".forge.toml"),
+      ["max_conversations = 100", "", "[updates]", 'channel = "stable"'].join("\n"),
+    );
+    write(
       join(projectDir, ".opencode", "opencode.json"),
       JSON.stringify({ model: "old", mcp: { existing: { command: ["old"] }, shared: { command: ["old"] } } }, null, 2),
     );
@@ -262,6 +284,12 @@ describe("runInstall", () => {
 
     expect(JSON.parse(read(join(projectDir, ".claude", "settings.json")))).toEqual({
       hooks: { PreToolUse: [{ matcher: "existing" }] },
+      statusLine: { type: "command", command: "bash ~/.claude/statusline.sh" },
+      enabledPlugins: { "plugin@example": true },
+      extraKnownMarketplaces: { example: { source: { source: "github", repo: "owner/repo" } } },
+      autoUpdatesChannel: "latest",
+      agentPushNotifEnabled: true,
+      theme: "dark",
       permissions: { allow: ["Bash(git status)"] },
     });
     expect(JSON.parse(read(join(projectDir, ".claude.json")))).toEqual({
@@ -272,6 +300,10 @@ describe("runInstall", () => {
     });
     expect(JSON.parse(read(join(projectDir, ".forge", ".mcp.json")))).toEqual({
       mcpServers: { existing: { command: "old" }, shared: { command: "generated" } },
+    });
+    expect(readMergeableConfig(join(projectDir, ".forge", ".forge.toml"))).toEqual({
+      max_conversations: 200,
+      updates: { channel: "stable", enabled: false },
     });
     expect(JSON.parse(read(join(projectDir, ".opencode", "opencode.json")))).toEqual({
       model: "generated",

@@ -384,7 +384,7 @@ async function installForgecode(context: InstallContext): Promise<void> {
     sourceDir,
     targetForgeDir,
     context.logger,
-    new Set([resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project)]),
+    new Set([resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project), ".forge.toml"]),
   );
 
   writePlatformPreservedNativeConfigs("forgecode", preservedConfigs, context);
