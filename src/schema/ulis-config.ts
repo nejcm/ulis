@@ -6,7 +6,7 @@ import { emptyYamlAsEmptyObject } from "../utils/yaml.js";
  * Top-level schema for `.ulis/config.yaml`.
  *
  * Kept intentionally minimal in v1. Platform- and agent-level options live
- * in their own files (`mcp.yaml`, `permissions.yaml`, `plugins.yaml`, and
+ * in their own files (`mcp.yaml`, `permissions.yaml`, and
  * per-agent/skill frontmatter).
  */
 export const UlisConfigSchema = emptyYamlAsEmptyObject(
@@ -23,6 +23,12 @@ export const UlisConfigSchema = emptyYamlAsEmptyObject(
      * - `exclude`: Skip rules entirely for unsupported platforms.
      */
     unsupportedPlatformRules: z.enum(["inject", "exclude"]).default("inject").optional(),
+    /**
+     * Package runner used to execute extension installers (`extensions.yaml`).
+     * Falls back to auto-detect (`bunx` if available, else `npx`) when omitted.
+     * Overridden by the `--runner` CLI flag.
+     */
+    runner: z.enum(["npx", "bunx"]).optional(),
   }),
 );
 

@@ -12,9 +12,9 @@ import { z } from "zod";
 
 import {
   AgentFrontmatterSchema,
+  ExtensionsConfigSchema,
   McpConfigSchema,
   PermissionsConfigSchema,
-  PluginsConfigSchema,
   PresetMetaSchema,
   SkillFrontmatterSchema,
   SkillsConfigSchema,
@@ -33,8 +33,8 @@ const schemas: Array<{ name: string; schema: z.ZodType }> = [
   { name: "agent", schema: AgentFrontmatterSchema },
   { name: "skill", schema: SkillFrontmatterSchema },
   { name: "mcp", schema: McpConfigSchema },
-  { name: "plugins", schema: PluginsConfigSchema },
   { name: "skills", schema: SkillsConfigSchema },
+  { name: "extensions", schema: ExtensionsConfigSchema },
   { name: "permissions", schema: PermissionsConfigSchema },
   { name: "preset", schema: PresetMetaSchema },
 ];

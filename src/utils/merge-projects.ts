@@ -1,5 +1,5 @@
 import type { ParsedProject } from "../parsers/index.js";
-import type { McpConfig, PermissionsConfig, PluginsConfig } from "../schema.js";
+import type { McpConfig, PermissionsConfig } from "../schema.js";
 
 /**
  * Deduplicate an array of items by a string key. When duplicates exist, the
@@ -57,22 +57,6 @@ function mergePermissions(configs: readonly (PermissionsConfig | undefined)[]): 
   return result;
 }
 
-function mergePlugins(configs: readonly (PluginsConfig | undefined)[]): PluginsConfig | undefined {
-  const defined = configs.filter((c): c is NonNullable<PluginsConfig> => c != null);
-  if (defined.length === 0) return undefined;
-
-  const result: NonNullable<PluginsConfig> = {};
-  for (const config of defined) {
-    for (const key of Object.keys(config) as Array<keyof typeof config>) {
-      const entry = config[key];
-      if (!entry?.plugins) continue;
-      const existing = result[key]?.plugins ?? [];
-      result[key] = { plugins: [...existing, ...entry.plugins] };
-    }
-  }
-  return result;
-}
-
 /**
  * Merge an ordered list of ParsedProject objects. Later entries win for
  * scalars; arrays are deduplicated by name with the last occurrence winning.
@@ -94,7 +78,6 @@ export function mergeProjects(projects: readonly ParsedProject[]): ParsedProject
     rules: deduplicateByName(allRules),
     mcp: mergeMcp(projects.map((p) => p.mcp)),
     permissions: mergePermissions(projects.map((p) => p.permissions)),
-    plugins: mergePlugins(projects.map((p) => p.plugins ?? undefined)),
     ulisConfig: base.ulisConfig,
     sourceDir: base.sourceDir,
   };

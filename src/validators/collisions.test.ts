@@ -45,6 +45,7 @@ describe("validateCollisions", () => {
     expect(out).toHaveLength(1);
     expect(out[0]?.level).toBe("error");
     expect(out[0]?.entity).toBe("agent:dup");
+    expect(out[0]?.suggestion).toContain("`name:` frontmatter");
   });
 
   it("flags duplicate skill directory names", () => {

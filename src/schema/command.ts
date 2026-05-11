@@ -1,11 +1,15 @@
 import { z } from "zod";
 
 import { ALL_MODELS, OPENCODE_MODELS } from "../models.js";
+import { knownStringSchema } from "./shared.js";
+
+const ModelSchema = knownStringSchema(ALL_MODELS);
+const OpenCodeModelSchema = knownStringSchema(OPENCODE_MODELS);
 
 export const CommandFrontmatterSchema = z
   .object({
     description: z.string(),
-    model: z.enum(ALL_MODELS).optional(),
+    model: ModelSchema.optional(),
     // Which agent executes this command (opencode)
     agent: z.string().optional(),
     // Force subagent invocation (opencode)
@@ -15,7 +19,7 @@ export const CommandFrontmatterSchema = z
         opencode: z
           .object({
             enabled: z.boolean().default(true),
-            model: z.enum(OPENCODE_MODELS).optional(),
+            model: OpenCodeModelSchema.optional(),
             agent: z.string().optional(),
             subtask: z.boolean().optional(),
           })

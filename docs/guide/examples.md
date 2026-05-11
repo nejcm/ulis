@@ -15,7 +15,6 @@ This page shows small, copyable examples for each `.ulis/` source type. Put thes
 ├── config.yaml
 ├── mcp.yaml
 ├── permissions.yaml
-├── plugins.yaml
 ├── skills.yaml
 ├── agents/
 │   └── builder.md
@@ -281,20 +280,6 @@ cursor:
     - git status
 ```
 
-## Plugins
-
-`plugins.yaml` declares Claude Code marketplace plugins. Sections can be platform-specific or use `"*"` as a shared section.
-
-```yaml
-claude:
-  plugins:
-    - name: frontend-design
-      source: official
-    - name: everything-claude-code
-      source: github
-      repo: affaan-m/everything-claude-code
-```
-
 ## External Skills
 
 `skills.yaml` installs external skills through `npx skills@latest add`. This is separate from local skills under `skills/<name>/SKILL.md`.
@@ -304,6 +289,10 @@ claude:
   skills:
     - name: mattpocock/skills/productivity/grill-me
     - name: https://github.com/mattpocock/skills/tree/main/skills/productivity/write-a-skill
+    - name: "@nejcm/ulis"
+      args:
+        - --skill
+        - ulis
 
 claude:
   skills:
@@ -319,6 +308,8 @@ cursor:
         - --skill
         - repo-review
 ```
+
+`@nejcm/ulis` publishes its own `ulis` usage skill from the package `skills/` directory, so it can be installed the same way as any other external skill source.
 
 ## Raw Overrides
 
@@ -355,7 +346,7 @@ network_access = false
 Always read `docs/SPEC.md` before changing generator behavior.
 ```
 
-Config files (`.json`, `.toml`, `.yaml`, `.yml`) are deep-merged into generated files with the same relative path. Other files are copied as-is.
+Config files (`.json`, `.toml`, `.yaml`, `.yml`) are merged into generated files with the same relative path. Objects merge recursively; raw arrays and scalars replace generated values at the same path. Other files are copied as-is.
 
 ## Presets
 

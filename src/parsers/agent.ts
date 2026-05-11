@@ -9,6 +9,10 @@ export interface ParsedAgent {
 
 export type AgentPlatform = "claude" | "opencode" | "codex" | "cursor" | "forgecode";
 
+export function resolveAgentName(fileName: string, frontmatter: AgentFrontmatter): string {
+  return frontmatter.name ?? fileName;
+}
+
 /** Filter agents that are not explicitly disabled for the given platform. */
 export function enabledAgentsFor(agents: readonly ParsedAgent[], platform: AgentPlatform): readonly ParsedAgent[] {
   return agents.filter((a) => a.frontmatter.platforms?.[platform]?.enabled !== false);
@@ -18,11 +22,16 @@ export function enabledAgentsFor(agents: readonly ParsedAgent[], platform: Agent
  * Parse and validate all agent markdown files from the provided directory.
  */
 export function parseAgents(agentsDir: string): readonly ParsedAgent[] {
-  const { items, errors } = readMarkdownDir(agentsDir, AgentFrontmatterSchema, "agent", (name, frontmatter, body) => ({
-    name,
-    frontmatter,
-    body,
-  }));
+  const { items, errors } = readMarkdownDir(
+    agentsDir,
+    AgentFrontmatterSchema,
+    "agent",
+    (fileName, frontmatter, body) => ({
+      name: resolveAgentName(fileName, frontmatter),
+      frontmatter,
+      body,
+    }),
+  );
   if (errors.length > 0) throw errors[0] as ParseError;
   return items;
 }

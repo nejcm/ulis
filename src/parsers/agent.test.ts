@@ -1,4 +1,6 @@
 import { describe, it, expect } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { parseAgents } from "./agent.js";
@@ -46,5 +48,55 @@ describe("parseAgents", () => {
     // The fixture dir has no README, but verify the filter logic by checking count
     const agents = parseAgents(fixturesDir);
     expect(agents.every((a) => a.name.toLowerCase() !== "readme")).toBe(true);
+  });
+
+  it("uses explicit frontmatter name over the filename", () => {
+    const root = mkdtempSync(join(tmpdir(), "ulis-agent-"));
+    try {
+      const agentsDir = join(root, "agents");
+      mkdirSync(agentsDir);
+      writeFileSync(
+        join(agentsDir, "local-file.md"),
+        [
+          "---",
+          "name: refactoring-specialist",
+          "description: Refactor safely",
+          "tools: Read, Write, Edit, Bash, Glob, Grep",
+          "model: sonnet",
+          "---",
+          "You are a refactoring specialist.",
+        ].join("\n"),
+      );
+
+      const [agent] = parseAgents(agentsDir);
+
+      expect(agent.name).toBe("refactoring-specialist");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects unsafe explicit frontmatter names", () => {
+    const root = mkdtempSync(join(tmpdir(), "ulis-agent-"));
+    try {
+      const agentsDir = join(root, "agents");
+      mkdirSync(agentsDir);
+      writeFileSync(
+        join(agentsDir, "local-file.md"),
+        [
+          "---",
+          "name: ../config",
+          "description: Refactor safely",
+          "tools: Read, Write, Edit, Bash, Glob, Grep",
+          "model: sonnet",
+          "---",
+          "You are a refactoring specialist.",
+        ].join("\n"),
+      );
+
+      expect(() => parseAgents(agentsDir)).toThrow("name");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

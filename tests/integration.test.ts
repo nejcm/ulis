@@ -16,7 +16,6 @@ import type { FileArtifact, ProjectBundle } from "../src/generators/types.js";
 import { parseAgents } from "../src/parsers/agent.js";
 import { loadMcp } from "../src/parsers/mcp.js";
 import { loadPermissions } from "../src/parsers/permissions.js";
-import { loadPlugins } from "../src/parsers/plugins.js";
 import { parseRules } from "../src/parsers/rule.js";
 import { parseSkills } from "../src/parsers/skill.js";
 import type { Platform } from "../src/platforms.js";
@@ -34,7 +33,6 @@ function buildProject(): ProjectBundle {
     rules: parseRules(join(fixturesDir, "rules")),
     mcp: loadMcp(fixturesDir),
     permissions: loadPermissions(fixturesDir),
-    plugins: loadPlugins(fixturesDir),
     ulisConfig: UlisConfigSchema.parse({ version: 1, name: "fixtures" }),
     sourceDir: fixturesDir,
   };
@@ -162,6 +160,30 @@ describe("Codex generator", () => {
 
   it("generates config.toml with mcp_servers", () => {
     expect(get(m, "config.toml")).toContain("[mcp_servers.test-local]");
+  });
+
+  it("does not emit implicit root config defaults", () => {
+    const config = get(m, "config.toml");
+    expect(config).not.toContain("model =");
+    expect(config).not.toContain("model_reasoning_effort =");
+    expect(config).not.toContain("[windows]");
+    expect(config).not.toContain("startup_timeout_sec");
+  });
+
+  it("keeps explicit Codex permission config", () => {
+    const result = generate("codex", {
+      ...buildProject(),
+      permissions: {
+        codex: {
+          approvalMode: "on-request",
+          sandbox: "workspace-write",
+        },
+      },
+    });
+    const config = result!.artifacts.find((artifact) => artifact.path === "config.toml")!.contents as string;
+    expect(config).toContain('approval_policy = "on-request"');
+    expect(config).toContain("[windows]");
+    expect(config).toContain('sandbox = "workspace-write"');
   });
 
   it("generates agent TOML with policy comments", () => {

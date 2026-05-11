@@ -3,11 +3,6 @@ import { mcpServersFor } from "../../../utils/mcp-block.js";
 import type { ProjectBundle } from "../../types.js";
 import { toTomlString } from "./format.js";
 
-const CODEX_DEFAULT_MODEL = "gpt-5.4";
-const CODEX_DEFAULT_MODEL_REASONING_EFFORT = "high";
-const CODEX_DEFAULT_SANDBOX = "elevated";
-const CODEX_DEFAULT_MCP_STARTUP_TIMEOUT_SEC = 20;
-
 /**
  * Codex distinguishes three HTTP header cases:
  * - `bearer_token_env_var`: header value is exactly `Bearer ${VAR}`
@@ -50,20 +45,21 @@ function codexHttpHeaderLines(headers: Record<string, string> | undefined): stri
 
 export function buildCodexConfigToml(project: ProjectBundle): string {
   const lines: string[] = [];
-  lines.push(`model = ${toTomlString(CODEX_DEFAULT_MODEL)}`);
-  lines.push(`model_reasoning_effort = ${toTomlString(CODEX_DEFAULT_MODEL_REASONING_EFFORT)}`);
 
   const approvalMode = project.permissions?.codex?.approvalMode;
   if (approvalMode) lines.push(`approval_policy = ${toTomlString(approvalMode)}`);
 
-  lines.push("");
-  lines.push("[windows]");
-  const sandbox = project.permissions?.codex?.sandbox ?? CODEX_DEFAULT_SANDBOX;
-  lines.push(`sandbox = ${toTomlString(sandbox)}`);
-  lines.push("");
+  const sandbox = project.permissions?.codex?.sandbox;
+  if (sandbox) {
+    if (lines.length > 0) lines.push("");
+    lines.push("[windows]");
+    lines.push(`sandbox = ${toTomlString(sandbox)}`);
+    lines.push("");
+  }
 
   const trustedProjects = project.permissions?.codex?.trustedProjects ?? {};
   for (const [path, level] of Object.entries(trustedProjects)) {
+    if (lines.length > 0 && lines.at(-1) !== "") lines.push("");
     lines.push(`[projects.'${path}']`);
     lines.push(`trust_level = ${toTomlString(level)}`);
     lines.push("");
@@ -77,7 +73,6 @@ export function buildCodexConfigToml(project: ProjectBundle): string {
         const args = server.args.map((a) => toTomlString(translateEnvVar(a, "codex"))).join(", ");
         lines.push(`args = [${args}]`);
       }
-      lines.push(`startup_timeout_sec = ${CODEX_DEFAULT_MCP_STARTUP_TIMEOUT_SEC}`);
       if (server.env) {
         lines.push("");
         lines.push(`[mcp_servers.${name}.env]`);
@@ -90,14 +85,12 @@ export function buildCodexConfigToml(project: ProjectBundle): string {
       lines.push(`[mcp_servers.${name}]`);
       lines.push(`url = ${toTomlString(server.url)}`);
       for (const headerLine of codexHttpHeaderLines(server.headers)) lines.push(headerLine);
-      lines.push(`startup_timeout_sec = ${CODEX_DEFAULT_MCP_STARTUP_TIMEOUT_SEC}`);
       lines.push("");
     } else if (server.localFallback) {
       lines.push(`[mcp_servers.${name}]`);
       lines.push(`command = ${toTomlString(server.localFallback.command)}`);
       const args = server.localFallback.args.map((a) => toTomlString(translateEnvVar(a, "codex"))).join(", ");
       lines.push(`args = [${args}]`);
-      lines.push(`startup_timeout_sec = ${CODEX_DEFAULT_MCP_STARTUP_TIMEOUT_SEC}`);
       lines.push("");
     }
   }

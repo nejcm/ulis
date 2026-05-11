@@ -3,6 +3,7 @@ import { createInterface } from "node:readline";
 
 import { analyzeProject, type Logger } from "../build.js";
 import { initCmd } from "../commands/init.js";
+import { loadExtensions } from "../parsers/extensions.js";
 import { planSource, selectedPresets, type TuiAction, type TuiState } from "./state.js";
 
 interface RuntimeDependencies {
@@ -10,10 +11,19 @@ interface RuntimeDependencies {
   createInterface: typeof createInterface;
 }
 
+interface RunTuiActionOptions {
+  readonly signal?: AbortSignal;
+}
+
 const defaultRuntimeDependencies: RuntimeDependencies = { spawn, createInterface };
 let runtimeDependencies: RuntimeDependencies = { ...defaultRuntimeDependencies };
 
-export async function runTuiAction(state: TuiState, action: Exclude<TuiAction, "init">, logger: Logger): Promise<void> {
+export async function runTuiAction(
+  state: TuiState,
+  action: Exclude<TuiAction, "init">,
+  logger: Logger,
+  options: RunTuiActionOptions = {},
+): Promise<void> {
   const planned = planSource(state);
   const presets = selectedPresets(state);
 
@@ -22,10 +32,15 @@ export async function runTuiAction(state: TuiState, action: Exclude<TuiAction, "
     logger.info(`Source: ${planned.sourceDir}`);
     if (presets.length > 0) logger.info(`Presets: ${presets.map((preset) => preset.name).join(", ")}`);
     const analysis = analyzeProject({ sourceDir: planned.sourceDir, presets, logger });
+    const extensionsConfig = loadExtensions(planned.sourceDir);
+    const extensionCount = Object.values(extensionsConfig).reduce(
+      (acc, entry) => acc + (entry?.extensions?.length ?? 0),
+      0,
+    );
     logger.success(
       `Validated ${analysis.project.agents.length} agents, ${analysis.project.skills.length} skills, ${
         Object.keys(analysis.project.mcp.servers).length
-      } MCP servers`,
+      } MCP servers, ${extensionCount} extensions`,
     );
     return;
   }
@@ -35,6 +50,7 @@ export async function runTuiAction(state: TuiState, action: Exclude<TuiAction, "
     action,
     logger,
     presets.map((preset) => preset.name),
+    options.signal,
   );
 }
 
@@ -52,6 +68,7 @@ async function runActionInChildProcess(
   action: Exclude<TuiAction, "init" | "validate">,
   logger: Logger,
   presetNames: readonly string[],
+  signal?: AbortSignal,
 ): Promise<void> {
   const entryScript = process.argv[1];
   if (!entryScript) {
@@ -59,7 +76,7 @@ async function runActionInChildProcess(
   }
 
   const args = [...process.execArgv, entryScript, action, "--source", planSource(state).sourceDir];
-  if (state.platforms.length > 0) args.push("--target", state.platforms.join(","));
+  args.push("--target", state.platforms.join(","));
   if (presetNames.length > 0) args.push("--preset", presetNames.join(","));
 
   if (action === "install") {
@@ -74,6 +91,15 @@ async function runActionInChildProcess(
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, ULIS_NON_INTERACTIVE: "1" },
     });
+    const abort = () => {
+      child.kill();
+      reject(new Error(`${action} stopped by user.`));
+    };
+    if (signal?.aborted) {
+      abort();
+      return;
+    }
+    signal?.addEventListener("abort", abort, { once: true });
 
     const stdout = runtimeDependencies.createInterface({ input: child.stdout });
     stdout.on("line", (line) => {
@@ -89,6 +115,7 @@ async function runActionInChildProcess(
 
     child.on("error", (error) => reject(error));
     child.on("close", (code) => {
+      signal?.removeEventListener("abort", abort);
       stdout.close();
       stderr.close();
       if (code === 0) resolve();

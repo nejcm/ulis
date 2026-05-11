@@ -1,11 +1,11 @@
-import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 import { runBuild, type Logger } from "./build.js";
 import { ULIS_GENERATED_DIRNAME } from "./config.js";
-import { loadPlugins } from "./parsers/plugins.js";
+import { loadExtensions, mergeExtensionsConfigs } from "./parsers/extensions.js";
 import { loadSkills, mergeSkillsConfigs } from "./parsers/skills.js";
 import {
   isSamePath,
@@ -17,9 +17,18 @@ import {
   uniquePlatforms,
   type Platform,
 } from "./platforms.js";
-import { type PluginsConfig, type SkillsConfig } from "./schema.js";
+import { UlisConfigSchema, type ExtensionsConfig, type SkillsConfig } from "./schema.js";
+import { loadValidatedConfigFile } from "./utils/config-loader.js";
+import {
+  capturePreservedNativeConfigs,
+  PreservedNativeConfigParseError,
+  writePreservedNativeConfigs,
+  type CapturedPreservedNativeConfig,
+} from "./utils/config-merger.js";
 import { logger as defaultLogger } from "./utils/logger.js";
 import type { ResolvedPreset } from "./utils/resolve-presets.js";
+
+export type Runner = "npx" | "bunx";
 
 export interface InstallOptions {
   readonly platforms?: readonly Platform[];
@@ -43,7 +52,50 @@ export interface InstallOptions {
   readonly userHome?: string;
   /** Resolved presets to merge at build time and for external skill installs. */
   readonly presets?: readonly ResolvedPreset[];
+  /** Override the package runner used for `extensions.yaml` entries. */
+  readonly runner?: Runner;
+  /** When false, skip running extensions installers (`extensions.yaml`). */
+  readonly installExtensions?: boolean;
 }
+
+type RunCommand = (
+  command: string,
+  args: readonly string[],
+  options: Parameters<typeof spawnSync>[2],
+) => ReturnType<typeof spawnSync>;
+
+interface AsyncCommandResult {
+  readonly status: number | null;
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly error?: Error;
+}
+
+type SkillInstallLog =
+  | { readonly level: "success"; readonly message: string }
+  | { readonly level: "warn"; readonly message: string };
+
+type RunAsyncCommand = (
+  command: string,
+  args: readonly string[],
+  options: Parameters<typeof spawn>[2],
+) => Promise<AsyncCommandResult>;
+
+interface RuntimeDependencies {
+  readonly runCommand: RunCommand;
+  readonly runAsyncCommand: RunAsyncCommand;
+}
+
+const defaultRuntimeDependencies: RuntimeDependencies = {
+  runCommand(command, args, options) {
+    return spawnSync(command, [...args], options);
+  },
+  runAsyncCommand(command, args, options) {
+    return runAsyncCommand(command, args, options);
+  },
+};
+
+let runtimeDependencies: RuntimeDependencies = { ...defaultRuntimeDependencies };
 
 class InstallError extends Error {
   constructor(
@@ -97,7 +149,7 @@ export function loadDotEnv(rootDir: string, env: NodeJS.ProcessEnv = process.env
 /**
  * Install generated per-platform configs from source to destination base directory.
  */
-export function runInstall(options: InstallOptions): readonly Platform[] {
+export async function runInstall(options: InstallOptions): Promise<readonly Platform[]> {
   const logger = options.logger ?? defaultLogger;
   const sourceDir = resolve(options.sourceDir);
   const destBase = resolve(options.destBase);
@@ -131,11 +183,23 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
     runBuild({ targets: platforms, sourceDir, outputDir, logger, presets: options.presets });
   }
 
-  const plugins = loadPlugins(sourceDir);
   const skillsConfig = mergeSkillsConfigs([
     ...(options.presets ?? []).map((preset) => loadSkills(preset.dir)),
     loadSkills(sourceDir),
   ]);
+  const extensionsConfig = mergeExtensionsConfigs([
+    ...(options.presets ?? []).map((preset) => loadExtensions(preset.dir)),
+    loadExtensions(sourceDir),
+  ]);
+
+  const installExtensionsEnabled = options.installExtensions ?? true;
+  const ulisConfig = loadValidatedConfigFile({
+    dir: sourceDir,
+    baseName: "config",
+    schema: UlisConfigSchema,
+    defaultValue: { version: 1, name: "ulis" },
+  });
+  const runner = resolveRunner({ cliFlag: options.runner, configValue: ulisConfig.runner });
 
   const timestamp = makeTimestamp();
   for (const platform of platforms) {
@@ -146,25 +210,27 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
       globalInstall,
       backup,
       timestamp,
-      plugins,
       skills: skillsConfig,
+      extensions: extensionsConfig,
+      runner,
+      installExtensionsEnabled,
       logger,
     };
     switch (platform) {
       case "opencode":
-        installOpencode(context);
+        await installOpencode(context);
         break;
       case "claude":
-        installClaude(context);
+        await installClaude(context);
         break;
       case "codex":
-        installCodex(context);
+        await installCodex(context);
         break;
       case "cursor":
-        installCursor(context);
+        await installCursor(context);
         break;
       case "forgecode":
-        installForgecode(context);
+        await installForgecode(context);
         break;
     }
   }
@@ -172,7 +238,15 @@ export function runInstall(options: InstallOptions): readonly Platform[] {
   const allSkills = skillsConfig["*"]?.skills ?? [];
   if (allSkills.length > 0) {
     logHeader(logger, "Installing External Skills");
-    installSkills(allSkills, "*", destBase, globalInstall, logger);
+    await installSkills(allSkills, "*", destBase, globalInstall, logger, platforms);
+  }
+
+  if (installExtensionsEnabled) {
+    const allExtensions = extensionsConfig["*"]?.extensions ?? [];
+    if (allExtensions.length > 0) {
+      logHeader(logger, "Installing Extensions");
+      installExtensions(allExtensions, "*", destBase, runner, logger);
+    }
   }
 
   logHeader(logger, "Installation Complete");
@@ -186,126 +260,111 @@ interface InstallContext {
   readonly globalInstall: boolean;
   readonly backup: boolean;
   readonly timestamp: string;
-  readonly plugins: PluginsConfig;
   readonly skills: SkillsConfig;
+  readonly extensions: ExtensionsConfig;
+  readonly runner: Runner;
+  readonly installExtensionsEnabled: boolean;
   readonly logger?: Logger;
 }
 
-function installOpencode(context: InstallContext): void {
+async function installOpencode(context: InstallContext): Promise<void> {
   const targetDir = platformConfigDir("opencode", context.destBase, context.userHome);
+  const sourceDir = join(context.outputDir, "opencode");
+
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.opencode}`);
   backupDirectory(targetDir, context);
+  const preservedConfigs = capturePlatformPreservedNativeConfigs("opencode", context);
 
-  rmSync(targetDir, { recursive: true, force: true });
-  cpSync(join(context.outputDir, "opencode"), targetDir, { recursive: true });
+  removePath(targetDir);
+  copyPath(sourceDir, targetDir);
+  writePlatformPreservedNativeConfigs("opencode", preservedConfigs, context);
   logSuccess(context.logger, `OpenCode -> ${targetDir}`);
 
   const skills = context.skills.opencode?.skills ?? [];
   if (skills.length > 0) {
-    installSkills(skills, "opencode", context.destBase, context.globalInstall, context.logger);
+    await installSkills(skills, "opencode", context.destBase, context.globalInstall, context.logger);
   }
+
+  runPlatformExtensions(context, "opencode");
 }
 
-function installClaude(context: InstallContext): void {
+async function installClaude(context: InstallContext): Promise<void> {
   const targetDir = platformConfigDir("claude", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "claude");
-  const generatedSettings = join(sourceDir, "settings.json");
-  const targetSettings = join(targetDir, "settings.json");
-  const generatedRootConfig = join(sourceDir, ".claude.json");
   const targetRootConfig = join(context.destBase, ".claude.json");
 
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.claude}`);
   backupDirectory(targetDir, context);
   backupFile(targetRootConfig, context);
+  const preservedConfigs = capturePlatformPreservedNativeConfigs("claude", context);
   ensureDir(targetDir);
 
-  if (existsSync(generatedSettings)) {
-    if (existsSync(targetSettings)) {
-      const merged = mergeSettingsJson(targetSettings, generatedSettings);
-      writeJson(targetSettings, merged);
-      logSuccess(context.logger, "settings.json (merged)");
-    } else {
-      cpSync(generatedSettings, targetSettings);
-      logSuccess(context.logger, "settings.json (copied)");
-    }
-  }
-
-  if (existsSync(generatedRootConfig)) {
-    if (existsSync(targetRootConfig)) {
-      const merged = mergeSettingsJson(targetRootConfig, generatedRootConfig);
-      writeJson(targetRootConfig, merged);
-      logSuccess(context.logger, ".claude.json (merged)");
-    } else {
-      cpSync(generatedRootConfig, targetRootConfig);
-      logSuccess(context.logger, ".claude.json (copied)");
-    }
-  }
+  writePlatformPreservedNativeConfigs("claude", preservedConfigs, context);
 
   copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["settings.json", ".claude.json"]));
-  installClaudePlugins(context.plugins, context.logger);
 
   const claudeSkills = context.skills.claude?.skills ?? [];
   if (claudeSkills.length > 0) {
-    installSkills(claudeSkills, "claude", context.destBase, context.globalInstall, context.logger);
+    await installSkills(claudeSkills, "claude", context.destBase, context.globalInstall, context.logger);
   }
+
+  runPlatformExtensions(context, "claude");
 }
 
-function installCodex(context: InstallContext): void {
+async function installCodex(context: InstallContext): Promise<void> {
   const targetDir = platformConfigDir("codex", context.destBase, context.userHome);
+  const sourceDir = join(context.outputDir, "codex");
+
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.codex}`);
   backupDirectory(targetDir, context);
+  const preservedConfigs = capturePlatformPreservedNativeConfigs("codex", context);
   ensureDir(targetDir);
-  copyPlatformContents(join(context.outputDir, "codex"), targetDir, context.logger);
+  copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["config.toml"]));
+  writePlatformPreservedNativeConfigs("codex", preservedConfigs, context);
 
   const skills = context.skills.codex?.skills ?? [];
   if (skills.length > 0) {
-    installSkills(skills, "codex", context.destBase, context.globalInstall, context.logger);
+    await installSkills(skills, "codex", context.destBase, context.globalInstall, context.logger);
   }
+
+  runPlatformExtensions(context, "codex");
 }
 
-function installCursor(context: InstallContext): void {
+async function installCursor(context: InstallContext): Promise<void> {
   const targetDir = platformConfigDir("cursor", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "cursor");
-  const generatedMcp = join(sourceDir, "mcp.json");
-  const targetMcp = join(targetDir, "mcp.json");
 
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.cursor}`);
   backupDirectory(targetDir, context);
+  const preservedConfigs = capturePlatformPreservedNativeConfigs("cursor", context);
   ensureDir(targetDir);
 
-  if (existsSync(generatedMcp)) {
-    if (existsSync(targetMcp)) {
-      const merged = mergeCursorMcpJson(targetMcp, generatedMcp);
-      writeJson(targetMcp, merged);
-      logSuccess(context.logger, "mcp.json (merged)");
-    } else {
-      cpSync(generatedMcp, targetMcp);
-      logSuccess(context.logger, "mcp.json (copied)");
-    }
-  }
+  writePlatformPreservedNativeConfigs("cursor", preservedConfigs, context);
 
   copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["mcp.json"]));
 
   const skills = context.skills.cursor?.skills ?? [];
   if (skills.length > 0) {
-    installSkills(skills, "cursor", context.destBase, context.globalInstall, context.logger);
+    await installSkills(skills, "cursor", context.destBase, context.globalInstall, context.logger);
   }
+
+  runPlatformExtensions(context, "cursor");
 }
 
-function installForgecode(context: InstallContext): void {
+async function installForgecode(context: InstallContext): Promise<void> {
   const sourceDir = join(context.outputDir, "forgecode");
   const sourceForgeDir = join(sourceDir, resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project));
-  const sourceMcp = join(sourceForgeDir, ".mcp.json");
   const targetForgeDir = platformConfigDir("forgecode", context.destBase, context.userHome);
   const targetMcp = join(targetForgeDir, ".mcp.json");
 
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.forgecode}`);
   backupDirectory(targetForgeDir, context);
   backupFile(targetMcp, context);
+  const preservedConfigs = capturePlatformPreservedNativeConfigs("forgecode", context);
   ensureDir(targetForgeDir);
 
   if (existsSync(sourceForgeDir)) {
-    copyPlatformContents(sourceForgeDir, targetForgeDir, context.logger);
+    copyPlatformContents(sourceForgeDir, targetForgeDir, context.logger, new Set([".mcp.json"]));
   }
 
   copyPlatformContents(
@@ -315,16 +374,9 @@ function installForgecode(context: InstallContext): void {
     new Set([resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project)]),
   );
 
-  if (existsSync(sourceMcp)) {
-    if (existsSync(targetMcp)) {
-      const merged = mergeCursorMcpJson(targetMcp, sourceMcp);
-      writeJson(targetMcp, merged);
-      logSuccess(context.logger, ".mcp.json (merged)");
-    } else {
-      cpSync(sourceMcp, targetMcp);
-      logSuccess(context.logger, ".mcp.json (copied)");
-    }
-  }
+  writePlatformPreservedNativeConfigs("forgecode", preservedConfigs, context);
+
+  runPlatformExtensions(context, "forgecode");
 }
 
 function copyPlatformContents(
@@ -352,58 +404,29 @@ function copyPlatformContents(
   }
 }
 
-function mergeSettingsJson(existingPath: string, generatedPath: string): Record<string, unknown> {
-  const existing = readJson(existingPath);
-  const generated = readJson(generatedPath);
-  return deepMerge(existing, generated);
-}
-
-function deepMerge<T>(base: T, override: unknown): T {
-  if (!isPlainObject(base) || !isPlainObject(override)) {
-    return override === undefined ? base : (override as T);
-  }
-
-  const result: Record<string, unknown> = { ...base };
-  for (const [key, value] of Object.entries(override)) {
-    if (value === undefined) continue;
-    if (isPlainObject(value) && isPlainObject(result[key])) {
-      result[key] = deepMerge(result[key], value);
-    } else {
-      result[key] = value;
+function capturePlatformPreservedNativeConfigs(
+  platform: Platform,
+  context: InstallContext,
+): readonly CapturedPreservedNativeConfig[] {
+  try {
+    return capturePreservedNativeConfigs(platform, context);
+  } catch (error) {
+    if (error instanceof PreservedNativeConfigParseError) {
+      throw new InstallError(error.message, error);
     }
-  }
-  return result as T;
-}
-
-function mergeCursorMcpJson(existingPath: string, generatedPath: string): Record<string, unknown> {
-  const existing = readJson(existingPath);
-  const generated = readJson(generatedPath);
-  const existingServers = isPlainObject(existing.mcpServers) ? existing.mcpServers : {};
-  const generatedServers = isPlainObject(generated.mcpServers) ? generated.mcpServers : {};
-
-  return {
-    ...existing,
-    mcpServers: {
-      ...existingServers,
-      ...generatedServers,
-    },
-  };
-}
-
-function readJson(filePath: string): Record<string, unknown> {
-  try {
-    return JSON.parse(readFileSync(filePath, "utf8")) as Record<string, unknown>;
-  } catch (error) {
-    throw new InstallError(`Failed to parse JSON at ${filePath}`, error);
+    throw new InstallError(`Failed to capture preserved native config for ${platform}`, error);
   }
 }
 
-function writeJson(filePath: string, value: Record<string, unknown>): void {
+function writePlatformPreservedNativeConfigs(
+  platform: Platform,
+  entries: readonly CapturedPreservedNativeConfig[],
+  context: InstallContext,
+): void {
   try {
-    ensureDir(dirnameOf(filePath));
-    writeFileSync(filePath, JSON.stringify(value, null, 2));
+    writePreservedNativeConfigs(entries, context.logger);
   } catch (error) {
-    throw new InstallError(`Failed to write JSON at ${filePath}`, error);
+    throw new InstallError(`Failed to write preserved native config for ${platform}`, error);
   }
 }
 
@@ -427,32 +450,6 @@ function backupFile(targetPath: string, context: InstallContext): void {
   logInfo(context.logger, `[backup] ${targetPath} -> ${backupPath}`);
 }
 
-function installClaudePlugins(plugins: PluginsConfig, logger?: Logger): void {
-  const claudePlugins = plugins?.claude?.plugins ?? [];
-  if (claudePlugins.length === 0) return;
-
-  if (!commandExists("claude")) {
-    logWarn(logger, "claude CLI not found - install marketplace plugins manually.");
-    return;
-  }
-
-  for (const plugin of claudePlugins) {
-    const source = plugin.source === "github" && plugin.repo ? plugin.repo : plugin.name;
-    const result = runCommand("claude", ["plugin", "add", "--from", source], {
-      stdio: ["ignore", "ignore", "pipe"],
-      shell: process.platform === "win32",
-      encoding: "utf8",
-    });
-    if (result.status === 0) {
-      logSuccess(logger, `Plugin: ${plugin.name}`);
-    } else {
-      const detail =
-        normalizeProcessOutput(result.stderr).split("\n").pop() || result.error?.message || `exit ${result.status}`;
-      logWarn(logger, `Failed to install plugin: ${plugin.name} (${detail})`);
-    }
-  }
-}
-
 // map platform key to skills argument agent name
 // only platforms supported by the `skills` CLI are listed here
 const SKILL_PLATFORM_AGENT_NAMES: Partial<Record<Platform, string>> = {
@@ -462,19 +459,28 @@ const SKILL_PLATFORM_AGENT_NAMES: Partial<Record<Platform, string>> = {
   cursor: "cursor",
 };
 
-function installSkills(
+const SKILL_INSTALL_CONCURRENCY = 4;
+
+async function installSkills(
   skills: readonly { key?: string; name: string; args?: readonly string[] }[],
   platform: Platform | "*",
   installBaseDir: string,
   globalInstall: boolean,
   logger?: Logger,
-): void {
+  selectedPlatforms: readonly Platform[] = [],
+): Promise<void> {
   if (skills.length === 0) return;
   const agentNames =
-    platform === "*" ? Object.values(SKILL_PLATFORM_AGENT_NAMES) : [SKILL_PLATFORM_AGENT_NAMES[platform] ?? platform];
+    platform === "*"
+      ? selectedPlatforms.flatMap((selectedPlatform) => {
+          const agentName = SKILL_PLATFORM_AGENT_NAMES[selectedPlatform];
+          return agentName ? [agentName] : [];
+        })
+      : [SKILL_PLATFORM_AGENT_NAMES[platform] ?? platform];
+  if (agentNames.length === 0) return;
   const agentFlags = ["-a", ...agentNames];
 
-  for (const skill of skills) {
+  const results = await runBounded(skills, SKILL_INSTALL_CONCURRENCY, async (skill): Promise<SkillInstallLog> => {
     const npxArgs = [
       "skills@latest",
       "add",
@@ -484,7 +490,78 @@ function installSkills(
       "--yes",
       ...(skill.args ?? []),
     ];
-    const result = runCommand("npx", npxArgs, {
+    logInfo(logger, `Installing ${platform} skill: ${skill.key ?? skill.name}`);
+    const result = await runSkillCommand("npx", npxArgs, {
+      stdio: ["ignore", "pipe", "pipe"],
+      cwd: installBaseDir,
+      shell: process.platform === "win32",
+    });
+    if (result.status !== 0) {
+      const combined = `${result.stdout ?? ""}\n${result.stderr ?? ""}`
+        .replace(/\u001b\[[0-9;]*m/gu, "")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      const detail = combined[combined.length - 1] || result.error?.message || `exit ${result.status}`;
+      return {
+        level: "warn",
+        message: `Failed to install ${platform} skill: ${skill.key ?? skill.name} (${detail})`,
+      };
+    }
+    return { level: "success", message: `${platform} skill: ${skill.key ?? skill.name}` };
+  });
+
+  for (const result of results) {
+    if (result.level === "warn") logWarn(logger, result.message);
+    else logSuccess(logger, result.message);
+  }
+}
+
+async function runBounded<T, U>(
+  items: readonly T[],
+  concurrency: number,
+  runItem: (item: T) => Promise<U>,
+): Promise<readonly U[]> {
+  let nextIndex = 0;
+  const results: U[] = [];
+  const workerCount = Math.min(concurrency, items.length);
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const itemIndex = nextIndex;
+      const item = items[itemIndex]!;
+      nextIndex += 1;
+      results[itemIndex] = await runItem(item);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+function runPlatformExtensions(context: InstallContext, platform: Platform): void {
+  if (!context.installExtensionsEnabled) return;
+  const entries = context.extensions[platform]?.extensions ?? [];
+  if (entries.length === 0) return;
+  installExtensions(entries, platform, context.destBase, context.runner, context.logger);
+}
+
+function installExtensions(
+  extensions: readonly { key?: string; name: string; args?: readonly string[] }[],
+  platform: Platform | "*",
+  installBaseDir: string,
+  runner: Runner,
+  logger?: Logger,
+): void {
+  if (extensions.length === 0) return;
+  if (!commandExists(runner)) {
+    logWarn(logger, `${runner} not found on PATH - skipping ${platform} extensions.`);
+    return;
+  }
+
+  for (const extension of extensions) {
+    const args = [extension.name, ...(extension.args ?? [])];
+    logInfo(logger, `Will run: ${runner} ${args.join(" ")}`);
+
+    const result = runCommand(runner, args, {
       stdio: ["ignore", "pipe", "pipe"],
       cwd: installBaseDir,
       shell: process.platform === "win32",
@@ -497,11 +574,29 @@ function installSkills(
         .map((line) => line.trim())
         .filter((line) => line.length > 0);
       const detail = combined[combined.length - 1] || result.error?.message || `exit ${result.status}`;
-      logWarn(logger, `Failed to install ${platform} skill: ${skill.key ?? skill.name} (${detail})`);
+      logWarn(logger, `Failed to install ${platform} extension: ${extension.key ?? extension.name} (${detail})`);
       continue;
     }
-    logSuccess(logger, `${platform} skill: ${skill.key ?? skill.name}`);
+    logSuccess(logger, `${platform} extension: ${extension.key ?? extension.name}`);
   }
+}
+
+/**
+ * Resolve which package runner to use for `extensions.yaml` entries.
+ * Precedence: CLI flag → config.yaml → auto-detect (`bunx` if present, else `npx`).
+ */
+export function resolveRunner({
+  cliFlag,
+  configValue,
+  hasCommand = commandExists,
+}: {
+  cliFlag?: Runner;
+  configValue?: Runner;
+  hasCommand?: (cmd: string) => boolean;
+}): Runner {
+  if (cliFlag) return cliFlag;
+  if (configValue) return configValue;
+  return hasCommand("bunx") ? "bunx" : "npx";
 }
 
 function commandExists(command: string): boolean {
@@ -521,20 +616,12 @@ function ensureDir(dirPath: string): void {
   }
 }
 
-function dirnameOf(filePath: string): string {
-  return filePath.slice(0, filePath.length - basename(filePath).length).replace(/[\\/]$/u, "");
-}
-
 function makeTimestamp(): string {
   const now = new Date();
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(
     now.getMinutes(),
   )}${pad(now.getSeconds())}`;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readDirectoryEntries(dirPath: string): readonly string[] {
@@ -563,20 +650,51 @@ function copyPath(sourcePath: string, targetPath: string): void {
 
 function runCommand(command: string, args: readonly string[], options: Parameters<typeof spawnSync>[2]) {
   try {
-    return spawnSync(command, [...args], options);
+    return runtimeDependencies.runCommand(command, args, options);
   } catch (error) {
     throw new InstallError(`Failed to run command: ${command} ${args.join(" ")}`, error);
   }
 }
 
-function normalizeProcessOutput(value: string | Buffer | undefined): string {
-  if (typeof value === "string") {
-    return value.trim();
+async function runSkillCommand(
+  command: string,
+  args: readonly string[],
+  options: Parameters<typeof spawn>[2],
+): Promise<AsyncCommandResult> {
+  try {
+    return await runtimeDependencies.runAsyncCommand(command, args, options);
+  } catch (error) {
+    throw new InstallError(`Failed to run command: ${command} ${args.join(" ")}`, error);
   }
-  if (!value) {
-    return "";
-  }
-  return value.toString("utf8").trim();
+}
+
+function runAsyncCommand(
+  command: string,
+  args: readonly string[],
+  options: Parameters<typeof spawn>[2],
+): Promise<AsyncCommandResult> {
+  return new Promise((resolve) => {
+    const child = spawn(command, [...args], options);
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout?.on("data", (chunk: Buffer | string) => stdout.push(Buffer.from(chunk)));
+    child.stderr?.on("data", (chunk: Buffer | string) => stderr.push(Buffer.from(chunk)));
+    child.on("error", (error) => {
+      resolve({
+        status: 1,
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8"),
+        error,
+      });
+    });
+    child.on("close", (status) => {
+      resolve({
+        status,
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8"),
+      });
+    });
+  });
 }
 
 function logHeader(logger: Logger | undefined, message: string): void {
@@ -594,3 +712,12 @@ function logSuccess(logger: Logger | undefined, message: string): void {
 function logWarn(logger: Logger | undefined, message: string): void {
   logger?.warn(message);
 }
+
+export const __test = {
+  setRuntimeDependencies(overrides: Partial<RuntimeDependencies>): void {
+    runtimeDependencies = { ...runtimeDependencies, ...overrides };
+  },
+  resetRuntimeDependencies(): void {
+    runtimeDependencies = { ...defaultRuntimeDependencies };
+  },
+};

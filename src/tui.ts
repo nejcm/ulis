@@ -17,6 +17,7 @@ import {
 
 const state: TuiState = createInitialState();
 let lastSavedPreferences = JSON.stringify(snapshotTuiPreferences(state));
+let currentRunAbortController: AbortController | undefined;
 
 function main(): void {
   state.availablePresets = listPresets();
@@ -77,6 +78,12 @@ async function handleEffect(effect: ReturnType<typeof handleTuiKey>): Promise<vo
     exitApp(effect.code);
     return;
   }
+  if (effect.type === "cancelRunning") {
+    if (currentRunAbortController == null) return;
+    pushLog("[warn] Stopping current workflow...");
+    currentRunAbortController.abort();
+    return;
+  }
 
   if (effect.type === "initSource") {
     const pendingAction = state.pendingAction;
@@ -87,9 +94,9 @@ async function handleEffect(effect: ReturnType<typeof handleTuiKey>): Promise<vo
       pendingAction == null
         ? "Source initialized successfully."
         : `Source initialized and ${formatActionTitle(pendingAction)} completed successfully.`;
-    await runWithLogs(title, successMessage, async (logger) => {
+    await runWithLogs(title, successMessage, async (logger, signal) => {
       await initializeMissingSource(state, logger);
-      if (pendingAction != null) await runTuiAction(state, pendingAction, logger);
+      if (pendingAction != null) await runTuiAction(state, pendingAction, logger, { signal });
     });
     return;
   }
@@ -105,8 +112,8 @@ async function handleEffect(effect: ReturnType<typeof handleTuiKey>): Promise<vo
   await runWithLogs(
     formatActionTitle(effect.action),
     `${formatActionTitle(effect.action)} completed successfully.`,
-    (logger) => {
-      return runTuiAction(state, effect.action, logger);
+    (logger, signal) => {
+      return runTuiAction(state, effect.action, logger, { signal });
     },
   );
 }
@@ -114,8 +121,10 @@ async function handleEffect(effect: ReturnType<typeof handleTuiKey>): Promise<vo
 async function runWithLogs(
   title: string,
   successMessage: string,
-  run: (logger: Logger) => void | Promise<void>,
+  run: (logger: Logger, signal: AbortSignal) => void | Promise<void>,
 ): Promise<void> {
+  const abortController = new AbortController();
+  currentRunAbortController = abortController;
   state.logs = [`Starting: ${title}`];
   state.notice = "";
   state.resultTitle = "";
@@ -130,14 +139,21 @@ async function runWithLogs(
   }, 120);
 
   try {
-    await run(createUiLogger());
+    await run(createUiLogger(), abortController.signal);
     state.resultTitle = `${title} Complete`;
     state.resultMessage = successMessage;
   } catch (error) {
-    state.resultTitle = `${title} Failed`;
-    state.resultMessage = error instanceof Error ? error.message : String(error);
-    pushLog(`[error] ${state.resultMessage}`);
+    if (abortController.signal.aborted) {
+      state.resultTitle = `${title} Stopped`;
+      state.resultMessage = `${title} stopped by user.`;
+      pushLog(`[warn] ${state.resultMessage}`);
+    } else {
+      state.resultTitle = `${title} Failed`;
+      state.resultMessage = error instanceof Error ? error.message : String(error);
+      pushLog(`[error] ${state.resultMessage}`);
+    }
   } finally {
+    if (currentRunAbortController === abortController) currentRunAbortController = undefined;
     clearInterval(spinnerInterval);
     state.screen = "result";
     cel.render();

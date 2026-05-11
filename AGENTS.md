@@ -32,7 +32,7 @@ When you need tool-specific configuration behavior:
 src/
   cli.ts                # cac entry point (bundled to dist/cli.js)
   commands/             # init, install, build, tui
-  parsers/              # agent, skill, mcp, plugins, permissions
+  parsers/              # agent, skill, mcp, permissions
   generators/           # claude, opencode, codex, cursor, forgecode
   schema/               # Zod schemas
   scaffold/             # `ulis init` templates (inlined strings)

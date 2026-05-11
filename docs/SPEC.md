@@ -19,13 +19,13 @@ ULIS is a CLI (`ulis`) that lets you define AI agent configurations **once** and
 │   SKILL.md                  ├── codex/    (config.toml, agents/*.toml, AGENTS.md)
 ├── mcp.yaml          ─────►  ├── cursor/   (agents/*.mdc, skills/, mcp.json)
 │                             └── forgecode/ (AGENTS.md, .forge/agents, .forge/skills, .forge/.mcp.json)
-├── plugins.yaml         (Claude marketplace plugins)
 ├── skills.yaml          (external skill installs)
+├── extensions.yaml      (third-party CLI extension installs via npx/bunx)
 ├── permissions.yaml
-└── config.yaml          ◄─── minimal: version + name (room to grow)
+└── config.yaml          ◄─── version + name + optional `runner: npx | bunx`
 ```
 
-The generated tree is then copied to the per-platform destination (`./.claude/`, `./.forge/`, etc.) by `ulis install`.
+`ulis install` deploys the generated tree to the per-platform destination (`./.claude/`, `./.forge/`, etc.), preserving only allowlisted existing native config sections such as MCP servers, hooks, trusted projects, and Codex `tui`, `notice`, and `features`.
 
 **Why it exists:** Claude Code, OpenCode, Codex, Cursor, and ForgeCode all have incompatible config formats. Without ULIS you maintain separate, drift-prone config trees. ULIS keeps one source of truth and compiles it.
 
@@ -36,13 +36,13 @@ The generated tree is then copied to the per-platform destination (`./.claude/`,
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  Source: .ulis/  (or ~/.ulis/)                          │
-│  agents/  skills/  mcp.yaml  plugins.yaml  skills.yaml  │
+│  agents/  skills/  mcp.yaml  skills.yaml                │
 └────────────────────────┬────────────────────────────────┘
                          │ gray-matter + Zod parse
                          ▼
 ┌─────────────────────────────────────────────────────────┐
 │  Canonical bundle                                       │
-│  ParsedAgent[]  ParsedSkill[]  McpConfig  PluginsConfig │
+│  ParsedAgent[]  ParsedSkill[]  McpConfig                │
 └──────────┬──────────┬──────────┬──────────┬────────────┘
            │          │          │          │
     generateClaude  generateOpencode  generateCodex  generateCursor  generateForgecode
@@ -68,7 +68,7 @@ Errors abort the build (exit code 1, no files written). Warnings print and the b
 
 `config.yaml` holds the minimum CLI metadata (`version`, `name`).
 
-Platform adapter defaults are internal to ULIS. If you need platform-native output customization, place partial config files under `raw/` (for example `raw/opencode/opencode.json` or `raw/codex/config.toml`). These are **deep-merged** into the generated output — raw values win on conflict, arrays are concatenated, and all generated keys not touched by the raw file are preserved. See [Source Layout — Raw overrides](./guide/source-layout.md#raw-overrides) for the full rules.
+Platform adapter defaults are internal to ULIS. If you need platform-native output customization, place partial config files under `raw/` (for example `raw/opencode/opencode.json` or `raw/codex/config.toml`). These are merged into the generated output — objects merge recursively, and raw arrays or scalars replace generated values at the same path. See [Source Layout — Raw overrides](./guide/source-layout.md#raw-overrides) for the full rules.
 
 Capability mismatches are handled with **best-effort + comments**: if a target lacks native support for a field, the value is emitted as a comment in the generated file so reviewers can see it, and the build continues (no hard failure).
 
@@ -192,21 +192,9 @@ Defined once in `.ulis/mcp.yaml` (JSON is also accepted for backwards compatibil
 
 Environment variables use `${VAR}` syntax everywhere. The build translates to platform-specific syntax (OpenCode headers use `{env:VAR}`).
 
-### 3.4 Plugin / Skill registry entries
+### 3.4 Skill / Extension registry entries
 
 Declarative installs are split into two files:
-
-**`.ulis/plugins.yaml`** — Claude Code marketplace plugins (`claude plugin add --from`):
-
-```yaml
-claude:
-  plugins:
-    - name: frontend-design
-      source: official
-    - name: everything-claude-code
-      source: github
-      repo: affaan-m/everything-claude-code
-```
 
 **`.ulis/skills.yaml`** — external skills installed via `npx skills@latest add`, keyed by platform or the `"*"` wildcard:
 
@@ -229,11 +217,12 @@ opencode:
 
 **Key semantics:**
 
-| File           | Key            | Effect during `ulis install`                                                             |
-| -------------- | -------------- | ---------------------------------------------------------------------------------------- |
-| `skills.yaml`  | `"*"`          | `skills` are installed for **all** platforms via `npx skills@latest add -a <each-agent>` |
-| `skills.yaml`  | `"<platform>"` | `skills` are installed for that platform only (`-a <agent-name>`)                        |
-| `plugins.yaml` | `"claude"`     | `plugins` are installed via `claude plugin add --from <source>`                          |
+| File              | Key            | Effect during `ulis install`                                                             |
+| ----------------- | -------------- | ---------------------------------------------------------------------------------------- |
+| `skills.yaml`     | `"*"`          | `skills` are installed for **all** platforms via `npx skills@latest add -a <each-agent>` |
+| `skills.yaml`     | `"<platform>"` | `skills` are installed for that platform only (`-a <agent-name>`)                        |
+| `extensions.yaml` | `"*"`          | each `extensions` entry runs once via the resolved runner (e.g. `bunx <name> <args>`)    |
+| `extensions.yaml` | `"<platform>"` | runs the entry only when that platform is part of the install target set                 |
 
 Skills are installed **system-globally** — `npx skills@latest add` writes directly into each agent's known config directory. No files are staged in this repo.
 
@@ -244,13 +233,32 @@ Each `skills` entry supports:
 | `name` | yes      | Package name, `owner/repo/skill`, or full URL                          |
 | `args` | no       | Additional CLI arguments forwarded verbatim to `npx skills@latest add` |
 
-Each `plugins` entry (Claude only) supports:
+**`.ulis/extensions.yaml`** — third-party CLI extensions invoked through a package runner. Useful for self-installing packages (e.g. `bunx codex-supermemory@latest install`) that wire themselves into a target tool's config files:
 
-| Field    | Required | Description                                     |
-| -------- | -------- | ----------------------------------------------- |
-| `name`   | yes      | Plugin identifier                               |
-| `source` | yes      | `"official"` or `"github"`                      |
-| `repo`   | no       | `"owner/repo"` — required when `source: github` |
+```yaml
+codex:
+  extensions:
+    - key: supermemory
+      name: codex-supermemory@latest
+      args: ["install"]
+
+claude:
+  extensions:
+    - name: some-claude-helper@1.2.3
+      args: ["setup", "--yes"]
+```
+
+Each `extensions` entry supports:
+
+| Field  | Required | Description                                                                   |
+| ------ | -------- | ----------------------------------------------------------------------------- |
+| `name` | yes      | Package spec (e.g. `codex-supermemory@latest`); passed verbatim to the runner |
+| `args` | no       | Arguments appended after `name` in the runner invocation                      |
+| `key`  | no       | Friendly identifier used in `ulis install` log lines                          |
+
+**Runner resolution** (precedence): `--runner` CLI flag → `runner` field in `config.yaml` → auto-detect (`bunx` if available on PATH, else `npx`).
+
+Extensions run **last** in the install pipeline (`build → files → skills → extensions`) because most self-installing extensions mutate the very files ulis just deployed. Each entry runs every time `ulis install` runs (no caching in v1). Failures log a warning and the install continues.
 
 ### 3.5 Hook
 
@@ -278,7 +286,6 @@ Hooks are native to Claude Code only. On other targets they are silently dropped
 | Git worktree isolation               |        ✓        |          —           |       —       |    —    |     —      |
 | Local MCP servers                    |        ✓        |          ✓           |       ✓       |    ✓    |     ✓      |
 | Remote MCP servers                   |        ✓        |          ✓           | localFallback |    ✓    |     ✓      |
-| Marketplace plugins                  |        ✓        |    ✓ (TS plugins)    |       —       |    —    |     —      |
 | Fine-grained tool permissions        |        ✓        |          ✓           |       —       |    —    | tools list |
 | `contextHints` enforcement           |     comment     |       comment        |    comment    | comment |  comment   |
 | `toolPolicy.avoid`                   | disallowedTools |       comment        |    comment    | comment |  comment   |
@@ -307,9 +314,8 @@ ulis install --global --yes    # build + deploy from ~/.ulis/
 const agents = parseAgents(join(sourceDir, "agents"));
 const skills = parseSkills(join(sourceDir, "skills"));
 const mcp = loadMcp(sourceDir);
-const plugins = loadPlugins(sourceDir);
 
-generateClaude(agents, skills, mcp, plugins, sourceDir, join(generatedDir, "claude"));
+generateClaude(agents, skills, mcp, sourceDir, join(generatedDir, "claude"));
 generateOpencode(agents, skills, mcp, sourceDir, join(generatedDir, "opencode"));
 generateCodex(agents, skills, mcp, sourceDir, join(generatedDir, "codex"));
 generateCursor(agents, skills, mcp, sourceDir, join(generatedDir, "cursor"));

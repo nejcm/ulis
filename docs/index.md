@@ -4,7 +4,7 @@ layout: home
 hero:
   name: "ulis"
   text: "One config source to rule them all."
-  tagline: "Define agents, skills, MCP servers, plugins, and permissions once, then generate native configs for Claude Code, Codex, Cursor, OpenCode, and ForgeCode."
+  tagline: "Define agents, skills, MCP servers, and permissions once, then generate native configs for Claude Code, Codex, Cursor, OpenCode, and ForgeCode."
   actions:
     - theme: brand
       text: Get Started

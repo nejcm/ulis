@@ -27,6 +27,29 @@ bun add -g @nejcm/ulis
 
 Requires Node 20+. Works with both Node and Bun runtimes.
 
+## Installable skills
+
+`@nejcm/ulis` also ships reusable skills under [`skills/`](skills/).
+
+Install the `ulis` guide skill directly:
+
+```bash
+npx skills@latest add @nejcm/ulis --skill ulis
+```
+
+Or install it through your ULIS source tree:
+
+```yaml
+"*":
+  skills:
+    - name: "@nejcm/ulis"
+      args:
+        - --skill
+        - ulis
+```
+
+That entry belongs in `.ulis/skills.yaml`, then `ulis install` will forward it to the `skills` CLI for supported targets.
+
 ---
 
 ## Quick start — project mode
@@ -45,8 +68,8 @@ This creates:
 ├── config.yaml          # version + project name
 ├── mcp.yaml             # MCP server definitions
 ├── permissions.yaml     # per-platform access rules
-├── plugins.yaml         # Claude marketplace plugin installs
 ├── skills.yaml          # external skill installs (per platform)
+├── extensions.yaml      # third-party CLI extension installs (per platform)
 ├── agents/              # agent definitions (.md with frontmatter)
 ├── skills/              # skill definitions (SKILL.md per skill)
 ├── commands/            # slash commands
@@ -142,6 +165,8 @@ In CI or other non-interactive runs, add `--yes` so a missing preset name fails 
 | `-y`, `--yes`         | `install`          | Skip confirmation prompts                                                    |
 | `--no-rebuild`        | `install`          | Skip the build step and deploy existing `generated/`                         |
 | `--backup`            | `install`          | Back up existing platform dirs (`<dir>.backup.YYYYMMDD_HHMMSS`)              |
+| `--runner <name>`     | `install`          | Package runner for `extensions.yaml` (`npx` or `bunx`)                       |
+| `--no-extensions`     | `install`          | Skip running entries from `extensions.yaml`                                  |
 
 ### Presets (quick reference)
 
@@ -175,8 +200,8 @@ You can define:
 - `config.yaml` – project identity
 - `mcp.yaml` – MCP servers shared across platforms
 - `permissions.yaml` – per-platform read/write/bash access rules
-- `plugins.yaml` – Claude Code marketplace plugins
 - `skills.yaml` – external skill installs
+- `extensions.yaml` – third-party CLI extension installs (run via `npx`/`bunx`)
 - `agents/*.md` – agents (prompt + frontmatter)
 - `skills/<name>/SKILL.md` – skills
 - `commands/` and `raw/` – pass-through fragments copied into generated outputs
@@ -196,6 +221,35 @@ For the full field-level schema and examples, see [docs/REFERENCE.md](docs/REFER
 | ForgeCode   | Merge (additive) | `./.forge/`           | `~/.forge/`                                                          |
 
 `settings.json`, `.claude.json`, `mcp.json`, and ForgeCode's `.forge/.mcp.json` are deep-merged so user content outside `ulis`-managed keys is preserved. With `--backup`, existing platform directories/files are copied aside before overwriting.
+
+`ulis install` runs phases in this order: **build → files → skills → extensions**. Extensions run last because they typically mutate the same files ulis just deployed.
+
+---
+
+## Extensions (`extensions.yaml`)
+
+Third-party CLI extensions that wire themselves into a target tool — for example `bunx codex-supermemory@latest install` — are declared once in `.ulis/extensions.yaml` and re-run on every `ulis install`. Each entry runs through a package runner.
+
+```yaml
+codex:
+  extensions:
+    - key: supermemory # optional, used in logs
+      name: codex-supermemory@latest
+      args: ["install"] # optional
+
+claude:
+  extensions:
+    - name: some-claude-helper@1.2.3
+      args: ["setup", "--yes"]
+```
+
+**Runner resolution** (highest precedence first):
+
+1. `--runner <npx|bunx>` CLI flag
+2. `runner: npx | bunx` in `config.yaml`
+3. Auto-detect: `bunx` if available on PATH, otherwise `npx`
+
+A single failing extension logs a warning and the install continues. Skip the phase entirely with `--no-extensions`. Extensions are always re-run on each install (no caching in this version — see [SPEC.md](docs/SPEC.md) for the future caching plan).
 
 ---
 
@@ -240,7 +294,7 @@ bun run build      # bundles dist/cli.js + regenerates dist/schemas + schemas/ (
 src/
   cli.ts                   # cac entry point (compiled to dist/cli.js)
   commands/                # init, install, build, tui
-  parsers/                 # agent, skill, mcp, plugins, permissions loaders
+  parsers/                 # agent, skill, mcp, permissions loaders
   generators/              # claude, opencode, codex, cursor, forgecode
   schema/                  # Zod schemas (ulis-config, agent, mcp, …)
   scaffold/                # inline templates used by `ulis init`

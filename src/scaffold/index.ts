@@ -62,23 +62,6 @@ const PERMISSIONS_TEMPLATE = `# yaml-language-server: $schema={{schemaBase}}/per
 #   terminalAllowlist: []
 `;
 
-const PLUGINS_TEMPLATE = `# yaml-language-server: $schema={{schemaBase}}/plugins.schema.json
-
-# Declarative Claude Code marketplace plugin installs.
-# Only "claude" is meaningful here today — other platforms don't have a
-# marketplace concept. Skills live in skills.yaml.
-#
-# Example:
-#
-# claude:
-#   plugins:
-#     - name: frontend-design
-#       source: official
-#     - name: everything-claude-code
-#       source: github
-#       repo: affaan-m/everything-claude-code
-`;
-
 const SKILLS_TEMPLATE = `# yaml-language-server: $schema={{schemaBase}}/skills.schema.json
 
 # Declarative skill installs per platform (via the \`skills\` CLI).
@@ -97,6 +80,31 @@ const SKILLS_TEMPLATE = `# yaml-language-server: $schema={{schemaBase}}/skills.s
 #   skills:
 #     - name: anthropics/skills
 #       args: ["--skill", "mcp-builder"]
+`;
+
+const EXTENSIONS_TEMPLATE = `# yaml-language-server: $schema={{schemaBase}}/extensions.schema.json
+
+# Declarative extension installs per platform.
+#
+# Each entry is run via a package runner (\`npx\` by default, \`bunx\` if
+# \`--runner bunx\` or \`runner: bunx\` in config.yaml is set, or auto-detected
+# when \`bunx\` is on PATH).
+#
+# - "*"      applies to every platform
+# - "claude" / "codex" / "cursor" / "opencode" / "forgecode" scope to one platform
+#
+# Example:
+#
+# codex:
+#   extensions:
+#     - key: supermemory
+#       name: codex-supermemory@latest
+#       args: ["install"]
+#
+# claude:
+#   extensions:
+#     - name: some-claude-helper@1.2.3
+#       args: ["setup", "--yes"]
 `;
 
 const RULE_CODE_STYLE_TEMPLATE = `# Code Style
@@ -128,12 +136,12 @@ export function renderPermissions(context: ScaffoldContext): string {
   return substitute(PERMISSIONS_TEMPLATE, context);
 }
 
-export function renderPlugins(context: ScaffoldContext): string {
-  return substitute(PLUGINS_TEMPLATE, context);
-}
-
 export function renderSkills(context: ScaffoldContext): string {
   return substitute(SKILLS_TEMPLATE, context);
+}
+
+export function renderExtensions(context: ScaffoldContext): string {
+  return substitute(EXTENSIONS_TEMPLATE, context);
 }
 
 export function renderRuleCodeStyle(_context: ScaffoldContext): string {

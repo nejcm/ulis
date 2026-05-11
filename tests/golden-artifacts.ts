@@ -88,16 +88,9 @@ You are a minimal worker agent used for testing.
 `,
   },
   codex: {
-    "config.toml": `model = "gpt-5.4"
-model_reasoning_effort = "high"
-
-[windows]
-sandbox = "elevated"
-
-[mcp_servers.test-local]
+    "config.toml": `[mcp_servers.test-local]
 command = "node"
 args = ["./mcp-server.js"]
-startup_timeout_sec = 20
 
 [mcp_servers.test-local.env]
 API_KEY = "\${TEST_API_KEY}"
@@ -105,7 +98,6 @@ API_KEY = "\${TEST_API_KEY}"
 [mcp_servers.test-remote]
 url = "https://mcp.example.com/sse"
 bearer_token_env_var = "TEST_REMOTE_TOKEN"
-startup_timeout_sec = 20
 `,
   },
   cursor: {

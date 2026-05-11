@@ -33,7 +33,7 @@ describe("parseProject (happy path)", () => {
     expect(p.rules).toEqual([]);
   });
 
-  it("includes mcp, permissions, plugins, ulisConfig, and sourceDir", () => {
+  it("includes mcp, permissions, ulisConfig, and sourceDir", () => {
     const p = parseProject(fixturesDir);
     expect(Object.keys(p.mcp.servers)).toContain("test-local");
     expect(p.ulisConfig.name).toBe("fixtures");
@@ -89,8 +89,8 @@ Body text.
 `;
 
   const invalidAgent = `---
-description: An agent with an invalid model
-model: not-a-valid-model-name
+description: An agent with an invalid model type
+model: 123
 tools:
   read: true
 ---

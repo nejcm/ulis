@@ -23,24 +23,7 @@ function buildMcpBlock(mcp: ProjectBundle["mcp"]): Record<string, unknown> {
   return mcpServers;
 }
 
-function buildSettings(
-  permissions: ProjectBundle["permissions"],
-  plugins: ProjectBundle["plugins"],
-): Record<string, unknown> {
-  const enabledPlugins: Record<string, boolean> = {};
-  const extraKnownMarketplaces: Record<string, unknown> = {};
-
-  for (const plugin of plugins?.claude?.plugins ?? []) {
-    if (plugin.source === "github" && plugin.repo) {
-      enabledPlugins[`${plugin.name}@${plugin.name}`] = true;
-      extraKnownMarketplaces[plugin.name] = {
-        source: { source: "github", repo: plugin.repo },
-      };
-    } else if (plugin.source === "official") {
-      enabledPlugins[`${plugin.name}@claude-plugins-official`] = true;
-    }
-  }
-
+function buildSettings(permissions: ProjectBundle["permissions"]): Record<string, unknown> {
   const permissionsBlock: Record<string, unknown> = {};
   if (permissions?.claude) {
     const cp = permissions.claude;
@@ -51,10 +34,7 @@ function buildSettings(
     if (cp.additionalDirectories?.length) permissionsBlock.additionalDirectories = cp.additionalDirectories;
   }
 
-  const settings: Record<string, unknown> = { enabledPlugins };
-  if (Object.keys(extraKnownMarketplaces).length > 0) {
-    settings.extraKnownMarketplaces = extraKnownMarketplaces;
-  }
+  const settings: Record<string, unknown> = {};
   if (Object.keys(permissionsBlock).length > 0) {
     settings.permissions = permissionsBlock;
   }
@@ -63,7 +43,7 @@ function buildSettings(
 
 export function buildClaudeSettingsArtifacts(project: ProjectBundle): FileArtifact[] {
   const artifacts: FileArtifact[] = [
-    { path: "settings.json", contents: JSON.stringify(buildSettings(project.permissions, project.plugins), null, 2) },
+    { path: "settings.json", contents: JSON.stringify(buildSettings(project.permissions), null, 2) },
   ];
 
   const mcpServers = buildMcpBlock(project.mcp);

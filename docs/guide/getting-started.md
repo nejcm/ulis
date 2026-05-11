@@ -20,6 +20,27 @@ bun add -g @nejcm/ulis
 
 Requires Node 20+.
 
+## Install the packaged `ulis` skill
+
+`@nejcm/ulis` ships an installable `ulis` skill that teaches the CLI and TUI workflows.
+
+Direct install:
+
+```bash
+npx skills@latest add @nejcm/ulis --skill ulis
+```
+
+Or declare it in `.ulis/skills.yaml` so `ulis install` manages it:
+
+```yaml
+"*":
+  skills:
+    - name: "@nejcm/ulis"
+      args:
+        - --skill
+        - ulis
+```
+
 ## Project mode quick start
 
 Use project mode when you want configuration that lives with a single repository.

@@ -2,7 +2,7 @@ import type { ParsedAgent } from "../parsers/agent.js";
 import type { ParsedRule } from "../parsers/rule.js";
 import type { ParsedSkill } from "../parsers/skill.js";
 import type { Platform } from "../platforms.js";
-import type { McpConfig, PermissionsConfig, PluginsConfig, UlisConfig } from "../schema.js";
+import type { McpConfig, PermissionsConfig, UlisConfig } from "../schema.js";
 
 /**
  * A single file to be written to disk. Generators return arrays of these
@@ -65,7 +65,6 @@ export interface ProjectBundle {
   readonly rules: readonly ParsedRule[];
   readonly mcp: McpConfig;
   readonly permissions: PermissionsConfig | undefined;
-  readonly plugins: PluginsConfig | undefined;
   readonly ulisConfig: UlisConfig;
   /** Absolute path to the `.ulis/` source tree. Generators may read raw/, commands/, etc. from here. */
   readonly sourceDir: string;
