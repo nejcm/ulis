@@ -188,7 +188,7 @@ describe("runInstall", () => {
     });
   });
 
-  it("preserves allowlisted integration maps across platform installs", async () => {
+  it("preserves allowlisted native config across platform installs", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");

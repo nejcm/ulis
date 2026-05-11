@@ -78,7 +78,7 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 
 **Install strategy per platform:**
 
-| Platform  | Managed dirs (replaced)                       | Existing native integrations preserved                                        |
+| Platform  | Managed dirs (replaced)                       | Preserved native config                                                       |
 | --------- | --------------------------------------------- | ----------------------------------------------------------------------------- |
 | Claude    | `agents/`, `commands/`, `rules/`, `hooks/`, … | `settings.json` `hooks`, `.claude.json` `mcpServers`                          |
 | OpenCode  | target dir contents                           | `opencode.json` `mcp`                                                         |
@@ -86,7 +86,7 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 | Cursor    | `agents/` (`.mdc` files)                      | `mcp.json` `mcpServers`                                                       |
 | ForgeCode | `.forge/agents`, `.forge/skills`, `AGENTS.md` | `.forge/.mcp.json` `mcpServers`                                               |
 
-Install preserves only the allowlisted native integration sections above. Generated output wins on the same integration name/path, and raw fragments win through the generated output because raw is merged during build. Existing non-allowlisted native config values are removed. If `--backup` is set, backups are created before parsing preserved native config.
+Install preserves only the allowlisted native config sections above. Generated output wins at the same config path, and raw fragments win through the generated output because raw is merged during build. Existing non-allowlisted native config values are removed. If `--backup` is set, backups are created before parsing preserved native config.
 
 ---
 

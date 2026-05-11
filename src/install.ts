@@ -19,7 +19,12 @@ import {
 } from "./platforms.js";
 import { UlisConfigSchema, type ExtensionsConfig, type SkillsConfig } from "./schema.js";
 import { loadValidatedConfigFile } from "./utils/config-loader.js";
-import { mergeConfigValues, readMergeableConfig, writeMergeableConfig } from "./utils/config-merger.js";
+import {
+  capturePreservedNativeConfigs,
+  PreservedNativeConfigParseError,
+  writePreservedNativeConfigs,
+  type CapturedPreservedNativeConfig,
+} from "./utils/config-merger.js";
 import { logger as defaultLogger } from "./utils/logger.js";
 import type { ResolvedPreset } from "./utils/resolve-presets.js";
 
@@ -265,16 +270,14 @@ interface InstallContext {
 async function installOpencode(context: InstallContext): Promise<void> {
   const targetDir = platformConfigDir("opencode", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "opencode");
-  const sourceConfig = join(sourceDir, "opencode.json");
-  const targetConfig = join(targetDir, "opencode.json");
 
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.opencode}`);
   backupDirectory(targetDir, context);
-  const preservedConfig = preserveConfigPaths(targetConfig, [["mcp"]]);
+  const preservedConfigs = capturePlatformPreservedNativeConfigs("opencode", context);
 
   removePath(targetDir);
   copyPath(sourceDir, targetDir);
-  writeMergedNativeConfig(sourceConfig, targetConfig, preservedConfig, "opencode.json", context.logger);
+  writePlatformPreservedNativeConfigs("opencode", preservedConfigs, context);
   logSuccess(context.logger, `OpenCode -> ${targetDir}`);
 
   const skills = context.skills.opencode?.skills ?? [];
@@ -288,20 +291,15 @@ async function installOpencode(context: InstallContext): Promise<void> {
 async function installClaude(context: InstallContext): Promise<void> {
   const targetDir = platformConfigDir("claude", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "claude");
-  const generatedSettings = join(sourceDir, "settings.json");
-  const targetSettings = join(targetDir, "settings.json");
-  const generatedRootConfig = join(sourceDir, ".claude.json");
   const targetRootConfig = join(context.destBase, ".claude.json");
 
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.claude}`);
   backupDirectory(targetDir, context);
   backupFile(targetRootConfig, context);
-  const preservedSettings = preserveConfigPaths(targetSettings, [["hooks"]]);
-  const preservedRootConfig = preserveConfigPaths(targetRootConfig, [["mcpServers"]]);
+  const preservedConfigs = capturePlatformPreservedNativeConfigs("claude", context);
   ensureDir(targetDir);
 
-  writeMergedNativeConfig(generatedSettings, targetSettings, preservedSettings, "settings.json", context.logger);
-  writeMergedNativeConfig(generatedRootConfig, targetRootConfig, preservedRootConfig, ".claude.json", context.logger);
+  writePlatformPreservedNativeConfigs("claude", preservedConfigs, context);
 
   copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["settings.json", ".claude.json"]));
 
@@ -316,22 +314,13 @@ async function installClaude(context: InstallContext): Promise<void> {
 async function installCodex(context: InstallContext): Promise<void> {
   const targetDir = platformConfigDir("codex", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "codex");
-  const sourceConfig = join(sourceDir, "config.toml");
-  const targetConfig = join(targetDir, "config.toml");
 
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.codex}`);
   backupDirectory(targetDir, context);
-  const preservedConfig = preserveConfigPaths(targetConfig, [
-    ["projects"],
-    ["hooks"],
-    ["mcp_servers"],
-    ["tui"],
-    ["notice"],
-    ["features"],
-  ]);
+  const preservedConfigs = capturePlatformPreservedNativeConfigs("codex", context);
   ensureDir(targetDir);
   copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["config.toml"]));
-  writeMergedNativeConfig(sourceConfig, targetConfig, preservedConfig, "config.toml", context.logger);
+  writePlatformPreservedNativeConfigs("codex", preservedConfigs, context);
 
   const skills = context.skills.codex?.skills ?? [];
   if (skills.length > 0) {
@@ -344,15 +333,13 @@ async function installCodex(context: InstallContext): Promise<void> {
 async function installCursor(context: InstallContext): Promise<void> {
   const targetDir = platformConfigDir("cursor", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "cursor");
-  const generatedMcp = join(sourceDir, "mcp.json");
-  const targetMcp = join(targetDir, "mcp.json");
 
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.cursor}`);
   backupDirectory(targetDir, context);
-  const preservedMcp = preserveConfigPaths(targetMcp, [["mcpServers"]]);
+  const preservedConfigs = capturePlatformPreservedNativeConfigs("cursor", context);
   ensureDir(targetDir);
 
-  writeMergedNativeConfig(generatedMcp, targetMcp, preservedMcp, "mcp.json", context.logger);
+  writePlatformPreservedNativeConfigs("cursor", preservedConfigs, context);
 
   copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["mcp.json"]));
 
@@ -367,14 +354,13 @@ async function installCursor(context: InstallContext): Promise<void> {
 async function installForgecode(context: InstallContext): Promise<void> {
   const sourceDir = join(context.outputDir, "forgecode");
   const sourceForgeDir = join(sourceDir, resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project));
-  const sourceMcp = join(sourceForgeDir, ".mcp.json");
   const targetForgeDir = platformConfigDir("forgecode", context.destBase, context.userHome);
   const targetMcp = join(targetForgeDir, ".mcp.json");
 
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.forgecode}`);
   backupDirectory(targetForgeDir, context);
   backupFile(targetMcp, context);
-  const preservedMcp = preserveConfigPaths(targetMcp, [["mcpServers"]]);
+  const preservedConfigs = capturePlatformPreservedNativeConfigs("forgecode", context);
   ensureDir(targetForgeDir);
 
   if (existsSync(sourceForgeDir)) {
@@ -388,7 +374,7 @@ async function installForgecode(context: InstallContext): Promise<void> {
     new Set([resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project)]),
   );
 
-  writeMergedNativeConfig(sourceMcp, targetMcp, preservedMcp, ".mcp.json", context.logger);
+  writePlatformPreservedNativeConfigs("forgecode", preservedConfigs, context);
 
   runPlatformExtensions(context, "forgecode");
 }
@@ -418,79 +404,29 @@ function copyPlatformContents(
   }
 }
 
-function preserveConfigPaths(filePath: string, paths: readonly (readonly string[])[]): unknown | undefined {
-  if (!existsSync(filePath)) return undefined;
+function capturePlatformPreservedNativeConfigs(
+  platform: Platform,
+  context: InstallContext,
+): readonly CapturedPreservedNativeConfig[] {
   try {
-    const preserved = pickConfigPaths(readMergeableConfig(filePath), paths);
-    return Object.keys(preserved).length > 0 ? preserved : undefined;
+    return capturePreservedNativeConfigs(platform, context);
   } catch (error) {
-    throw new InstallError(`Failed to parse existing native config at ${filePath}`, error);
-  }
-}
-
-function pickConfigPaths(source: unknown, paths: readonly (readonly string[])[]): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const path of paths) {
-    const value = getConfigPath(source, path);
-    if (value !== undefined) setConfigPath(result, path, value);
-  }
-  return result;
-}
-
-function getConfigPath(source: unknown, path: readonly string[]): unknown {
-  let current = source;
-  for (const key of path) {
-    if (!isPlainObject(current) || !(key in current)) return undefined;
-    current = current[key];
-  }
-  return current;
-}
-
-function setConfigPath(target: Record<string, unknown>, path: readonly string[], value: unknown): void {
-  let current = target;
-  for (const key of path.slice(0, -1)) {
-    const next = current[key];
-    if (isPlainObject(next)) {
-      current = next;
-    } else {
-      const created: Record<string, unknown> = {};
-      current[key] = created;
-      current = created;
+    if (error instanceof PreservedNativeConfigParseError) {
+      throw new InstallError(error.message, error);
     }
+    throw new InstallError(`Failed to capture preserved native config for ${platform}`, error);
   }
-  current[path[path.length - 1]!] = value;
 }
 
-function writeMergedNativeConfig(
-  generatedPath: string,
-  targetPath: string,
-  preservedExisting: unknown | undefined,
-  label: string,
-  logger?: Logger,
+function writePlatformPreservedNativeConfigs(
+  platform: Platform,
+  entries: readonly CapturedPreservedNativeConfig[],
+  context: InstallContext,
 ): void {
   try {
-    if (!existsSync(generatedPath)) {
-      if (preservedExisting !== undefined) {
-        writeMergeableConfig(targetPath, preservedExisting);
-        logSuccess(logger, `${label} (preserved)`);
-      } else if (existsSync(targetPath)) {
-        removePath(targetPath);
-        logSuccess(logger, `${label} (removed)`);
-      }
-      return;
-    }
-
-    if (preservedExisting === undefined) {
-      cpSync(generatedPath, targetPath);
-      logSuccess(logger, `${label} (copied)`);
-      return;
-    }
-
-    const generated = readMergeableConfig(generatedPath);
-    writeMergeableConfig(targetPath, mergeConfigValues(preservedExisting, generated));
-    logSuccess(logger, `${label} (merged)`);
+    writePreservedNativeConfigs(entries, context.logger);
   } catch (error) {
-    throw new InstallError(`Failed to merge native config ${generatedPath} -> ${targetPath}`, error);
+    throw new InstallError(`Failed to write preserved native config for ${platform}`, error);
   }
 }
 
@@ -686,10 +622,6 @@ function makeTimestamp(): string {
   return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(
     now.getMinutes(),
   )}${pad(now.getSeconds())}`;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function readDirectoryEntries(dirPath: string): readonly string[] {
