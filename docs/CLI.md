@@ -81,13 +81,13 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 
 | Platform  | Managed dirs (replaced)                       | Preserved native config                                                       |
 | --------- | --------------------------------------------- | ----------------------------------------------------------------------------- |
-| Claude    | `agents/`, `commands/`, `rules/`, `hooks/`, … | `settings.json` `hooks`, `.claude.json` `mcpServers`                          |
+| Claude    | `agents/`, `commands/`, `rules/`, `hooks/`, … | `settings.json` `hooks`, UI/plugin settings; `.claude.json` `mcpServers`       |
 | OpenCode  | target dir contents                           | `opencode.json` `mcp`                                                         |
 | Codex     | target dir contents                           | `config.toml` `projects`, `hooks`, `mcp_servers`, `tui`, `notice`, `features` |
 | Cursor    | `agents/` (`.mdc` files)                      | `mcp.json` `mcpServers`                                                       |
-| ForgeCode | `.forge/agents`, `.forge/skills`, `AGENTS.md` | `.forge/.mcp.json` `mcpServers`                                               |
+| ForgeCode | `.forge/agents`, `.forge/skills`, `AGENTS.md` | `.forge/.mcp.json` `mcpServers`, `.forge.toml`                                 |
 
-Install preserves only the allowlisted native config sections above. Generated output wins at the same config path, and raw fragments win through the generated output because raw is merged during build. Existing non-allowlisted native config values are removed. If `--backup` is set, backups are created before parsing preserved native config.
+Install preserves only the allowlisted native config values and files above. Generated output wins at the same config path, and raw fragments win through the generated output because raw is merged during build. Existing non-allowlisted native config values are removed. If `--backup` is set, backups are created before parsing preserved native config.
 
 `--link-mode symlink` affects eligible local skills only. ULIS stages native-safe generated skills, then runs `npx skills@latest add <staged-dir>` with the selected project/global scope and target agents. The skills library manages `.agents/skills/`, symlinks on macOS/Linux, junctions on Windows, and copy fallback if linking fails. After a successful linked install, ULIS removes duplicate generated native skill copies; failed linked installs keep the generated copies as fallback. Skills with platform-specific skill config or extra generated files are copied by ULIS.
 
