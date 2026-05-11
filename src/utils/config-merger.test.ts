@@ -225,4 +225,74 @@ describe("writePreservedNativeConfigs", () => {
       generated: true,
     });
   });
+
+  it("keeps generated config when existing and raw config are absent", () => {
+    const root = createTempRoot();
+    write(join(root, "generated", "config.json"), JSON.stringify({ generated: true, list: ["generated"] }));
+
+    writePreservedNativeConfigs([entry(root, undefined)]);
+
+    expect(readJson(join(root, "target", "config.json"))).toEqual({ generated: true, list: ["generated"] });
+  });
+
+  it("merges existing preserved config with generated config when raw config is absent", () => {
+    const root = createTempRoot();
+    write(
+      join(root, "generated", "config.json"),
+      JSON.stringify({ keep: { shared: "generated", generatedOnly: true }, list: ["generated"] }),
+    );
+
+    writePreservedNativeConfigs([
+      entry(root, { keep: { shared: "existing", existingOnly: true }, list: ["existing"], existing: true }),
+    ]);
+
+    expect(readJson(join(root, "target", "config.json"))).toEqual({
+      keep: { shared: "generated", existingOnly: true, generatedOnly: true },
+      list: ["generated"],
+      existing: true,
+    });
+  });
+
+  it("merges generated config with raw config when existing preserved config is absent", () => {
+    const root = createTempRoot();
+    const generated = {
+      keep: { shared: "generated", generatedOnly: true },
+      list: ["generated"],
+      generated: true,
+    };
+    const raw = { keep: { shared: "raw", rawOnly: true }, list: ["raw"], raw: true };
+    write(join(root, "generated", "config.json"), JSON.stringify(mergeConfigValues(generated, raw)));
+
+    writePreservedNativeConfigs([entry(root, undefined)]);
+
+    expect(readJson(join(root, "target", "config.json"))).toEqual({
+      keep: { shared: "raw", generatedOnly: true, rawOnly: true },
+      list: ["raw"],
+      generated: true,
+      raw: true,
+    });
+  });
+
+  it("applies precedence existing preserved config then generated config then raw config", () => {
+    const root = createTempRoot();
+    const generated = {
+      keep: { shared: "generated", generatedOnly: true },
+      list: ["generated"],
+      generated: true,
+    };
+    const raw = { keep: { shared: "raw", rawOnly: true }, list: ["raw"], raw: true };
+    write(join(root, "generated", "config.json"), JSON.stringify(mergeConfigValues(generated, raw)));
+
+    writePreservedNativeConfigs([
+      entry(root, { keep: { shared: "existing", existingOnly: true }, list: ["existing"], existing: true }),
+    ]);
+
+    expect(readJson(join(root, "target", "config.json"))).toEqual({
+      keep: { shared: "raw", existingOnly: true, generatedOnly: true, rawOnly: true },
+      list: ["raw"],
+      existing: true,
+      generated: true,
+      raw: true,
+    });
+  });
 });
