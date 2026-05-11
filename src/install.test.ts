@@ -214,12 +214,30 @@ describe("runInstall", () => {
       JSON.stringify({ mcpServers: { shared: { command: "generated" } } }, null, 2),
     );
     write(
+      join(outputDir, "forgecode", ".forge.toml"),
+      ["max_conversations = 200", "", "[updates]", "enabled = false"].join("\n"),
+    );
+    write(
       join(outputDir, "opencode", "opencode.json"),
       JSON.stringify({ model: "generated", mcp: { shared: { command: ["generated"] } } }, null, 2),
     );
     write(
       join(projectDir, ".claude", "settings.json"),
-      JSON.stringify({ env: { OLD: "1" }, hooks: { PreToolUse: [{ matcher: "existing" }] } }, null, 2),
+      JSON.stringify(
+        {
+          env: { OLD: "1" },
+          hooks: { PreToolUse: [{ matcher: "existing" }] },
+          statusLine: { type: "command", command: "bash ~/.claude/statusline.sh" },
+          enabledPlugins: { "plugin@example": true },
+          extraKnownMarketplaces: { example: { source: { source: "github", repo: "owner/repo" } } },
+          autoUpdatesChannel: "latest",
+          agentPushNotifEnabled: true,
+          theme: "dark",
+          mcpServers: { old: { command: "old" } },
+        },
+        null,
+        2,
+      ),
     );
     write(
       join(projectDir, ".claude.json"),
@@ -246,6 +264,10 @@ describe("runInstall", () => {
       ),
     );
     write(
+      join(projectDir, ".forge", ".forge.toml"),
+      ["max_conversations = 100", "", "[updates]", 'channel = "stable"'].join("\n"),
+    );
+    write(
       join(projectDir, ".opencode", "opencode.json"),
       JSON.stringify({ model: "old", mcp: { existing: { command: ["old"] }, shared: { command: ["old"] } } }, null, 2),
     );
@@ -262,6 +284,12 @@ describe("runInstall", () => {
 
     expect(JSON.parse(read(join(projectDir, ".claude", "settings.json")))).toEqual({
       hooks: { PreToolUse: [{ matcher: "existing" }] },
+      statusLine: { type: "command", command: "bash ~/.claude/statusline.sh" },
+      enabledPlugins: { "plugin@example": true },
+      extraKnownMarketplaces: { example: { source: { source: "github", repo: "owner/repo" } } },
+      autoUpdatesChannel: "latest",
+      agentPushNotifEnabled: true,
+      theme: "dark",
       permissions: { allow: ["Bash(git status)"] },
     });
     expect(JSON.parse(read(join(projectDir, ".claude.json")))).toEqual({
@@ -272,6 +300,10 @@ describe("runInstall", () => {
     });
     expect(JSON.parse(read(join(projectDir, ".forge", ".mcp.json")))).toEqual({
       mcpServers: { existing: { command: "old" }, shared: { command: "generated" } },
+    });
+    expect(readMergeableConfig(join(projectDir, ".forge", ".forge.toml"))).toEqual({
+      max_conversations: 200,
+      updates: { channel: "stable", enabled: false },
     });
     expect(JSON.parse(read(join(projectDir, ".opencode", "opencode.json")))).toEqual({
       model: "generated",
@@ -688,6 +720,83 @@ describe("runInstall", () => {
     );
     expect(logs).not.toContain("dim:stdout noise");
     expect(logs).not.toContain("warn:first detail");
+  });
+
+  it("delegates eligible linked local skills to the skills library", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(
+      join(sourceDir, "skills", "shared", "SKILL.md"),
+      [
+        "---",
+        "name: shared",
+        "description: Shared skill",
+        "platforms:",
+        "  codex:",
+        "    enabled: true",
+        "---",
+        "Shared.",
+      ].join("\n"),
+    );
+    write(
+      join(sourceDir, "skills", "explicit-only", "SKILL.md"),
+      [
+        "---",
+        "name: explicit-only",
+        "description: Explicit only skill",
+        "allowImplicitInvocation: false",
+        "---",
+        "Explicit.",
+      ].join("\n"),
+    );
+    write(join(outputDir, "claude", "skills", "shared", "SKILL.md"), "Generated shared.\n");
+    write(join(outputDir, "claude", "skills", "explicit-only", "SKILL.md"), "Generated explicit.\n");
+    write(join(outputDir, "codex", "skills", "shared", "SKILL.md"), "Generated shared.\n");
+    write(join(outputDir, "codex", "skills", "explicit-only", "SKILL.md"), "Generated explicit.\n");
+    write(join(outputDir, "codex", "skills", "explicit-only", "agents", "openai.yaml"), "policy:\n");
+
+    const commands: Array<{ command: string; args: readonly string[]; cwd?: string }> = [];
+    __test.setRuntimeDependencies({
+      async runAsyncCommand(command, args, options) {
+        commands.push({ command, args, cwd: options?.cwd?.toString() });
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["claude", "codex"],
+      rebuild: false,
+      linkMode: "symlink",
+      logger: silentLogger,
+    });
+
+    expect(commands).toHaveLength(2);
+    expect(commands.every((command) => command.command === "npx" && command.cwd === projectDir)).toBe(true);
+    const sharedInstall = commands.find((command) => command.args.includes("shared"));
+    const explicitInstall = commands.find((command) => command.args.includes("explicit-only"));
+    expect(sharedInstall?.args).toContain("skills@latest");
+    expect(sharedInstall?.args).toContain("add");
+    expect(sharedInstall?.args).toContain("-a");
+    expect(sharedInstall?.args).toContain("claude-code");
+    expect(sharedInstall?.args).toContain("codex");
+    expect(explicitInstall?.args).toContain("claude-code");
+    expect(explicitInstall?.args).not.toContain("codex");
+
+    const stagedSkill = read(join(outputDir, ".linked-local-skills", "shared", "SKILL.md"));
+    expect(stagedSkill).toContain("description: Shared skill");
+    expect(stagedSkill).not.toContain("platforms:");
+    expect(existsSync(join(projectDir, ".codex", "skills", "shared"))).toBe(false);
+    expect(existsSync(join(projectDir, ".codex", "skills", "explicit-only"))).toBe(true);
   });
 });
 

@@ -85,13 +85,18 @@ function renderDashboard(state: TuiState) {
 
   return renderCard(TITLE, SUBTITLE, [
     { text: "Current plan", fgColor: "color06", bold: true },
-    { text: `Source: ${formatSourceMode(state.sourceMode)} -> ${plan.sourceDir}` },
-    { text: `Destination: ${formatDestinationMode(state.destinationMode)} -> ${plan.destBase}` },
+    {
+      text: `Source: ${formatSourceMode(state.sourceMode)} -> ${plan.sourceDir}`,
+    },
+    {
+      text: `Destination: ${formatDestinationMode(state.destinationMode)} -> ${plan.destBase}`,
+    },
     { text: `Platforms: ${formatPlatforms(state.platforms)}` },
     { text: "" },
     { text: `Presets: ${formatPresets(state)}` },
     { text: `Backup: ${state.backup ? "on" : "off"}` },
     { text: `Rebuild before install: ${state.rebuild ? "on" : "off"}` },
+    { text: `Local skills: ${state.linkMode}` },
     { text: "" },
     { text: "Actions", fgColor: "color06", bold: true },
     { text: "" },
@@ -119,14 +124,21 @@ function renderSourceSelection(state: TuiState) {
     selectableLabelValueLine(state.cursor, 2, "Custom", state.customSource || "Set custom path"),
     selectableLine(state.cursor, 3, "Back to dashboard"),
     { text: "" },
-    { text: "Project and global choices also update the default install destination.", fgColor: "color08" },
+    {
+      text: "Project and global choices also update the default install destination.",
+      fgColor: "color08",
+    },
   ]);
 }
 
 function renderCustomSource(state: TuiState, handlers?: CustomSourceHandlers) {
   const recentLines: UiLine[] = [];
   if (state.recentCustomSources.length > 0) {
-    recentLines.push({ text: "Recent custom sources", fgColor: "color06", bold: true });
+    recentLines.push({
+      text: "Recent custom sources",
+      fgColor: "color06",
+      bold: true,
+    });
     for (let index = 0; index < state.recentCustomSources.length; index++) {
       const source = state.recentCustomSources[index];
       if (!source) continue;
@@ -189,7 +201,11 @@ function renderUiLine(line: UiLine): Node {
         },
         [
           Text(line.text || " ", { bold: line.bold, wrap: "word" }),
-          Text(line.value, { bold: line.bold, fgColor: "color06", wrap: "word" }),
+          Text(line.value, {
+            bold: line.bold,
+            fgColor: "color06",
+            wrap: "word",
+          }),
         ],
       );
 }
@@ -250,7 +266,10 @@ function renderCardShell(title: string, subtitle: string, children: readonly Nod
 function renderPresets(state: TuiState) {
   const lines: UiLine[] = [];
   if (state.availablePresets.length === 0) {
-    lines.push({ text: "No user-global or bundled presets found.", fgColor: "color03" });
+    lines.push({
+      text: "No user-global or bundled presets found.",
+      fgColor: "color03",
+    });
   } else {
     for (let index = 0; index < state.availablePresets.length; index++) {
       const preset = state.availablePresets[index];
@@ -275,10 +294,18 @@ function renderPresets(state: TuiState) {
 
 function renderPlatforms(state: TuiState) {
   const lines: UiLine[] = [
-    { text: `Selected: ${formatPlatforms(state.platforms)}`, fgColor: "color06", bold: true },
+    {
+      text: `Selected: ${formatPlatforms(state.platforms)}`,
+      fgColor: "color06",
+      bold: true,
+    },
     { text: "" },
     selectableLine(state.cursor, 0, `[${state.platforms.length === PLATFORMS.length ? "x" : " "}] All platforms`),
-    { text: "Select every supported platform in one action.", indent: 4, fgColor: "color08" },
+    {
+      text: "Select every supported platform in one action.",
+      indent: 4,
+      fgColor: "color08",
+    },
   ];
 
   for (let index = 0; index < PLATFORMS.length; index++) {
@@ -287,7 +314,11 @@ function renderPlatforms(state: TuiState) {
     const rowIndex = index + 1;
     const checked = state.platforms.includes(platform) ? "x" : " ";
     lines.push(selectableLine(state.cursor, rowIndex, `[${checked}] ${PLATFORM_LABELS[platform]}`));
-    lines.push({ text: PLATFORM_DESCRIPTIONS[platform], indent: 4, fgColor: "color08" });
+    lines.push({
+      text: PLATFORM_DESCRIPTIONS[platform],
+      indent: 4,
+      fgColor: "color08",
+    });
   }
 
   lines.push({ text: "" });
@@ -297,7 +328,14 @@ function renderPlatforms(state: TuiState) {
 
 function renderMissingSource(state: TuiState) {
   const plan = planSource(state);
-  const lines: UiLine[] = [{ text: `Missing source: ${plan.sourceDir}`, fgColor: "color03", bold: true }, { text: "" }];
+  const lines: UiLine[] = [
+    {
+      text: `Missing source: ${plan.sourceDir}`,
+      fgColor: "color03",
+      bold: true,
+    },
+    { text: "" },
+  ];
 
   if (state.sourceMode !== "custom") {
     lines.push(selectableLine(state.cursor, 0, `Initialize ${formatSourceMode(state.sourceMode)}`));
@@ -324,9 +362,14 @@ function renderInstallReview(state: TuiState) {
     { text: "" },
     selectableLine(state.cursor, 0, `[${state.backup ? "x" : " "}] Backup existing configs before install`),
     selectableLine(state.cursor, 1, `[${state.rebuild ? "x" : " "}] Rebuild before install`),
+    selectableLine(
+      state.cursor,
+      2,
+      `[${state.linkMode === "symlink" ? "x" : " "}] Link eligible local skills (symlinks)`,
+    ),
     { text: "" },
-    selectableLine(state.cursor, 2, "Start install"),
-    selectableLine(state.cursor, 3, "Back to dashboard"),
+    selectableLine(state.cursor, 3, "Start install"),
+    selectableLine(state.cursor, 4, "Back to dashboard"),
   ]);
 }
 

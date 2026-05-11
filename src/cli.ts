@@ -9,6 +9,7 @@ import { initCmd } from "./commands/init.js";
 import { installCmd } from "./commands/install.js";
 import { presetListCmd } from "./commands/preset.js";
 import { tuiCmd } from "./commands/tui.js";
+import type { InstallLinkMode } from "./schema.js";
 
 function resolvePackageVersion(): string {
   try {
@@ -34,6 +35,12 @@ function parseRunner(value: unknown): "npx" | "bunx" | undefined {
   throw new Error(`Invalid --runner: "${String(value)}". Expected "npx" or "bunx".`);
 }
 
+function parseLinkMode(value: unknown): InstallLinkMode | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (value === "copy" || value === "symlink") return value;
+  throw new Error(`Invalid --link-mode: "${String(value)}". Expected "copy" or "symlink".`);
+}
+
 async function main(): Promise<void> {
   const cli = cac("ulis");
 
@@ -51,6 +58,7 @@ async function main(): Promise<void> {
     .option("--no-rebuild", "Skip the build step and install existing generated output")
     .option("--backup", "Back up existing platform dirs before overwriting")
     .option("--preset <names>", "Apply user-global or bundled preset(s) (comma-separated)")
+    .option("--link-mode <mode>", "Local skill install mode (copy | symlink)")
     .option("--runner <name>", "Package runner used for extension installs (npx | bunx)")
     .option("--no-extensions", "Skip running entries from extensions.yaml")
     .action((options) =>
@@ -62,6 +70,7 @@ async function main(): Promise<void> {
         rebuild: options.rebuild !== false,
         backup: Boolean(options.backup),
         preset: options.preset,
+        linkMode: parseLinkMode(options.linkMode),
         runner: parseRunner(options.runner),
         extensions: options.extensions !== false,
       }),

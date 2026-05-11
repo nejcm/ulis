@@ -84,6 +84,7 @@ async function runActionInChildProcess(
     if (planSource(state).globalInstall) args.push("--global");
     if (!state.rebuild) args.push("--no-rebuild");
     if (state.backup) args.push("--backup");
+    args.push("--link-mode", state.linkMode);
   }
 
   await new Promise<void>((resolve, reject) => {

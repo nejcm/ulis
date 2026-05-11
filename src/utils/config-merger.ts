@@ -136,7 +136,15 @@ export const PRESERVED_NATIVE_CONFIGS = [
     label: "settings.json",
     generatedPath: (context) => join(context.outputDir, "claude", "settings.json"),
     targetPath: (context) => join(platformConfigDir("claude", context.destBase, context.userHome), "settings.json"),
-    preservedPaths: [["hooks"]],
+    preservedPaths: [
+      ["hooks"],
+      ["statusLine"],
+      ["enabledPlugins"],
+      ["extraKnownMarketplaces"],
+      ["autoUpdatesChannel"],
+      ["agentPushNotifEnabled"],
+      ["theme"],
+    ],
   },
   {
     platform: "claude",
@@ -166,6 +174,13 @@ export const PRESERVED_NATIVE_CONFIGS = [
       join(context.outputDir, "forgecode", resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project), ".mcp.json"),
     targetPath: (context) => join(platformConfigDir("forgecode", context.destBase, context.userHome), ".mcp.json"),
     preservedPaths: [["mcpServers"]],
+  },
+  {
+    platform: "forgecode",
+    label: ".forge.toml",
+    generatedPath: (context) => join(context.outputDir, "forgecode", ".forge.toml"),
+    targetPath: (context) => join(platformConfigDir("forgecode", context.destBase, context.userHome), ".forge.toml"),
+    preservedPaths: [[]],
   },
 ] as const satisfies readonly PreservedNativeConfigSpec[];
 
@@ -214,6 +229,10 @@ function capturePreservedConfig(entry: PreservedNativeConfigEntry): unknown | un
 export function pickConfigPaths(source: unknown, paths: readonly ConfigPath[]): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const path of paths) {
+    if (path.length === 0) {
+      if (isPlainObject(source)) Object.assign(result, source);
+      continue;
+    }
     const value = getConfigPath(source, path);
     if (value !== undefined) setConfigPath(result, path, value);
   }

@@ -5,6 +5,7 @@ import { createInterface } from "node:readline/promises";
 
 import { runInstall } from "../install.js";
 import { PLATFORMS, platformConfigDir, type Platform } from "../platforms.js";
+import type { InstallLinkMode } from "../schema.js";
 import { logger as log } from "../utils/logger.js";
 import { parsePresetNames, resolvePresets } from "../utils/resolve-presets.js";
 import { resolveSource } from "../utils/resolve-source.js";
@@ -15,6 +16,7 @@ export interface InstallCmdOptions extends BuildCmdOptions {
   readonly backup?: boolean;
   readonly rebuild?: boolean;
   readonly runner?: "npx" | "bunx";
+  readonly linkMode?: InstallLinkMode;
   readonly extensions?: boolean;
 }
 
@@ -51,6 +53,7 @@ export async function installCmd(options: InstallCmdOptions = {}): Promise<void>
     logger: log,
     presets,
     runner: options.runner,
+    linkMode: options.linkMode,
     installExtensions: options.extensions ?? true,
   });
 }

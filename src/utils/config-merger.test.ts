@@ -96,7 +96,15 @@ describe("preserved native config registry", () => {
         label: "settings.json",
         generatedPath: join("root", ".ulis", "generated", "claude", "settings.json"),
         targetPath: join("root", "project", ".claude", "settings.json"),
-        preservedPaths: [["hooks"]],
+        preservedPaths: [
+          ["hooks"],
+          ["statusLine"],
+          ["enabledPlugins"],
+          ["extraKnownMarketplaces"],
+          ["autoUpdatesChannel"],
+          ["agentPushNotifEnabled"],
+          ["theme"],
+        ],
       },
       {
         label: ".claude.json",
@@ -122,6 +130,12 @@ describe("preserved native config registry", () => {
         targetPath: join("root", "project", ".forge", ".mcp.json"),
         preservedPaths: [["mcpServers"]],
       },
+      {
+        label: ".forge.toml",
+        generatedPath: join("root", ".ulis", "generated", "forgecode", ".forge.toml"),
+        targetPath: join("root", "project", ".forge", ".forge.toml"),
+        preservedPaths: [[]],
+      },
     ]);
   });
 });
@@ -141,6 +155,13 @@ describe("pickConfigPaths", () => {
         ],
       ),
     ).toEqual({ keep: { nested: true } });
+  });
+
+  it("copies the whole config for an empty path", () => {
+    expect(pickConfigPaths({ keep: true, nested: { value: 1 } }, [[]])).toEqual({
+      keep: true,
+      nested: { value: 1 },
+    });
   });
 });
 

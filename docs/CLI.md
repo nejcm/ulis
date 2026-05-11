@@ -59,7 +59,7 @@ Run `build` and then deploy the generated configs onto the target platform direc
 ```bash
 ulis install [-g | --global] [--source <path>] [--target <platforms>]
              [-y | --yes] [--no-rebuild] [--backup] [--preset <names>]
-             [--runner <npx|bunx>] [--no-extensions]
+             [--link-mode <copy|symlink>] [--runner <npx|bunx>] [--no-extensions]
 ```
 
 | Flag                   | Effect                                                                                                                                                     |
@@ -71,6 +71,7 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 | `--no-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`.                                                                                   |
 | `--backup`             | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.                                                                          |
 | `--preset <names>`     | Same resolution as `ulis build --preset` (user-global directory, then bundled).                                                                            |
+| `--link-mode <mode>`   | Local skill install mode. `copy` keeps generated skill copies in each platform config. `symlink` delegates eligible local skills to `skills@latest`.       |
 | `--runner <name>`      | Package runner used for `extensions.yaml` entries. `npx` or `bunx`. Overrides `runner` in `config.yaml`. Default: auto-detect (`bunx` if present).         |
 | `--no-extensions`      | Skip running entries from `extensions.yaml`. Useful in CI where network installs are not desired.                                                          |
 
@@ -80,13 +81,15 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 
 | Platform  | Managed dirs (replaced)                       | Preserved native config                                                       |
 | --------- | --------------------------------------------- | ----------------------------------------------------------------------------- |
-| Claude    | `agents/`, `commands/`, `rules/`, `hooks/`, … | `settings.json` `hooks`, `.claude.json` `mcpServers`                          |
+| Claude    | `agents/`, `commands/`, `rules/`, `hooks/`, … | `settings.json` `hooks`, UI/plugin settings; `.claude.json` `mcpServers`      |
 | OpenCode  | target dir contents                           | `opencode.json` `mcp`                                                         |
 | Codex     | target dir contents                           | `config.toml` `projects`, `hooks`, `mcp_servers`, `tui`, `notice`, `features` |
 | Cursor    | `agents/` (`.mdc` files)                      | `mcp.json` `mcpServers`                                                       |
-| ForgeCode | `.forge/agents`, `.forge/skills`, `AGENTS.md` | `.forge/.mcp.json` `mcpServers`                                               |
+| ForgeCode | `.forge/agents`, `.forge/skills`, `AGENTS.md` | `.forge/.mcp.json` `mcpServers`, `.forge.toml`                                |
 
-Install preserves only the allowlisted native config sections above. Generated output wins at the same config path, and raw fragments win through the generated output because raw is merged during build. Existing non-allowlisted native config values are removed. If `--backup` is set, backups are created before parsing preserved native config.
+Install preserves only the allowlisted native config values and files above. Generated output wins at the same config path, and raw fragments win through the generated output because raw is merged during build. Existing non-allowlisted native config values are removed. If `--backup` is set, backups are created before parsing preserved native config.
+
+`--link-mode symlink` affects eligible local skills only. ULIS stages native-safe generated skills, then runs `npx skills@latest add <staged-dir>` with the selected project/global scope and target agents. The skills library manages `.agents/skills/`, symlinks on macOS/Linux, junctions on Windows, and copy fallback if linking fails. After a successful linked install, ULIS removes duplicate generated native skill copies; failed linked installs keep the generated copies as fallback. Skills with platform-specific skill config or extra generated files are copied by ULIS.
 
 ---
 
@@ -98,7 +101,7 @@ Launch the interactive terminal dashboard. Use it to choose a source, select pre
 ulis tui
 ```
 
-The TUI supports project `.ulis/`, global `~/.ulis/`, and custom source paths. Install destinations are explicit: project-local configs or home-level configs. If a project or global source is missing, the TUI can initialize it before continuing. Installs require a review screen where `backup` and `rebuild` can be toggled before execution (both default to enabled).
+The TUI supports project `.ulis/`, global `~/.ulis/`, and custom source paths. Install destinations are explicit: project-local configs or home-level configs. If a project or global source is missing, the TUI can initialize it before continuing. Installs require a review screen where `backup`, `rebuild`, and linked local skill installs can be toggled before execution.
 
 Keyboard controls:
 

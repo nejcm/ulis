@@ -22,10 +22,10 @@ ULIS is a CLI (`ulis`) that lets you define AI agent configurations **once** and
 ├── skills.yaml          (external skill installs)
 ├── extensions.yaml      (third-party CLI extension installs via npx/bunx)
 ├── permissions.yaml
-└── config.yaml          ◄─── version + name + optional `runner: npx | bunx`
+└── config.yaml          ◄─── version + name + optional install + runner settings
 ```
 
-`ulis install` deploys the generated tree to the per-platform destination (`./.claude/`, `./.forge/`, etc.), preserving only allowlisted existing native config sections such as MCP servers, hooks, trusted projects, and Codex `tui`, `notice`, and `features`.
+`ulis install` deploys the generated tree to the per-platform destination (`./.claude/`, `./.forge/`, etc.), preserving only allowlisted existing native config values or files such as MCP servers, hooks, trusted projects, selected Claude Code preferences, Codex `tui`, `notice`, and `features`, and ForgeCode `.forge.toml`.
 
 **Why it exists:** Claude Code, OpenCode, Codex, Cursor, and ForgeCode all have incompatible config formats. Without ULIS you maintain separate, drift-prone config trees. ULIS keeps one source of truth and compiles it.
 
@@ -66,7 +66,14 @@ Errors abort the build (exit code 1, no files written). Warnings print and the b
 
 ## 2.1 Build configuration
 
-`config.yaml` holds the minimum CLI metadata (`version`, `name`).
+`config.yaml` holds CLI metadata (`version`, `name`) and install defaults.
+
+`install.linkMode` controls local skill installation:
+
+- `copy` (default): ULIS copies generated local skill directories into each selected platform config.
+- `symlink`: ULIS stages eligible local skills as native-safe skill directories, then delegates installation to `npx skills@latest add <staged-dir>` so the skills library owns `.agents/skills/`, OS-specific symlinks or junctions, and copy fallback behavior. Successful linked installs remove duplicate generated native skill copies; failed linked installs leave generated copies in place.
+
+Linked install applies only to local skills. Agents and platform config files remain generated per platform because their native formats differ.
 
 Platform adapter defaults are internal to ULIS. If you need platform-native output customization, place partial config files under `raw/` (for example `raw/opencode/opencode.json` or `raw/codex/config.toml`). These are merged into the generated output — objects merge recursively, and raw arrays or scalars replace generated values at the same path. See [Source Layout — Raw overrides](./guide/source-layout.md#raw-overrides) for the full rules.
 
@@ -224,7 +231,7 @@ opencode:
 | `extensions.yaml` | `"*"`          | each `extensions` entry runs once via the resolved runner (e.g. `bunx <name> <args>`)    |
 | `extensions.yaml` | `"<platform>"` | runs the entry only when that platform is part of the install target set                 |
 
-Skills are installed **system-globally** — `npx skills@latest add` writes directly into each agent's known config directory. No files are staged in this repo.
+External skills are installed by `npx skills@latest add`, which writes into the selected project or global agent config directories. Local linked skills use the same installer after ULIS stages native-safe generated skill directories.
 
 Each `skills` entry supports:
 
