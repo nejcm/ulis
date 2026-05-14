@@ -3,7 +3,6 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { PLATFORMS, uniquePlatforms, type Platform } from "../platforms.js";
-import type { InstallLinkMode } from "../schema.js";
 import { rememberCustomSource, type DestinationMode, type SourceMode, type TuiState } from "./state.js";
 
 export interface TuiPreferences {
@@ -15,7 +14,6 @@ export interface TuiPreferences {
   readonly selectedPresetNames?: readonly string[];
   readonly backup?: boolean;
   readonly rebuild?: boolean;
-  readonly linkMode?: InstallLinkMode;
 }
 
 const TUI_PREFERENCES_FILE = ".ulis-tui.json";
@@ -34,7 +32,6 @@ export function snapshotTuiPreferences(state: TuiState): TuiPreferences {
     selectedPresetNames: [...state.selectedPresetNames],
     backup: state.backup,
     rebuild: state.rebuild,
-    linkMode: state.linkMode,
   };
 }
 
@@ -69,7 +66,6 @@ export function applyTuiPreferences(state: TuiState, preferences: TuiPreferences
 
   if (typeof preferences.backup === "boolean") state.backup = preferences.backup;
   if (typeof preferences.rebuild === "boolean") state.rebuild = preferences.rebuild;
-  if (isInstallLinkMode(preferences.linkMode)) state.linkMode = preferences.linkMode;
 }
 
 export function loadTuiPreferences(state: TuiState, filePath: string = getTuiPreferencesPath()): string | undefined {
@@ -111,10 +107,6 @@ function isDestinationMode(value: unknown): value is DestinationMode {
 
 function isPlatform(value: unknown): value is Platform {
   return typeof value === "string" && PLATFORMS.includes(value as Platform);
-}
-
-function isInstallLinkMode(value: unknown): value is InstallLinkMode {
-  return value === "copy" || value === "symlink";
 }
 
 function formatError(error: unknown): string {

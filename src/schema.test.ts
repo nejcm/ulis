@@ -6,7 +6,6 @@ import {
   McpConfigSchema,
   SkillFrontmatterSchema,
   SkillsConfigSchema,
-  UlisConfigSchema,
 } from "./schema.js";
 
 describe("AgentFrontmatterSchema", () => {
@@ -451,20 +450,3 @@ describe("SkillsConfigSchema", () => {
   });
 });
 
-describe("UlisConfigSchema", () => {
-  it("accepts omitted install config", () => {
-    const result = UlisConfigSchema.parse({ version: 1, name: "test" });
-
-    expect(result.install).toBeUndefined();
-  });
-
-  it("parses symlink install link mode", () => {
-    const result = UlisConfigSchema.parse({
-      version: 1,
-      name: "test",
-      install: { linkMode: "symlink" },
-    });
-
-    expect(result.install?.linkMode).toBe("symlink");
-  });
-});

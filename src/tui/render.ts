@@ -86,7 +86,7 @@ function renderDashboard(state: TuiState) {
   return renderCard(TITLE, SUBTITLE, [
     { text: "Current plan", fgColor: "color06", bold: true },
     {
-      text: `Source: ${formatSourceMode(state.sourceMode)} -> ${plan.sourceDir}`,
+      text: `Source: ${formatSourceMode(state.sourceMode, state.customSource)} -> ${plan.sourceDir}`,
     },
     {
       text: `Destination: ${formatDestinationMode(state.destinationMode)} -> ${plan.destBase}`,
@@ -96,7 +96,6 @@ function renderDashboard(state: TuiState) {
     { text: `Presets: ${formatPresets(state)}` },
     { text: `Backup: ${state.backup ? "on" : "off"}` },
     { text: `Rebuild before install: ${state.rebuild ? "on" : "off"}` },
-    { text: `Local skills: ${state.linkMode}` },
     { text: "" },
     { text: "Actions", fgColor: "color06", bold: true },
     { text: "" },
@@ -110,7 +109,7 @@ function renderDashboard(state: TuiState) {
 }
 
 function dashboardLabel(state: TuiState, label: (typeof DASHBOARD_ITEMS)[number]): string {
-  if (label === "Source") return formatSourceMode(state.sourceMode);
+  if (label === "Source") return formatSourceMode(state.sourceMode, state.customSource);
   if (label === "Destination") return formatDestinationMode(state.destinationMode);
   if (label === "Presets") return `${state.selectedPresetNames.length} selected`;
   if (label === "Platforms") return `${state.platforms.length} selected`;
@@ -362,14 +361,9 @@ function renderInstallReview(state: TuiState) {
     { text: "" },
     selectableLine(state.cursor, 0, `[${state.backup ? "x" : " "}] Backup existing configs before install`),
     selectableLine(state.cursor, 1, `[${state.rebuild ? "x" : " "}] Rebuild before install`),
-    selectableLine(
-      state.cursor,
-      2,
-      `[${state.linkMode === "symlink" ? "x" : " "}] Link eligible local skills (symlinks)`,
-    ),
     { text: "" },
-    selectableLine(state.cursor, 3, "Start install"),
-    selectableLine(state.cursor, 4, "Back to dashboard"),
+    selectableLine(state.cursor, 2, "Start install"),
+    selectableLine(state.cursor, 3, "Back to dashboard"),
   ]);
 }
 

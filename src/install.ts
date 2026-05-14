@@ -6,7 +6,6 @@ import { join, resolve } from "node:path";
 import { runBuild, type Logger } from "./build.js";
 import { ULIS_GENERATED_DIRNAME } from "./config.js";
 import { loadExtensions, mergeExtensionsConfigs } from "./parsers/extensions.js";
-import { enabledSkillsFor, parseSkills, type ParsedSkill } from "./parsers/skill.js";
 import { loadSkills, mergeSkillsConfigs } from "./parsers/skills.js";
 import {
   isSamePath,
@@ -18,7 +17,7 @@ import {
   uniquePlatforms,
   type Platform,
 } from "./platforms.js";
-import { UlisConfigSchema, type ExtensionsConfig, type InstallLinkMode, type SkillsConfig } from "./schema.js";
+import { UlisConfigSchema, type ExtensionsConfig, type SkillsConfig } from "./schema.js";
 import { loadValidatedConfigFile } from "./utils/config-loader.js";
 import {
   capturePreservedNativeConfigs,
@@ -26,7 +25,6 @@ import {
   writePreservedNativeConfigs,
   type CapturedPreservedNativeConfig,
 } from "./utils/config-merger.js";
-import { copySkillDirs } from "./utils/fs.js";
 import { logger as defaultLogger } from "./utils/logger.js";
 import type { ResolvedPreset } from "./utils/resolve-presets.js";
 
@@ -56,8 +54,6 @@ export interface InstallOptions {
   readonly presets?: readonly ResolvedPreset[];
   /** Override the package runner used for `extensions.yaml` entries. */
   readonly runner?: Runner;
-  /** Override local skill install mode from config.yaml. */
-  readonly linkMode?: InstallLinkMode;
   /** When false, skip running extensions installers (`extensions.yaml`). */
   readonly installExtensions?: boolean;
 }
@@ -204,8 +200,6 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
     defaultValue: { version: 1, name: "ulis" },
   });
   const runner = resolveRunner({ cliFlag: options.runner, configValue: ulisConfig.runner });
-  const linkMode = options.linkMode ?? ulisConfig.install?.linkMode ?? "copy";
-  logInfo(logger, `Local skill link mode: ${linkMode}`);
 
   const timestamp = makeTimestamp();
   for (const platform of platforms) {
@@ -238,18 +232,6 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
         await installForgecode(context);
         break;
     }
-  }
-
-  if (linkMode === "symlink") {
-    const linkedGroups = await installLinkedLocalSkills({
-      sourceDir,
-      outputDir,
-      destBase,
-      globalInstall,
-      platforms,
-      logger,
-    });
-    removeNativeLinkedSkillCopies(linkedGroups, { destBase, userHome });
   }
 
   for (const platform of platforms) {
@@ -471,138 +453,6 @@ const SKILL_PLATFORM_AGENT_NAMES: Partial<Record<Platform, string>> = {
 };
 
 const SKILL_INSTALL_CONCURRENCY = 4;
-const LINKED_LOCAL_SKILLS_DIR = ".linked-local-skills";
-
-interface LinkedLocalSkillsOptions {
-  readonly sourceDir: string;
-  readonly outputDir: string;
-  readonly destBase: string;
-  readonly globalInstall: boolean;
-  readonly platforms: readonly Platform[];
-  readonly logger?: Logger;
-}
-
-interface LinkedSkillGroup {
-  readonly skillNames: readonly string[];
-  readonly platforms: readonly Platform[];
-  readonly agentNames: readonly string[];
-}
-
-async function installLinkedLocalSkills(options: LinkedLocalSkillsOptions): Promise<readonly LinkedSkillGroup[]> {
-  const skills = parseSkills(join(options.sourceDir, "skills"));
-  if (skills.length === 0) return [];
-
-  const groups = groupLinkedLocalSkills(skills, options.platforms);
-  if (groups.length === 0) return [];
-
-  const stagedDir = join(options.outputDir, LINKED_LOCAL_SKILLS_DIR);
-  removePath(stagedDir);
-  copySkillDirs(
-    skills.filter((skill) => groups.some((group) => group.skillNames.includes(skill.name))),
-    stagedDir,
-  );
-
-  logHeader(options.logger, "Installing Linked Local Skills");
-  const installedGroups: LinkedSkillGroup[] = [];
-  for (const group of groups) {
-    const npxArgs = [
-      "skills@latest",
-      "add",
-      stagedDir,
-      "-a",
-      ...group.agentNames,
-      "--skill",
-      ...group.skillNames,
-      ...(options.globalInstall ? ["-g"] : ["--project"]),
-      "--yes",
-    ];
-    logInfo(options.logger, `Installing linked local skills: ${group.skillNames.join(", ")}`);
-    const result = await runSkillCommand("npx", npxArgs, {
-      stdio: ["ignore", "pipe", "pipe"],
-      cwd: options.destBase,
-      shell: process.platform === "win32",
-    });
-    if (result.status !== 0) {
-      logWarn(
-        options.logger,
-        `Failed to install linked local skills: ${group.skillNames.join(", ")} (${formatCommandFailure(result)})`,
-      );
-      continue;
-    }
-    logSuccess(options.logger, `linked local skills: ${group.skillNames.join(", ")}`);
-    installedGroups.push(group);
-  }
-  return installedGroups;
-}
-
-function groupLinkedLocalSkills(
-  skills: readonly ParsedSkill[],
-  platforms: readonly Platform[],
-): readonly LinkedSkillGroup[] {
-  const groups = new Map<
-    string,
-    { skillNames: string[]; platforms: readonly Platform[]; agentNames: readonly string[] }
-  >();
-
-  for (const skill of skills) {
-    const linkedPlatforms = platforms.filter((platform) => isLinkedLocalSkillEligible(skill, platform));
-    const agentNames = linkedPlatforms
-      .map((platform) => SKILL_PLATFORM_AGENT_NAMES[platform])
-      .filter((agentName): agentName is string => agentName != null);
-    if (agentNames.length === 0) continue;
-
-    const key = agentNames.join("\0");
-    const group = groups.get(key) ?? { skillNames: [], platforms: linkedPlatforms, agentNames };
-    group.skillNames.push(skill.name);
-    groups.set(key, group);
-  }
-
-  return [...groups.values()].map((group) => ({
-    skillNames: group.skillNames,
-    platforms: group.platforms,
-    agentNames: group.agentNames,
-  }));
-}
-
-function removeNativeLinkedSkillCopies(
-  groups: readonly LinkedSkillGroup[],
-  context: Pick<InstallContext, "destBase" | "userHome">,
-): void {
-  for (const group of groups) {
-    for (const platform of group.platforms) {
-      const skillsDir = nativeSkillCopiesDir(platform, context.destBase, context.userHome);
-      if (!skillsDir) continue;
-      for (const skillName of group.skillNames) {
-        removePath(join(skillsDir, skillName));
-      }
-    }
-  }
-}
-
-function nativeSkillCopiesDir(platform: Platform, destBase: string, userHome: string): string | undefined {
-  const targetDir = platformConfigDir(platform, destBase, userHome);
-  switch (platform) {
-    case "codex":
-    case "cursor":
-    case "opencode":
-      return join(targetDir, "skills");
-    case "forgecode":
-      return join(targetDir, "skills");
-    case "claude":
-      return undefined;
-  }
-}
-
-function isLinkedLocalSkillEligible(skill: ParsedSkill, platform: Platform): boolean {
-  if (!enabledSkillsFor([skill], platform).includes(skill)) return false;
-  if (!SKILL_PLATFORM_AGENT_NAMES[platform]) return false;
-
-  const platformConfig = skill.frontmatter?.platforms?.[platform] as Record<string, unknown> | undefined;
-  const realPlatformKeys = Object.keys(platformConfig ?? {}).filter((key) => key !== "enabled");
-  if (realPlatformKeys.length > 0) return false;
-
-  return platform !== "codex" || skill.frontmatter?.allowImplicitInvocation !== false;
-}
 
 async function installSkills(
   skills: readonly { key?: string; name: string; args?: readonly string[] }[],

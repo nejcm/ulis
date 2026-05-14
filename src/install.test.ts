@@ -722,7 +722,7 @@ describe("runInstall", () => {
     expect(logs).not.toContain("warn:first detail");
   });
 
-  it("delegates eligible linked local skills to the skills library", async () => {
+  it("copies generated local skills into each platform without delegating to the skills CLI", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -731,40 +731,20 @@ describe("runInstall", () => {
     mkdirSync(sourceDir, { recursive: true });
     mkdirSync(projectDir, { recursive: true });
     mkdirSync(userHome, { recursive: true });
-    write(
-      join(sourceDir, "skills", "shared", "SKILL.md"),
-      [
-        "---",
-        "name: shared",
-        "description: Shared skill",
-        "platforms:",
-        "  codex:",
-        "    enabled: true",
-        "---",
-        "Shared.",
-      ].join("\n"),
-    );
-    write(
-      join(sourceDir, "skills", "explicit-only", "SKILL.md"),
-      [
-        "---",
-        "name: explicit-only",
-        "description: Explicit only skill",
-        "allowImplicitInvocation: false",
-        "---",
-        "Explicit.",
-      ].join("\n"),
-    );
-    write(join(outputDir, "claude", "skills", "shared", "SKILL.md"), "Generated shared.\n");
-    write(join(outputDir, "claude", "skills", "explicit-only", "SKILL.md"), "Generated explicit.\n");
-    write(join(outputDir, "codex", "skills", "shared", "SKILL.md"), "Generated shared.\n");
-    write(join(outputDir, "codex", "skills", "explicit-only", "SKILL.md"), "Generated explicit.\n");
-    write(join(outputDir, "codex", "skills", "explicit-only", "agents", "openai.yaml"), "policy:\n");
 
-    const commands: Array<{ command: string; args: readonly string[]; cwd?: string }> = [];
+    write(join(sourceDir, "skills", "shared", "SKILL.md"), "---\nname: shared\ndescription: Shared\n---\nShared.\n");
+
+    write(join(outputDir, "claude", "skills", "shared", "SKILL.md"), "Generated shared (claude).\n");
+    write(join(outputDir, "codex", "skills", "shared", "SKILL.md"), "Generated shared (codex).\n");
+    write(join(outputDir, "cursor", "skills", "shared", "SKILL.md"), "Generated shared (cursor).\n");
+    write(join(outputDir, "opencode", "skills", "shared", "SKILL.md"), "Generated shared (opencode).\n");
+    createForgecodeOutput(outputDir);
+    write(join(outputDir, "forgecode", ".forge", "skills", "shared", "SKILL.md"), "Generated shared (forge).\n");
+
+    const commands: Array<{ command: string; args: readonly string[] }> = [];
     __test.setRuntimeDependencies({
-      async runAsyncCommand(command, args, options) {
-        commands.push({ command, args, cwd: options?.cwd?.toString() });
+      async runAsyncCommand(command, args) {
+        commands.push({ command, args });
         return { status: 0, stdout: "", stderr: "" };
       },
     });
@@ -774,29 +754,19 @@ describe("runInstall", () => {
       outputDir,
       destBase: projectDir,
       userHome,
-      platforms: ["claude", "codex"],
+      platforms: ["claude", "codex", "cursor", "opencode", "forgecode"],
       rebuild: false,
-      linkMode: "symlink",
       logger: silentLogger,
     });
 
-    expect(commands).toHaveLength(2);
-    expect(commands.every((command) => command.command === "npx" && command.cwd === projectDir)).toBe(true);
-    const sharedInstall = commands.find((command) => command.args.includes("shared"));
-    const explicitInstall = commands.find((command) => command.args.includes("explicit-only"));
-    expect(sharedInstall?.args).toContain("skills@latest");
-    expect(sharedInstall?.args).toContain("add");
-    expect(sharedInstall?.args).toContain("-a");
-    expect(sharedInstall?.args).toContain("claude-code");
-    expect(sharedInstall?.args).toContain("codex");
-    expect(explicitInstall?.args).toContain("claude-code");
-    expect(explicitInstall?.args).not.toContain("codex");
+    expect(read(join(projectDir, ".claude", "skills", "shared", "SKILL.md"))).toBe("Generated shared (claude).\n");
+    expect(read(join(projectDir, ".codex", "skills", "shared", "SKILL.md"))).toBe("Generated shared (codex).\n");
+    expect(read(join(projectDir, ".cursor", "skills", "shared", "SKILL.md"))).toBe("Generated shared (cursor).\n");
+    expect(read(join(projectDir, ".opencode", "skills", "shared", "SKILL.md"))).toBe("Generated shared (opencode).\n");
+    expect(read(join(projectDir, ".forge", "skills", "shared", "SKILL.md"))).toBe("Generated shared (forge).\n");
 
-    const stagedSkill = read(join(outputDir, ".linked-local-skills", "shared", "SKILL.md"));
-    expect(stagedSkill).toContain("description: Shared skill");
-    expect(stagedSkill).not.toContain("platforms:");
-    expect(existsSync(join(projectDir, ".codex", "skills", "shared"))).toBe(false);
-    expect(existsSync(join(projectDir, ".codex", "skills", "explicit-only"))).toBe(true);
+    expect(existsSync(join(outputDir, ".linked-local-skills"))).toBe(false);
+    expect(commands).toHaveLength(0);
   });
 });
 
