@@ -86,7 +86,7 @@ function renderDashboard(state: TuiState) {
   return renderCard(TITLE, SUBTITLE, [
     { text: "Current plan", fgColor: "color06", bold: true },
     {
-      text: `Source: ${formatSourceMode(state.sourceMode)} -> ${plan.sourceDir}`,
+      text: `Source: ${formatSourceMode(state.sourceMode, state.customSource)} -> ${plan.sourceDir}`,
     },
     {
       text: `Destination: ${formatDestinationMode(state.destinationMode)} -> ${plan.destBase}`,
@@ -109,7 +109,7 @@ function renderDashboard(state: TuiState) {
 }
 
 function dashboardLabel(state: TuiState, label: (typeof DASHBOARD_ITEMS)[number]): string {
-  if (label === "Source") return formatSourceMode(state.sourceMode);
+  if (label === "Source") return formatSourceMode(state.sourceMode, state.customSource);
   if (label === "Destination") return formatDestinationMode(state.destinationMode);
   if (label === "Presets") return `${state.selectedPresetNames.length} selected`;
   if (label === "Platforms") return `${state.platforms.length} selected`;

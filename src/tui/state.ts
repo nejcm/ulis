@@ -127,10 +127,10 @@ export function selectedPresets(state: TuiState): readonly ResolvedPreset[] {
     .map((preset) => ({ name: preset.name, dir: preset.dir }));
 }
 
-export function formatSourceMode(mode: SourceMode): string {
+export function formatSourceMode(mode: SourceMode, customSource?: string): string {
   if (mode === "project") return `Project ./${ULIS_SOURCE_DIRNAME}`;
   if (mode === "global") return `Global ~/${ULIS_SOURCE_DIRNAME}`;
-  return "Custom path";
+  return customSource ? `Custom ${customSource}` : "Custom path";
 }
 
 export function formatDestinationMode(mode: DestinationMode): string {
