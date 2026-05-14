@@ -449,4 +449,3 @@ describe("SkillsConfigSchema", () => {
     expect(result.forgecode?.skills[0].name).toBe("forgecode-skill");
   });
 });
-

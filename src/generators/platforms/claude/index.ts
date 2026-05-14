@@ -2,11 +2,13 @@ import { join } from "node:path";
 
 import { enabledAgentsFor } from "../../../parsers/agent.js";
 import { enabledRulesFor } from "../../../parsers/rule.js";
+import { enabledSkillsFor } from "../../../parsers/skill.js";
 import type { FileArtifact, GenerationResult, ProjectBundle } from "../../types.js";
 import { buildClaudeAgentArtifact } from "./agents.js";
 import { buildClaudeCommandArtifacts } from "./commands.js";
 import { buildClaudeRuleArtifact } from "./rules.js";
 import { buildClaudeSettingsArtifacts } from "./settings.js";
+import { buildClaudeSkillDirs } from "./skills.js";
 
 export function generateClaude(project: ProjectBundle): GenerationResult {
   const artifacts: FileArtifact[] = [];
@@ -27,7 +29,7 @@ export function generateClaude(project: ProjectBundle): GenerationResult {
     post: {
       rawDirs: [join(project.sourceDir, "raw", "common"), join(project.sourceDir, "raw", "claude")],
       aliasFiles: ["CLAUDE.md"],
-      skillDirs: [],
+      skillDirs: buildClaudeSkillDirs(enabledSkillsFor(project.skills, "claude")),
     },
   };
 }
