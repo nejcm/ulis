@@ -9,13 +9,6 @@ const CONFIG_TEMPLATE = `# yaml-language-server: $schema={{schemaBase}}/config.s
 
 version: 1
 name: {{name}}
-
-# Local skill install mode:
-# - copy: copy generated local skills into each platform config
-# - symlink: delegate eligible local skills to the skills library, which uses
-#   .agents/skills plus OS-specific symlinks or junctions
-install:
-  linkMode: copy
 `;
 
 const MCP_TEMPLATE = `# yaml-language-server: $schema={{schemaBase}}/mcp.schema.json

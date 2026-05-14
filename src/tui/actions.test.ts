@@ -138,7 +138,6 @@ describe("tui actions child process flow", () => {
     state.destinationMode = "global";
     state.backup = true;
     state.rebuild = false;
-    state.linkMode = "symlink";
     const logger = createLogger();
 
     const run = runTuiAction(state, "install", logger);
@@ -155,8 +154,6 @@ describe("tui actions child process flow", () => {
     expect(args).toContain("--global");
     expect(args).toContain("--no-rebuild");
     expect(args).toContain("--backup");
-    expect(args).toContain("--link-mode");
-    expect(args).toContain("symlink");
   });
 
   it("forwards an empty target when no platforms are selected", async () => {

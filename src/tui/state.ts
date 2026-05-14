@@ -5,7 +5,6 @@ import { dirname, join, resolve } from "node:path";
 import { ULIS_SOURCE_DIRNAME } from "../config.js";
 import { PLATFORMS, uniquePlatforms, type Platform } from "../platforms.js";
 import type { PresetListEntry } from "../presets.js";
-import type { InstallLinkMode } from "../schema.js";
 import type { ResolvedPreset } from "../utils/resolve-presets.js";
 
 export type TuiScreen =
@@ -46,7 +45,6 @@ export interface TuiState {
   selectedPresetNames: string[];
   backup: boolean;
   rebuild: boolean;
-  linkMode: InstallLinkMode;
   logs: string[];
   notice: string;
   resultTitle: string;
@@ -94,7 +92,6 @@ export function createInitialState(availablePresets: readonly PresetListEntry[] 
     selectedPresetNames: [],
     backup: true,
     rebuild: true,
-    linkMode: "copy",
     logs: [],
     notice: "",
     resultTitle: "",
@@ -471,7 +468,7 @@ function handleMissingSourceKey(state: TuiState, key: string): TuiEffect {
 }
 
 function handleInstallReviewKey(state: TuiState, key: string): TuiEffect {
-  moveCursor(state, key, 4);
+  moveCursor(state, key, 3);
   if (!isConfirmKey(key) && !isToggleKey(key)) return { type: "none" };
 
   if (state.cursor === 0) {
@@ -479,8 +476,6 @@ function handleInstallReviewKey(state: TuiState, key: string): TuiEffect {
   } else if (state.cursor === 1) {
     state.rebuild = !state.rebuild;
   } else if (state.cursor === 2) {
-    state.linkMode = state.linkMode === "copy" ? "symlink" : "copy";
-  } else if (state.cursor === 3) {
     return { type: "start", action: "install" };
   } else {
     state.screen = "dashboard";

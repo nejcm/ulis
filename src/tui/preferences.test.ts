@@ -35,7 +35,6 @@ describe("tui preferences", () => {
         selectedPresetNames: ["missing", "team"],
         backup: false,
         rebuild: false,
-        linkMode: "symlink",
       }),
     );
     const state = createInitialState([{ name: "team", displayName: "Team", description: "", source: "user", dir: "" }]);
@@ -51,7 +50,6 @@ describe("tui preferences", () => {
     expect(state.selectedPresetNames).toEqual(["team"]);
     expect(state.backup).toBe(false);
     expect(state.rebuild).toBe(false);
-    expect(state.linkMode).toBe("symlink");
   });
 
   it("ignores invalid values and keeps defaults", () => {
@@ -66,7 +64,6 @@ describe("tui preferences", () => {
       selectedPresetNames: ["team", 42 as never],
       backup: "nope" as never,
       rebuild: null as never,
-      linkMode: "hardlink" as never,
     });
 
     expect(state.sourceMode).toBe("project");
@@ -77,7 +74,6 @@ describe("tui preferences", () => {
     expect(state.selectedPresetNames).toEqual(["team"]);
     expect(state.backup).toBe(true);
     expect(state.rebuild).toBe(true);
-    expect(state.linkMode).toBe("copy");
   });
 
   it("saves the current state to disk", () => {
@@ -92,7 +88,6 @@ describe("tui preferences", () => {
     state.selectedPresetNames = ["team"];
     state.backup = false;
     state.rebuild = false;
-    state.linkMode = "symlink";
 
     const error = saveTuiPreferences(state, filePath);
 
@@ -106,7 +101,6 @@ describe("tui preferences", () => {
       selectedPresetNames: ["team"],
       backup: false,
       rebuild: false,
-      linkMode: "symlink",
     });
   });
 

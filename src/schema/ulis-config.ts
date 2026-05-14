@@ -2,9 +2,6 @@ import { z } from "zod";
 
 import { emptyYamlAsEmptyObject } from "../utils/yaml.js";
 
-export const InstallLinkModeSchema = z.enum(["copy", "symlink"]);
-export type InstallLinkMode = z.infer<typeof InstallLinkModeSchema>;
-
 /**
  * Top-level schema for `.ulis/config.yaml`.
  *
@@ -32,17 +29,6 @@ export const UlisConfigSchema = emptyYamlAsEmptyObject(
      * Overridden by the `--runner` CLI flag.
      */
     runner: z.enum(["npx", "bunx"]).optional(),
-    /**
-     * Install-time behavior for local skills.
-     *
-     * - `copy` (default): generated local skills are copied into each platform.
-     * - `symlink`: eligible local skills are delegated to the skills library.
-     */
-    install: z
-      .object({
-        linkMode: InstallLinkModeSchema.default("copy").optional(),
-      })
-      .optional(),
   }),
 );
 

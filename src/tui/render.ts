@@ -96,7 +96,6 @@ function renderDashboard(state: TuiState) {
     { text: `Presets: ${formatPresets(state)}` },
     { text: `Backup: ${state.backup ? "on" : "off"}` },
     { text: `Rebuild before install: ${state.rebuild ? "on" : "off"}` },
-    { text: `Local skills: ${state.linkMode}` },
     { text: "" },
     { text: "Actions", fgColor: "color06", bold: true },
     { text: "" },
@@ -362,14 +361,9 @@ function renderInstallReview(state: TuiState) {
     { text: "" },
     selectableLine(state.cursor, 0, `[${state.backup ? "x" : " "}] Backup existing configs before install`),
     selectableLine(state.cursor, 1, `[${state.rebuild ? "x" : " "}] Rebuild before install`),
-    selectableLine(
-      state.cursor,
-      2,
-      `[${state.linkMode === "symlink" ? "x" : " "}] Link eligible local skills (symlinks)`,
-    ),
     { text: "" },
-    selectableLine(state.cursor, 3, "Start install"),
-    selectableLine(state.cursor, 4, "Back to dashboard"),
+    selectableLine(state.cursor, 2, "Start install"),
+    selectableLine(state.cursor, 3, "Back to dashboard"),
   ]);
 }
 
