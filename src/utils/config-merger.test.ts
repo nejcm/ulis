@@ -8,6 +8,7 @@ import {
   capturePreservedNativeConfigs,
   getPreservedNativeConfigEntries,
   mergeConfigValues,
+  omitConfigPaths,
   pickConfigPaths,
   PreservedNativeConfigParseError,
   readMergeableConfig,
@@ -91,6 +92,7 @@ describe("preserved native config registry", () => {
         generatedPath: join("root", ".ulis", "generated", "opencode", "opencode.json"),
         targetPath: join("root", "project", ".opencode", "opencode.json"),
         preservedPaths: [["mcp"]],
+        ownership: "file",
       },
       {
         label: "settings.json",
@@ -105,38 +107,67 @@ describe("preserved native config registry", () => {
           ["agentPushNotifEnabled"],
           ["theme"],
         ],
+        ownership: "file",
       },
       {
         label: ".claude.json / .mcp.json",
         generatedPath: join("root", ".ulis", "generated", "claude", ".claude.json"),
         targetPath: join("root", "project", ".mcp.json"),
         preservedPaths: [["mcpServers"]],
+        // Project install: target is `<cwd>/.mcp.json`; ULIS merges with existing
+        // mcpServers (file-owned mode).
+        ownership: "file",
       },
       {
         label: "config.toml",
         generatedPath: join("root", ".ulis", "generated", "codex", "config.toml"),
         targetPath: join("root", "project", ".codex", "config.toml"),
         preservedPaths: [["projects"], ["hooks"], ["mcp_servers"], ["tui"], ["notice"], ["features"]],
+        ownership: "file",
       },
       {
         label: "mcp.json",
         generatedPath: join("root", ".ulis", "generated", "cursor", "mcp.json"),
         targetPath: join("root", "project", ".cursor", "mcp.json"),
         preservedPaths: [["mcpServers"]],
+        ownership: "file",
       },
       {
         label: ".mcp.json",
         generatedPath: join("root", ".ulis", "generated", "forgecode", ".forge", ".mcp.json"),
         targetPath: join("root", "project", ".forge", ".mcp.json"),
         preservedPaths: [["mcpServers"]],
+        ownership: "file",
       },
       {
         label: ".forge.toml",
         generatedPath: join("root", ".ulis", "generated", "forgecode", ".forge.toml"),
         targetPath: join("root", "project", ".forge", ".forge.toml"),
         preservedPaths: [[]],
+        ownership: "file",
       },
     ]);
+  });
+
+  it("switches Claude's .claude.json/.mcp.json entry to ownership: 'paths' for global installs", () => {
+    // When destBase === userHome (global install), the target is `~/.claude.json`
+    // — a file Claude Code owns. ULIS owns ONLY the `mcpServers` path; every
+    // other key (theme, projects, plugins, history) must survive across installs.
+    const globalContext = {
+      outputDir: join("root", ".ulis", "generated"),
+      destBase: join("root", "home"),
+      userHome: join("root", "home"),
+    };
+    const claudeEntries = getPreservedNativeConfigEntries("claude", globalContext);
+    const claudeJsonEntry = claudeEntries.find((entry) => entry.label === ".claude.json / .mcp.json");
+
+    expect(claudeJsonEntry).toEqual({
+      label: ".claude.json / .mcp.json",
+      generatedPath: join("root", ".ulis", "generated", "claude", ".claude.json"),
+      targetPath: join("root", "home", ".claude.json"),
+      preservedPaths: [["mcpServers"]],
+      ownership: "paths",
+    });
   });
 });
 
@@ -165,6 +196,40 @@ describe("pickConfigPaths", () => {
   });
 });
 
+describe("omitConfigPaths", () => {
+  it("returns the source with the listed top-level paths removed", () => {
+    expect(omitConfigPaths({ theme: "dark", mcpServers: { a: 1 }, projects: { p: 1 } }, [["mcpServers"]])).toEqual({
+      theme: "dark",
+      projects: { p: 1 },
+    });
+  });
+
+  it("removes nested paths without disturbing siblings", () => {
+    expect(omitConfigPaths({ kept: { keep: true, drop: true, sibling: { v: 1 } } }, [["kept", "drop"]])).toEqual({
+      kept: { keep: true, sibling: { v: 1 } },
+    });
+  });
+
+  it("does not mutate the source object", () => {
+    const source = { mcpServers: { existing: 1 }, theme: "dark" };
+    omitConfigPaths(source, [["mcpServers"]]);
+    expect(source).toEqual({ mcpServers: { existing: 1 }, theme: "dark" });
+  });
+
+  it("is a no-op for paths that don't exist", () => {
+    expect(omitConfigPaths({ a: 1 }, [["missing"], ["a", "missing"]])).toEqual({ a: 1 });
+  });
+
+  it("returns an empty object when the empty path is requested", () => {
+    expect(omitConfigPaths({ a: 1, b: 2 }, [[]])).toEqual({});
+  });
+
+  it("returns an empty object for non-object sources", () => {
+    expect(omitConfigPaths(null, [["a"]])).toEqual({});
+    expect(omitConfigPaths(42, [["a"]])).toEqual({});
+  });
+});
+
 describe("capturePreservedNativeConfigs", () => {
   it("returns undefined preserved config when the target file is missing", () => {
     const root = createTempRoot();
@@ -182,6 +247,7 @@ describe("capturePreservedNativeConfigs", () => {
         targetPath: join(root, "project", ".opencode", "opencode.json"),
         preservedPaths: [["mcp"]],
         preservedConfig: undefined,
+        ownership: "file",
       },
     ]);
   });
