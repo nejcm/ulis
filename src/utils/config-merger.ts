@@ -4,7 +4,13 @@ import { extname, join } from "node:path";
 import * as smolToml from "smol-toml";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
-import { PLATFORM_DIRS, platformConfigDir, resolvePlatformDirSegment, type Platform } from "../platforms.js";
+import {
+  isSamePath,
+  PLATFORM_DIRS,
+  platformConfigDir,
+  resolvePlatformDirSegment,
+  type Platform,
+} from "../platforms.js";
 import { ensureDir, fileExists, readFile, writeFile } from "./fs.js";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -148,9 +154,16 @@ export const PRESERVED_NATIVE_CONFIGS = [
   },
   {
     platform: "claude",
-    label: ".claude.json",
+    label: ".claude.json / .mcp.json",
     generatedPath: (context) => join(context.outputDir, "claude", ".claude.json"),
-    targetPath: (context) => join(context.destBase, ".claude.json"),
+    // Claude Code reads MCP servers from two different files depending on scope:
+    // - Global install (~): user-scope `~/.claude.json` (huge file with mcpServers among other keys)
+    // - Project install (<cwd>): project-scope `<cwd>/.mcp.json` (committed, just { mcpServers })
+    // The generated `.claude.json` content (`{ mcpServers: {...} }`) fits both formats.
+    targetPath: (context) =>
+      isSamePath(context.destBase, context.userHome)
+        ? join(context.destBase, ".claude.json")
+        : join(context.destBase, ".mcp.json"),
     preservedPaths: [["mcpServers"]],
   },
   {

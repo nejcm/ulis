@@ -28,7 +28,7 @@ export async function installCmd(options: InstallCmdOptions = {}): Promise<void>
     ? await resolvePresets(parsePresetNames(options.preset), { nonInteractive: options.yes ?? false })
     : [];
 
-  const collisions = detectCollisions(destBase, targets);
+  const collisions = detectCollisions(destBase, targets, mode === "global");
   if (collisions.length > 0 && !options.yes) {
     log.warn("The following folders already exist and will be modified/overwritten:");
     for (const path of collisions) {
@@ -56,11 +56,11 @@ export async function installCmd(options: InstallCmdOptions = {}): Promise<void>
 }
 
 // TODO: improve this function
-function detectCollisions(destBase: string, targets: readonly Platform[]): string[] {
+function detectCollisions(destBase: string, targets: readonly Platform[], globalInstall: boolean): string[] {
   const paths: string[] = [];
   for (const platform of targets) {
     if (platform === "claude") {
-      const rootConfigPath = join(destBase, ".claude.json");
+      const rootConfigPath = globalInstall ? join(destBase, ".claude.json") : join(destBase, ".mcp.json");
       if (existsSync(rootConfigPath)) {
         paths.push(rootConfigPath);
       }
