@@ -107,9 +107,9 @@ describe("preserved native config registry", () => {
         ],
       },
       {
-        label: ".claude.json",
+        label: ".claude.json / .mcp.json",
         generatedPath: join("root", ".ulis", "generated", "claude", ".claude.json"),
-        targetPath: join("root", "project", ".claude.json"),
+        targetPath: join("root", "project", ".mcp.json"),
         preservedPaths: [["mcpServers"]],
       },
       {

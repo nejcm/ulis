@@ -240,7 +240,7 @@ describe("runInstall", () => {
       ),
     );
     write(
-      join(projectDir, ".claude.json"),
+      join(projectDir, ".mcp.json"),
       JSON.stringify(
         { other: true, mcpServers: { existing: { command: "old" }, shared: { command: "old" } } },
         null,
@@ -292,7 +292,7 @@ describe("runInstall", () => {
       theme: "dark",
       permissions: { allow: ["Bash(git status)"] },
     });
-    expect(JSON.parse(read(join(projectDir, ".claude.json")))).toEqual({
+    expect(JSON.parse(read(join(projectDir, ".mcp.json")))).toEqual({
       mcpServers: { existing: { command: "old" }, shared: { command: "generated" } },
     });
     expect(JSON.parse(read(join(projectDir, ".cursor", "mcp.json")))).toEqual({
@@ -767,6 +767,147 @@ describe("runInstall", () => {
 
     expect(existsSync(join(outputDir, ".linked-local-skills"))).toBe(false);
     expect(commands).toHaveLength(0);
+  });
+
+  it("writes Claude MCP servers to <project>/.mcp.json on a project install", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+
+    write(join(outputDir, "claude", "settings.json"), "{}");
+    write(
+      join(outputDir, "claude", ".claude.json"),
+      JSON.stringify({ mcpServers: { shared: { command: "generated" } } }, null, 2),
+    );
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["claude"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(existsSync(join(projectDir, ".mcp.json"))).toBe(true);
+    expect(existsSync(join(projectDir, ".claude.json"))).toBe(false);
+    expect(JSON.parse(read(join(projectDir, ".mcp.json")))).toEqual({
+      mcpServers: { shared: { command: "generated" } },
+    });
+  });
+
+  it("writes Claude MCP servers to <home>/.claude.json on a global install", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+
+    write(join(outputDir, "claude", "settings.json"), "{}");
+    write(
+      join(outputDir, "claude", ".claude.json"),
+      JSON.stringify({ mcpServers: { shared: { command: "generated" } } }, null, 2),
+    );
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: userHome,
+      userHome,
+      platforms: ["claude"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(existsSync(join(userHome, ".claude.json"))).toBe(true);
+    expect(existsSync(join(userHome, ".mcp.json"))).toBe(false);
+    expect(JSON.parse(read(join(userHome, ".claude.json")))).toEqual({
+      mcpServers: { shared: { command: "generated" } },
+    });
+  });
+
+  it("merges preserved Claude user-scope keys into ~/.claude.json on global install", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+
+    write(join(outputDir, "claude", "settings.json"), "{}");
+    write(
+      join(outputDir, "claude", ".claude.json"),
+      JSON.stringify({ mcpServers: { shared: { command: "generated" } } }, null, 2),
+    );
+    // Existing user-scope file with unrelated keys and an existing mcpServer that must be merged.
+    write(
+      join(userHome, ".claude.json"),
+      JSON.stringify(
+        {
+          unrelated: "keep-me",
+          mcpServers: { existing: { command: "old" }, shared: { command: "old" } },
+        },
+        null,
+        2,
+      ),
+    );
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: userHome,
+      userHome,
+      platforms: ["claude"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    // mcpServers from generated wins for collisions; existing servers are preserved.
+    expect(JSON.parse(read(join(userHome, ".claude.json")))).toEqual({
+      mcpServers: { existing: { command: "old" }, shared: { command: "generated" } },
+    });
+  });
+
+  it("preserves an existing project .mcp.json and merges with generated mcpServers", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+
+    write(join(outputDir, "claude", "settings.json"), "{}");
+    write(
+      join(outputDir, "claude", ".claude.json"),
+      JSON.stringify({ mcpServers: { shared: { command: "generated" } } }, null, 2),
+    );
+    write(
+      join(projectDir, ".mcp.json"),
+      JSON.stringify({ mcpServers: { teamOnly: { command: "team" }, shared: { command: "old" } } }, null, 2),
+    );
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["claude"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(JSON.parse(read(join(projectDir, ".mcp.json")))).toEqual({
+      mcpServers: { teamOnly: { command: "team" }, shared: { command: "generated" } },
+    });
   });
 });
 

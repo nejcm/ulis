@@ -86,7 +86,7 @@ describe("commands", () => {
     await installCmd({ yes: true, target: "claude" });
 
     expect(existsSync(join(projectRoot, ".claude", "agents", "worker.md"))).toBe(true);
-    expect(existsSync(join(projectRoot, ".claude.json"))).toBe(true);
+    expect(existsSync(join(projectRoot, ".mcp.json"))).toBe(true);
     expect(readFileSync(join(projectRoot, ".claude", "agents", "worker.md"), "utf8")).toContain("A minimal test agent");
   });
 

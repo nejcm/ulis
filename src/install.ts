@@ -307,7 +307,11 @@ async function installOpencode(context: InstallContext): Promise<void> {
 async function installClaude(context: InstallContext): Promise<void> {
   const targetDir = platformConfigDir("claude", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "claude");
-  const targetRootConfig = join(context.destBase, ".claude.json");
+  // For global install: MCP servers live in user-scope `~/.claude.json`.
+  // For project install: Claude Code reads project-scoped servers from `<project>/.mcp.json`.
+  const targetRootConfig = context.globalInstall
+    ? join(context.destBase, ".claude.json")
+    : join(context.destBase, ".mcp.json");
 
   logHeader(context.logger, `Installing ${PLATFORM_LABELS.claude}`);
   backupDirectory(targetDir, context);
