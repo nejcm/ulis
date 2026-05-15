@@ -833,7 +833,12 @@ describe("runInstall", () => {
     });
   });
 
-  it("merges preserved Claude user-scope keys into ~/.claude.json on global install", async () => {
+  it("preserves user-owned keys in ~/.claude.json on global install and replaces mcpServers wholesale", async () => {
+    // Regression: ULIS used to capture only the `mcpServers` slice of an
+    // existing ~/.claude.json and write back just that slice, wiping every
+    // other key (projects, enabledPlugins, theme, history, ...). Global Claude
+    // installs must preserve those user-owned keys verbatim and overwrite only
+    // the mcpServers block, which ULIS owns.
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -846,12 +851,17 @@ describe("runInstall", () => {
       join(outputDir, "claude", ".claude.json"),
       JSON.stringify({ mcpServers: { shared: { command: "generated" } } }, null, 2),
     );
-    // Existing user-scope file with unrelated keys and an existing mcpServer that must be merged.
     write(
       join(userHome, ".claude.json"),
       JSON.stringify(
         {
-          unrelated: "keep-me",
+          // Claude Code-owned state that MUST survive an install:
+          theme: "dark",
+          projects: { "/home/me/repo": { lastModified: "2026-05-15", history: ["msg1", "msg2"] } },
+          enabledPlugins: { "marketplace@example": true },
+          autoUpdatesChannel: "latest",
+          telemetryStatus: "enabled",
+          // ULIS-owned mcpServers slice (will be replaced):
           mcpServers: { existing: { command: "old" }, shared: { command: "old" } },
         },
         null,
@@ -869,9 +879,54 @@ describe("runInstall", () => {
       logger: silentLogger,
     });
 
-    // mcpServers from generated wins for collisions; existing servers are preserved.
+    // Every user-owned key survives verbatim; mcpServers comes entirely from generated.
     expect(JSON.parse(read(join(userHome, ".claude.json")))).toEqual({
-      mcpServers: { existing: { command: "old" }, shared: { command: "generated" } },
+      theme: "dark",
+      projects: { "/home/me/repo": { lastModified: "2026-05-15", history: ["msg1", "msg2"] } },
+      enabledPlugins: { "marketplace@example": true },
+      autoUpdatesChannel: "latest",
+      telemetryStatus: "enabled",
+      mcpServers: { shared: { command: "generated" } },
+    });
+  });
+
+  it("keeps user-owned ~/.claude.json keys intact when no MCP servers are generated", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+
+    write(join(outputDir, "claude", "settings.json"), "{}");
+    // No generated .claude.json (empty mcp.yaml scenario).
+    write(
+      join(userHome, ".claude.json"),
+      JSON.stringify(
+        {
+          theme: "dark",
+          projects: { "/home/me/repo": { lastModified: "2026-05-15" } },
+          mcpServers: { stale: { command: "old" } },
+        },
+        null,
+        2,
+      ),
+    );
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: userHome,
+      userHome,
+      platforms: ["claude"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    // mcpServers (ULIS-owned) is removed; user-owned keys survive.
+    expect(JSON.parse(read(join(userHome, ".claude.json")))).toEqual({
+      theme: "dark",
+      projects: { "/home/me/repo": { lastModified: "2026-05-15" } },
     });
   });
 

@@ -100,12 +100,25 @@ export interface PreservedNativeConfigContext {
   readonly userHome: string;
 }
 
+type Ownership = "file" | "paths";
+
 interface PreservedNativeConfigSpec {
   readonly platform: Platform;
   readonly label: string;
   readonly generatedPath: (context: PreservedNativeConfigContext) => string;
   readonly targetPath: (context: PreservedNativeConfigContext) => string;
   readonly preservedPaths: readonly ConfigPath[];
+  /**
+   * Ownership model for the target file. May be a literal or context-derived:
+   * - "file" (default): ULIS owns the whole file. `preservedPaths` are
+   *    exceptions PICKED from the existing file and merged on top of the
+   *    generated content (so user-owned keys like `hooks` survive).
+   * - "paths": ULIS owns ONLY `preservedPaths`. Everything else in the existing
+   *    file is preserved. Used for host-owned files such as `~/.claude.json`
+   *    where ULIS contributes only `mcpServers` but Claude Code owns the rest
+   *    (projects, plugins, theme, history, ...).
+   */
+  readonly ownership?: Ownership | ((context: PreservedNativeConfigContext) => Ownership);
 }
 
 export interface PreservedNativeConfigEntry {
@@ -113,6 +126,7 @@ export interface PreservedNativeConfigEntry {
   readonly generatedPath: string;
   readonly targetPath: string;
   readonly preservedPaths: readonly ConfigPath[];
+  readonly ownership?: Ownership;
 }
 
 export interface CapturedPreservedNativeConfig extends PreservedNativeConfigEntry {
@@ -157,14 +171,25 @@ export const PRESERVED_NATIVE_CONFIGS = [
     label: ".claude.json / .mcp.json",
     generatedPath: (context) => join(context.outputDir, "claude", ".claude.json"),
     // Claude Code reads MCP servers from two different files depending on scope:
-    // - Global install (~): user-scope `~/.claude.json` (huge file with mcpServers among other keys)
-    // - Project install (<cwd>): project-scope `<cwd>/.mcp.json` (committed, just { mcpServers })
+    // - Global install (~): user-scope `~/.claude.json` (huge file Claude Code owns —
+    //   `projects`, `enabledPlugins`, history, theme, telemetry, ... — ULIS only
+    //   contributes `mcpServers`).
+    // - Project install (<cwd>): project-scope `<cwd>/.mcp.json` (committed, just `{ mcpServers }`).
     // The generated `.claude.json` content (`{ mcpServers: {...} }`) fits both formats.
+    // Ownership differs by mode:
+    // - Global (~/.claude.json): "paths" — ULIS owns ONLY `mcpServers`. Every
+    //   other key (projects, enabledPlugins, theme, history, telemetry, ...)
+    //   is preserved verbatim across installs. Critical: without this, Claude
+    //   Code's user-scope state is wiped on every install.
+    // - Project (<cwd>/.mcp.json): "file" — the file is just `{ mcpServers }`,
+    //   and we want to merge generated servers on top of any user/team-added
+    //   ones already in the file.
     targetPath: (context) =>
       isSamePath(context.destBase, context.userHome)
         ? join(context.destBase, ".claude.json")
         : join(context.destBase, ".mcp.json"),
     preservedPaths: [["mcpServers"]],
+    ownership: (context) => (isSamePath(context.destBase, context.userHome) ? "paths" : "file"),
   },
   {
     platform: "codex",
@@ -201,12 +226,17 @@ export function getPreservedNativeConfigEntries(
   platform: Platform,
   context: PreservedNativeConfigContext,
 ): readonly PreservedNativeConfigEntry[] {
-  return PRESERVED_NATIVE_CONFIGS.filter((spec) => spec.platform === platform).map((spec) => ({
-    label: spec.label,
-    generatedPath: spec.generatedPath(context),
-    targetPath: spec.targetPath(context),
-    preservedPaths: spec.preservedPaths,
-  }));
+  return PRESERVED_NATIVE_CONFIGS.filter((spec) => spec.platform === platform).map((spec) => {
+    const rawOwnership = "ownership" in spec ? spec.ownership : undefined;
+    const ownership: Ownership = typeof rawOwnership === "function" ? rawOwnership(context) : (rawOwnership ?? "file");
+    return {
+      label: spec.label,
+      generatedPath: spec.generatedPath(context),
+      targetPath: spec.targetPath(context),
+      preservedPaths: spec.preservedPaths,
+      ownership,
+    };
+  });
 }
 
 export function capturePreservedNativeConfigs(
@@ -232,7 +262,11 @@ function capturePreservedConfig(entry: PreservedNativeConfigEntry): unknown | un
   if (!existsSync(entry.targetPath)) return undefined;
   let preserved: Record<string, unknown>;
   try {
-    preserved = pickConfigPaths(readMergeableConfig(entry.targetPath), entry.preservedPaths);
+    const existing = readMergeableConfig(entry.targetPath);
+    preserved =
+      entry.ownership === "paths"
+        ? omitConfigPaths(existing, entry.preservedPaths)
+        : pickConfigPaths(existing, entry.preservedPaths);
   } catch (error) {
     throw new PreservedNativeConfigParseError(entry.targetPath, error);
   }
@@ -250,6 +284,33 @@ export function pickConfigPaths(source: unknown, paths: readonly ConfigPath[]): 
     if (value !== undefined) setConfigPath(result, path, value);
   }
   return result;
+}
+
+/**
+ * Return a deep clone of `source` with the given paths removed. Used by the
+ * `ownership: "paths"` preservation mode to capture "everything except the
+ * paths ULIS owns" — the inverse of {@link pickConfigPaths}.
+ */
+export function omitConfigPaths(source: unknown, paths: readonly ConfigPath[]): Record<string, unknown> {
+  if (!isPlainObject(source)) return {};
+  // Empty path => caller wants to drop the entire object; honor it.
+  if (paths.some((p) => p.length === 0)) return {};
+  const result = structuredClone(source) as Record<string, unknown>;
+  for (const path of paths) {
+    deleteConfigPath(result, path);
+  }
+  return result;
+}
+
+function deleteConfigPath(target: Record<string, unknown>, path: readonly string[]): void {
+  if (path.length === 0) return;
+  let current: Record<string, unknown> = target;
+  for (let i = 0; i < path.length - 1; i += 1) {
+    const next = current[path[i]!];
+    if (!isPlainObject(next)) return;
+    current = next;
+  }
+  delete current[path[path.length - 1]!];
 }
 
 function getConfigPath(source: unknown, path: readonly string[]): unknown {
