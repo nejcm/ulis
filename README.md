@@ -13,6 +13,23 @@ Instead of maintaining separate "dialects" per platform, you keep a single canon
 
 ---
 
+## Project status
+
+`ulis` is still in active development. It writes real tool configuration files, and bugs or platform changes can produce bad generated config.
+
+Before using global mode, keep your home-level AI tool configs under local Git so you can inspect and revert changes:
+
+- `~/.ulis/`
+- `~/.claude/`
+- `~/.codex/`
+- `~/.cursor/`
+- `~/.config/opencode/`
+- `~/.forge/`
+
+For extra caution, run `ulis build` first to inspect generated files, and use `ulis install --backup` when installing over existing config.
+
+---
+
 ## Install
 
 ```bash
