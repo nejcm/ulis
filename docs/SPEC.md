@@ -57,6 +57,8 @@ Each `generate*` function:
 2. Maps canonical types (model aliases, tool groups, permission levels) to platform specifics
 3. Emits native files (YAML frontmatter, JSON, TOML, MDC)
 
+Provider adapters own their own parsing-to-native behavior, generated file layout, and install semantics. Prefer keeping agent, skill, MCP, permission, and install handling inside the relevant platform implementation even when this duplicates some code across adapters. Platform config formats and install locations change independently, so localized duplication is acceptable when it keeps future platform updates isolated. Extract shared helpers only for stable, cross-platform mechanics that are clearly reusable, such as path utilities, environment placeholder rewriting, config merging, or policy comment formatting.
+
 Between parsing and generation the orchestrator runs **validators** (`src/validators/`):
 
 - `validateCrossRefs(agents, skills, mcp)` — agent → skill (warn), agent → mcp (**error**), agent → subagent allowlist (warn)
