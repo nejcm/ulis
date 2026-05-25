@@ -1,4 +1,5 @@
 import { RuleFrontmatterSchema, type RuleFrontmatter } from "../schema.js";
+import type { DiagnosticOrigin } from "../types.js";
 import { ParseError, readMarkdownDir } from "./_shared.js";
 
 export interface ParsedRule {
@@ -8,6 +9,7 @@ export interface ParsedRule {
   filename: string;
   frontmatter: RuleFrontmatter;
   body: string;
+  origin?: DiagnosticOrigin;
 }
 
 export type RulePlatform = "claude" | "opencode" | "codex" | "cursor" | "forgecode";
@@ -25,7 +27,7 @@ export function parseRules(rulesDir: string): readonly ParsedRule[] {
     rulesDir,
     RuleFrontmatterSchema,
     "rule",
-    (name, frontmatter, body, relFile) => ({ name, filename: relFile, frontmatter, body }),
+    (name, frontmatter, body, relFile, origin) => ({ name, filename: relFile, frontmatter, body, origin }),
     { recursive: true },
   );
   if (errors.length > 0) throw errors[0] as ParseError;

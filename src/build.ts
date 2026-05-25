@@ -1,8 +1,9 @@
 import { join, resolve } from "node:path";
 
 import { ULIS_GENERATED_DIRNAME } from "./config.js";
+import { formatDiagnostic } from "./diagnostics.js";
 import { generate, writeResult } from "./generators/index.js";
-import { ParseAggregateError, parseProject } from "./parsers/index.js";
+import { ParseAggregateError, ParseError, parseProject } from "./parsers/index.js";
 import type { Platform } from "./platforms.js";
 import { PLATFORMS, uniquePlatforms } from "./platforms.js";
 import type { Diagnostic } from "./types.js";
@@ -79,18 +80,37 @@ export function analyzeProject(options: AnalyzeProjectOptions): ProjectAnalysis 
   let parsed: ReturnType<typeof parseProject>;
   try {
     if (presets.length === 0) {
-      parsed = parseProject(sourceDir);
+      parsed = parseProject(sourceDir, { source: "base" });
     } else {
+      const parseErrors: ParseError[] = [];
+      const parseWithErrors = (dir: string, source: string): ReturnType<typeof parseProject> | undefined => {
+        try {
+          return parseProject(dir, { source });
+        } catch (err) {
+          if (err instanceof ParseAggregateError) {
+            parseErrors.push(...err.errors);
+            return undefined;
+          }
+          throw err;
+        }
+      };
       const presetProjects = presets.map((preset) => {
         logger.dim(`  Parsing preset: ${preset.name}`);
-        return parseProject(preset.dir);
+        return parseWithErrors(preset.dir, `preset:${preset.name}`);
       });
-      const baseProject = parseProject(sourceDir);
-      parsed = mergeProjects([...presetProjects, baseProject]);
+      const baseProject = parseWithErrors(sourceDir, "base");
+      const completePresetProjects = presetProjects.filter(
+        (project): project is ReturnType<typeof parseProject> => project != null,
+      );
+      if (parseErrors.length > 0) throw new ParseAggregateError(parseErrors);
+      if (!baseProject || completePresetProjects.length !== presetProjects.length) {
+        throw new Error("Parsing failed before project merge.");
+      }
+      parsed = mergeProjects([...completePresetProjects, baseProject]);
     }
   } catch (err) {
     if (err instanceof ParseAggregateError) {
-      for (const e of err.errors) logger.error(e.message);
+      for (const e of err.errors) logger.error(formatDiagnostic(e.toDiagnostic()));
       throw new Error(`Parsing failed: ${err.errors.length} error(s). No files written.`);
     }
     throw err;
@@ -107,9 +127,7 @@ export function analyzeProject(options: AnalyzeProjectOptions): ProjectAnalysis 
   ];
 
   for (const diagnostic of diagnostics) {
-    const line = `[${diagnostic.entity}] ${diagnostic.message}${
-      diagnostic.suggestion ? ` - ${diagnostic.suggestion}` : ""
-    }`;
+    const line = formatDiagnostic(diagnostic);
     if (diagnostic.level === "error") {
       logger.error(line);
     } else {

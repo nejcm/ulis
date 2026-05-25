@@ -1,3 +1,4 @@
+import { withOrigin } from "../diagnostics.js";
 import type { ParsedAgent } from "../parsers/agent.js";
 import type { ParsedSkill } from "../parsers/skill.js";
 import type { McpConfig } from "../schema.js";
@@ -33,6 +34,7 @@ export function validateCrossRefs(
             entity: `agent:${agent.name}`,
             message: `References skill "${skillRef}" which is not defined in skills/`,
             suggestion: `Create skills/${skillRef}/SKILL.md or remove the reference`,
+            ...withOrigin(agent.origin, { fieldPath: "skills[]", target: "all" }),
           });
         }
       }
@@ -47,6 +49,7 @@ export function validateCrossRefs(
             entity: `agent:${agent.name}`,
             message: `References MCP server "${mcpRef}" which is not defined in mcp.yaml`,
             suggestion: `Add "${mcpRef}" to mcp.yaml or remove the reference`,
+            ...withOrigin(agent.origin, { fieldPath: "mcpServers[]", target: "all" }),
           });
         }
       }
@@ -63,6 +66,7 @@ export function validateCrossRefs(
             entity: `agent:${agent.name}`,
             message: `Subagent allowlist references "${subagentRef}" which is not defined in agents/`,
             suggestion: `Create agents/${subagentRef}.md or remove from allowlist`,
+            ...withOrigin(agent.origin, { fieldPath: "tools.agent[]", target: "all" }),
           });
         }
       }

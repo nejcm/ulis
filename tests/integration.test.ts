@@ -16,6 +16,7 @@ import { parse as parseToml } from "smol-toml";
 import { generate } from "../src/generators/index.js";
 import type { FileArtifact, ProjectBundle } from "../src/generators/types.js";
 import { parseAgents } from "../src/parsers/agent.js";
+import { parseProject } from "../src/parsers/index.js";
 import { loadMcp } from "../src/parsers/mcp.js";
 import { loadPermissions } from "../src/parsers/permissions.js";
 import { parseRules } from "../src/parsers/rule.js";
@@ -406,7 +407,7 @@ alwaysApply: true
 Review security-sensitive changes.
 `,
     );
-    const project = { ...buildProject(), sourceDir, rules: parseRules(join(sourceDir, "rules")) };
+    const project = { ...buildProject(), sourceDir, rules: parseProject(sourceDir).rules };
 
     const cursor = runProject("cursor", project);
     const cursorRule = get(cursor, "rules/common/security.mdc");

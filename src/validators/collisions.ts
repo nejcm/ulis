@@ -1,3 +1,4 @@
+import { withOrigin } from "../diagnostics.js";
 import type { ParsedAgent } from "../parsers/agent.js";
 import type { ParsedSkill } from "../parsers/skill.js";
 import type { Diagnostic } from "../types.js";
@@ -16,7 +17,7 @@ export function validateCollisions(
 
   diags.push(
     ...findDuplicates(
-      agents.map((a) => a.name),
+      agents.map((agent) => ({ name: agent.name, origin: agent.origin })),
       "agent",
       "Duplicate agent name",
       `Rename one of the colliding files in the ulis agents/ folder (or its \`name:\` frontmatter)`,
@@ -25,7 +26,7 @@ export function validateCollisions(
 
   diags.push(
     ...findDuplicates(
-      skills.map((s) => s.frontmatter?.name ?? s.name),
+      skills.map((skill) => ({ name: skill.frontmatter?.name ?? skill.name, origin: skill.origin })),
       "skill",
       "Duplicate skill name",
       `Rename one of the colliding directories in the ulis skills/ folder (or its \`name:\` frontmatter)`,
@@ -36,24 +37,25 @@ export function validateCollisions(
 }
 
 function findDuplicates(
-  names: readonly string[],
+  items: readonly { readonly name: string; readonly origin?: ParsedAgent["origin"] }[],
   entityKind: string,
   message: string,
   suggestion: string,
 ): readonly Diagnostic[] {
-  const seen = new Set<string>();
-  const dupes = new Set<string>();
-  for (const name of names) {
-    if (seen.has(name)) {
-      dupes.add(name);
+  const seen = new Map<string, (typeof items)[number]>();
+  const dupes = new Map<string, (typeof items)[number]>();
+  for (const item of items) {
+    if (seen.has(item.name)) {
+      dupes.set(item.name, item);
     } else {
-      seen.add(name);
+      seen.set(item.name, item);
     }
   }
-  return [...dupes].map((name) => ({
+  return [...dupes].map(([name, item]) => ({
     level: "error" as const,
     entity: `${entityKind}:${name}`,
     message: `${message} "${name}" — output files would collide`,
     suggestion,
+    ...withOrigin(item.origin, { fieldPath: "name", target: "all" }),
   }));
 }

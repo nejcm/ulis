@@ -3,7 +3,9 @@ import { createInterface } from "node:readline";
 
 import { analyzeProject, type Logger } from "../build.js";
 import { initCmd } from "../commands/init.js";
+import { formatDiagnostic } from "../diagnostics.js";
 import { loadExtensions } from "../parsers/extensions.js";
+import { ParseError } from "../parsers/index.js";
 import { planSource, selectedPresets, type TuiAction, type TuiState } from "./state.js";
 
 interface RuntimeDependencies {
@@ -32,7 +34,16 @@ export async function runTuiAction(
     logger.info(`Source: ${planned.sourceDir}`);
     if (presets.length > 0) logger.info(`Presets: ${presets.map((preset) => preset.name).join(", ")}`);
     const analysis = analyzeProject({ sourceDir: planned.sourceDir, presets, logger });
-    const extensionsConfig = loadExtensions(planned.sourceDir);
+    let extensionsConfig: ReturnType<typeof loadExtensions>;
+    try {
+      extensionsConfig = loadExtensions(planned.sourceDir, { source: "base", sourceDir: planned.sourceDir });
+    } catch (err) {
+      if (err instanceof ParseError) {
+        logger.error(formatDiagnostic(err.toDiagnostic()));
+        throw new Error("Parsing failed: 1 error(s). No files written.");
+      }
+      throw err;
+    }
     const extensionCount = Object.values(extensionsConfig).reduce(
       (acc, entry) => acc + (entry?.extensions?.length ?? 0),
       0,

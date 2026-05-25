@@ -32,50 +32,81 @@ export interface ParsedProject {
   readonly sourceDir: string;
 }
 
+export interface ParseProjectOptions {
+  readonly source?: string;
+}
+
 /**
  * Parse all entity kinds from a ulis source directory in one call.
  * Collects every per-file error across agents, skills, and rules before
  * throwing, so users see all broken files at once instead of one at a time.
  */
-export function parseProject(sourceDir: string): ParsedProject {
+export function parseProject(sourceDir: string, options: ParseProjectOptions = {}): ParsedProject {
   const allErrors: ParseError[] = [];
+  const source = options.source ?? "base";
 
   const agentsResult = readMarkdownDir(
     join(sourceDir, "agents"),
     AgentFrontmatterSchema,
     "agent",
-    (fileName, frontmatter, body) => ({ name: resolveAgentName(fileName, frontmatter), frontmatter, body }),
+    (fileName, frontmatter, body, _relFile, origin) => ({
+      name: resolveAgentName(fileName, frontmatter),
+      frontmatter,
+      body,
+      origin,
+    }),
+    { sourceDir, source, relativePrefix: "agents" },
   );
   allErrors.push(...agentsResult.errors);
 
-  const skillsResult = collectSkills(join(sourceDir, "skills"));
+  const skillsResult = collectSkills(join(sourceDir, "skills"), { sourceDir, source });
   allErrors.push(...skillsResult.errors);
 
   const rulesResult = readMarkdownDir(
     join(sourceDir, "rules"),
     RuleFrontmatterSchema,
     "rule",
-    (name, frontmatter, body, relFile) => ({ name, filename: relFile, frontmatter, body }),
-    { recursive: true },
+    (name, frontmatter, body, relFile, origin) => ({ name, filename: relFile, frontmatter, body, origin }),
+    { recursive: true, sourceDir, source, relativePrefix: "rules" },
   );
   allErrors.push(...rulesResult.errors);
 
-  if (allErrors.length > 0) throw new ParseAggregateError(allErrors);
+  const ulisConfig = collectConfigError(
+    allErrors,
+    () =>
+      loadValidatedConfigFile({
+        dir: sourceDir,
+        baseName: "config",
+        schema: UlisConfigSchema,
+        defaultValue: { version: 1, name: "ulis" },
+        diagnostic: { source, sourceDir },
+      }),
+    { version: 1, name: "ulis" } as UlisConfig,
+  );
+  const mcp = collectConfigError(allErrors, () => loadMcp(sourceDir, { source, sourceDir }), { servers: {} });
+  const permissions = collectConfigError(allErrors, () => loadPermissions(sourceDir, { source, sourceDir }), {});
 
-  const ulisConfig = loadValidatedConfigFile({
-    dir: sourceDir,
-    baseName: "config",
-    schema: UlisConfigSchema,
-    defaultValue: { version: 1, name: "ulis" },
-  });
+  if (allErrors.length > 0) throw new ParseAggregateError(allErrors);
 
   return {
     agents: agentsResult.items,
     skills: skillsResult.items,
     rules: rulesResult.items,
-    mcp: loadMcp(sourceDir),
-    permissions: loadPermissions(sourceDir),
+    mcp,
+    permissions,
     ulisConfig,
     sourceDir,
   };
+}
+
+function collectConfigError<T>(errors: ParseError[], load: () => T, fallback: T): T {
+  try {
+    return load();
+  } catch (err) {
+    if (err instanceof ParseError) {
+      errors.push(err);
+      return fallback;
+    }
+    throw err;
+  }
 }

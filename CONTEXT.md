@@ -6,6 +6,7 @@
 - **Destination**: The base directory where generated platform configs are installed. A project destination writes under the current project; a global destination writes under the user's home directory.
 - **Platform**: A supported AI tool target: Claude Code, Codex, Cursor, OpenCode, or ForgeCode.
 - **Preset**: A reusable ULIS source tree applied before the base source. Presets are resolved from user-global or bundled preset directories; the base source wins conflicts.
+- **Diagnostic**: A parse or validation message with source label, source-relative file, absolute path, field path, target platform, optional line/column, and suggested fix.
 - **Build**: Parse, validate, and generate native platform config files under `<source>/generated/<platform>/`.
 - **Validate**: Parse and validate a source plus selected presets without writing generated files.
 - **Install**: Deploy generated platform configs to a destination, optionally rebuilding first.

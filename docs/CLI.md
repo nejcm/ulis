@@ -50,6 +50,20 @@ ulis build [-g | --global] [--source <path>] [--target <platforms>] [--preset <n
 
 Output is always written under `<source>/generated/<platform>/`. Existing contents there are cleared before each build.
 
+Parse and validation failures print compact multi-line diagnostics before the final `No files written.` summary:
+
+```text
+[agent:worker] References MCP server "db" which is not defined in mcp.yaml
+  source: base
+  file: agents/worker.md
+  path: /absolute/path/.ulis/agents/worker.md
+  field: mcpServers[]
+  target: all
+  fix: Add "db" to mcp.yaml or remove the reference
+```
+
+`source` is `base` or `preset:<name>`. `target` is a specific platform, `all` for cross-platform fields, or `none` for source-only config issues. TUI validate uses the same diagnostic shape.
+
 ---
 
 ## `ulis install`

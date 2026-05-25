@@ -1,10 +1,12 @@
 import { AgentFrontmatterSchema, type AgentFrontmatter } from "../schema.js";
+import type { DiagnosticOrigin } from "../types.js";
 import { ParseError, readMarkdownDir } from "./_shared.js";
 
 export interface ParsedAgent {
   name: string;
   frontmatter: AgentFrontmatter;
   body: string;
+  origin?: DiagnosticOrigin;
 }
 
 export type AgentPlatform = "claude" | "opencode" | "codex" | "cursor" | "forgecode";
@@ -26,10 +28,11 @@ export function parseAgents(agentsDir: string): readonly ParsedAgent[] {
     agentsDir,
     AgentFrontmatterSchema,
     "agent",
-    (fileName, frontmatter, body) => ({
+    (fileName, frontmatter, body, _relFile, origin) => ({
       name: resolveAgentName(fileName, frontmatter),
       frontmatter,
       body,
+      origin,
     }),
   );
   if (errors.length > 0) throw errors[0] as ParseError;

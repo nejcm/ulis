@@ -1,5 +1,5 @@
 import { ExtensionsConfigSchema, type ExtensionsConfig } from "../schema.js";
-import { loadConfigFile, parseConfigOrThrow, resolveLoadedConfigPath } from "../utils/config-loader.js";
+import { loadValidatedConfigFile, type ConfigDiagnosticOptions } from "../utils/config-loader.js";
 
 const EXTENSION_CONFIG_KEYS = ["*", "claude", "opencode", "codex", "cursor", "forgecode"] as const;
 
@@ -7,10 +7,14 @@ const EXTENSION_CONFIG_KEYS = ["*", "claude", "opencode", "codex", "cursor", "fo
  * Load and validate the extensions config (yaml or json) from `sourceDir`.
  * Missing file or an empty YAML document validates as an empty config.
  */
-export function loadExtensions(sourceDir: string): ExtensionsConfig {
-  const raw = loadConfigFile(sourceDir, "extensions");
-  const filePath = resolveLoadedConfigPath(sourceDir, "extensions");
-  return parseConfigOrThrow(ExtensionsConfigSchema, raw, "extensions", filePath);
+export function loadExtensions(sourceDir: string, diagnostic?: ConfigDiagnosticOptions): ExtensionsConfig {
+  return loadValidatedConfigFile({
+    dir: sourceDir,
+    baseName: "extensions",
+    schema: ExtensionsConfigSchema,
+    defaultValue: {},
+    diagnostic,
+  });
 }
 
 /**

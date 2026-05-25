@@ -1,5 +1,5 @@
 import { SkillsConfigSchema, type SkillsConfig } from "../schema.js";
-import { loadConfigFile, parseConfigOrThrow, resolveLoadedConfigPath } from "../utils/config-loader.js";
+import { loadValidatedConfigFile, type ConfigDiagnosticOptions } from "../utils/config-loader.js";
 
 const SKILL_CONFIG_KEYS = ["*", "claude", "opencode", "codex", "cursor", "forgecode"] as const;
 
@@ -7,10 +7,14 @@ const SKILL_CONFIG_KEYS = ["*", "claude", "opencode", "codex", "cursor", "forgec
  * Load and validate the skills config (yaml or json) from `sourceDir`.
  * Missing file or an empty YAML document validates as an empty config.
  */
-export function loadSkills(sourceDir: string): SkillsConfig {
-  const raw = loadConfigFile(sourceDir, "skills");
-  const filePath = resolveLoadedConfigPath(sourceDir, "skills");
-  return parseConfigOrThrow(SkillsConfigSchema, raw, "skills", filePath);
+export function loadSkills(sourceDir: string, diagnostic?: ConfigDiagnosticOptions): SkillsConfig {
+  return loadValidatedConfigFile({
+    dir: sourceDir,
+    baseName: "skills",
+    schema: SkillsConfigSchema,
+    defaultValue: {},
+    diagnostic,
+  });
 }
 
 /**
