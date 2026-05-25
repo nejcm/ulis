@@ -6,8 +6,10 @@
  * No filesystem writes — tests read from the pure `GenerationResult` map,
  * which keeps them fast and deterministic.
  */
-import { describe, expect, it } from "bun:test";
-import { isAbsolute, join, resolve } from "node:path";
+import { afterEach, describe, expect, it } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 
 import { parse as parseToml } from "smol-toml";
 
@@ -25,6 +27,7 @@ import { validateCrossRefs } from "../src/validators/cross-refs.js";
 import { GOLDEN_ARTIFACTS } from "./golden-artifacts.js";
 
 const fixturesDir = resolve(join(import.meta.dirname, "fixtures"));
+const tmpRoots: string[] = [];
 
 function buildProject(): ProjectBundle {
   return {
@@ -39,7 +42,11 @@ function buildProject(): ProjectBundle {
 }
 
 function run(platform: Platform): Map<string, string> {
-  const result = generate(platform, buildProject());
+  return runProject(platform, buildProject());
+}
+
+function runProject(platform: Platform, project: ProjectBundle): Map<string, string> {
+  const result = generate(platform, project);
   if (!result) throw new Error(`No generator for ${platform}`);
   const map = new Map<string, string>();
   for (const a of result.artifacts) {
@@ -48,6 +55,23 @@ function run(platform: Platform): Map<string, string> {
   }
   return map;
 }
+
+function createTempSource(): string {
+  const sourceDir = mkdtempSync(join(tmpdir(), "ulis-output-fixture-"));
+  tmpRoots.push(sourceDir);
+  return sourceDir;
+}
+
+function write(path: string, content: string): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, content, "utf8");
+}
+
+afterEach(() => {
+  for (const root of tmpRoots.splice(0)) {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 function get(map: Map<string, string>, path: string): string {
   const v = map.get(path);
@@ -122,6 +146,31 @@ describe("Claude generator", () => {
     expect(mcp.mcpServers).toHaveProperty("test-local");
     expect(mcp.mcpServers).toHaveProperty("test-remote");
   });
+
+  it("emits configured Claude permissions in settings.json", () => {
+    const m = runProject("claude", {
+      ...buildProject(),
+      permissions: {
+        claude: {
+          defaultMode: "acceptEdits",
+          allow: ["Bash(git status)"],
+          deny: ["Bash(rm -rf*)"],
+          ask: ["Edit(**/*.ts)"],
+          additionalDirectories: ["../shared"],
+        },
+      },
+    });
+
+    expect(JSON.parse(get(m, "settings.json"))).toEqual({
+      permissions: {
+        defaultMode: "acceptEdits",
+        allow: ["Bash(git status)"],
+        deny: ["Bash(rm -rf*)"],
+        ask: ["Edit(**/*.ts)"],
+        additionalDirectories: ["../shared"],
+      },
+    });
+  });
 });
 
 // ─── OpenCode ────────────────────────────────────────────────────────────────
@@ -150,6 +199,37 @@ describe("OpenCode generator", () => {
     const oc = JSON.parse(get(m, "opencode.json"));
     expect(oc.mcp).toHaveProperty("test-local");
     expect(oc.mcp).toHaveProperty("test-remote");
+  });
+
+  it("generates command artifacts with OpenCode overrides and README passthrough", () => {
+    const sourceDir = createTempSource();
+    write(
+      join(sourceDir, "commands", "review.md"),
+      `---
+description: Review current changes
+model: claude-haiku-4-5-20251001
+agent: base-agent
+subtask: false
+platforms:
+  opencode:
+    model: anthropic/sonnet
+    agent: worker
+    subtask: true
+---
+
+Run the review workflow.
+`,
+    );
+    write(join(sourceDir, "commands", "README.md"), "Command docs.\n");
+
+    const m = runProject("opencode", { ...buildProject(), sourceDir });
+    const command = get(m, "commands/review.md");
+    expect(command).toContain("description: Review current changes");
+    expect(command).toContain("model: anthropic/sonnet");
+    expect(command).toContain("agent: worker");
+    expect(command).toContain("subtask: true");
+    expect(command).toContain("Run the review workflow.");
+    expect(get(m, "commands/README.md")).toBe("Command docs.\n");
   });
 });
 
@@ -205,6 +285,47 @@ describe("Codex generator", () => {
     expect(skill).not.toContain("allowImplicitInvocation:");
     expect(skill).not.toContain("platforms:");
   });
+
+  it("generates openai.yaml for Codex skill UI, policy, dependencies, and extras", () => {
+    const sourceDir = createTempSource();
+    write(
+      join(sourceDir, "skills", "ui-skill", "SKILL.md"),
+      `---
+name: ui-skill
+description: UI skill
+allowImplicitInvocation: false
+platforms:
+  codex:
+    model: gpt-5.4
+    displayName: UI Skill
+    shortDescription: Helps with UI
+    iconSmall: icon-sm
+    brandColor: "#336699"
+    defaultPrompt: Start here
+    mcpDependencies:
+      - type: mcp
+        value: browser
+        description: Browser tools
+        transport: http
+        url: https://example.com/mcp
+    customField: keep-me
+---
+
+Do UI work.
+`,
+    );
+
+    const m = runProject("codex", { ...buildProject(), sourceDir, skills: parseSkills(join(sourceDir, "skills")) });
+    const yaml = get(m, "skills/ui-skill/agents/openai.yaml");
+    expect(yaml).toContain('model: "gpt-5.4"');
+    expect(yaml).toContain("interface:");
+    expect(yaml).toContain('display_name: "UI Skill"');
+    expect(yaml).toContain("allow_implicit_invocation: false");
+    expect(yaml).toContain("dependencies:");
+    expect(yaml).toContain('value: "browser"');
+    expect(yaml).toContain('url: "https://example.com/mcp"');
+    expect(yaml).toContain("customField: keep-me");
+  });
 });
 
 // ─── Cursor ──────────────────────────────────────────────────────────────────
@@ -228,6 +349,23 @@ describe("Cursor generator", () => {
     const mcp = JSON.parse(get(m, "mcp.json"));
     expect(mcp.mcpServers).toHaveProperty("test-local");
     expect(mcp.mcpServers).toHaveProperty("test-remote");
+  });
+
+  it("emits permissions.json when Cursor allowlists are configured", () => {
+    const m = runProject("cursor", {
+      ...buildProject(),
+      permissions: {
+        cursor: {
+          mcpAllowlist: ["github:*", "*:list_*"],
+          terminalAllowlist: ["git", "npm test"],
+        },
+      },
+    });
+
+    expect(JSON.parse(get(m, "permissions.json"))).toEqual({
+      mcpAllowlist: ["github:*", "*:list_*"],
+      terminalAllowlist: ["git", "npm test"],
+    });
   });
 });
 
@@ -254,6 +392,43 @@ describe("ForgeCode generator", () => {
 // ─── Generator boundary ──────────────────────────────────────────────────────
 
 describe("Generator boundary", () => {
+  it("emits rule artifacts through Cursor rules and Codex/OpenCode AGENTS indexes", () => {
+    const sourceDir = createTempSource();
+    write(
+      join(sourceDir, "rules", "common", "security.md"),
+      `---
+description: Security rules
+paths:
+  - "**/*.ts"
+alwaysApply: true
+---
+
+Review security-sensitive changes.
+`,
+    );
+    const project = { ...buildProject(), sourceDir, rules: parseRules(join(sourceDir, "rules")) };
+
+    const cursor = runProject("cursor", project);
+    const cursorRule = get(cursor, "rules/common/security.mdc");
+    expect(cursorRule).toContain("description: Security rules");
+    expect(cursorRule).toContain('  - "**/*.ts"');
+    expect(cursorRule).toContain("alwaysApply: true");
+    expect(cursorRule).toContain("Review security-sensitive changes.");
+
+    for (const platform of ["codex", "opencode"] as const) {
+      const result = generate(platform, project);
+      expect(
+        result?.artifacts.some((artifact) => artifact.path.replace(/\\/g, "/") === "rules/common/security.md"),
+      ).toBe(true);
+      expect(result?.post.appendAfterRaw).toEqual([
+        {
+          path: "AGENTS.md",
+          content: expect.stringContaining("rules/common/security.md"),
+        },
+      ]);
+    }
+  });
+
   it("emits structurally valid and safe relative artifacts", () => {
     for (const platform of ["claude", "codex", "cursor", "opencode", "forgecode"] as const) {
       const result = generate(platform, buildProject());
