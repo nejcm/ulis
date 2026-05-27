@@ -184,9 +184,13 @@ export function planSource(state: TuiState, cwd: string = process.cwd(), userHom
 }
 
 export function selectedPresets(state: TuiState): readonly ResolvedPreset[] {
-  const available = new Map(visiblePresetChoices(state).map((preset) => [preset.name, preset]));
-  return state.selectedPresetNames.flatMap((name) => {
-    const preset = available.get(name);
+  const available = new Map<string, PresetListEntry>();
+  for (const preset of visiblePresetChoices(state)) {
+    available.set(presetSelectionKey(state, preset), preset);
+    if (!showsPresetSourcePicker(state)) available.set(preset.name, preset);
+  }
+  return state.selectedPresetNames.flatMap((selection) => {
+    const preset = available.get(selection);
     return preset ? [{ name: preset.name, dir: preset.dir }] : [];
   });
 }
@@ -288,13 +292,23 @@ export function visiblePresetChoices(state: TuiState): readonly PresetListEntry[
   const mode = state.presetSourceMode;
   const filtered =
     mode === "auto"
-      ? state.availablePresets
+      ? state.availablePresets.filter(
+          (preset) => preset.source === "project" || presetSourceMatchesMode(preset.source, "global"),
+        )
       : state.availablePresets.filter((preset) => presetSourceMatchesMode(preset.source, mode));
   return dedupePresetChoices(filtered);
 }
 
 export function showsPresetSourcePicker(state: TuiState): boolean {
   return state.flow === "presetsOnly";
+}
+
+export function presetSelectionKey(state: TuiState, preset: PresetListEntry): string {
+  return showsPresetSourcePicker(state) ? presetSourceKey(preset) : preset.name;
+}
+
+function presetSourceKey(preset: PresetListEntry): string {
+  return `${preset.source}:${preset.name}`;
 }
 
 function dedupePresetChoices(presets: readonly PresetListEntry[]): readonly PresetListEntry[] {
@@ -378,7 +392,9 @@ export function applyFlowPreferences(state: TuiState, flow: TuiFlow = state.flow
     state.platforms = platforms.length > 0 ? platforms : [...PLATFORMS];
   }
   if (preferences.selectedPresetNames) {
-    const availablePresetNames = new Set(state.availablePresets.map((preset) => preset.name));
+    const availablePresetNames = new Set(
+      state.availablePresets.flatMap((preset) => [preset.name, presetSourceKey(preset)]),
+    );
     state.selectedPresetNames = [...new Set(preferences.selectedPresetNames)].filter((name) =>
       availablePresetNames.has(name),
     );
@@ -727,7 +743,8 @@ function handlePresetsKey(state: TuiState, key: string): TuiEffect {
     state.notice = "";
   } else if (state.cursor >= sourceRows && state.cursor < presets.length + sourceRows) {
     const preset = presets[state.cursor - sourceRows];
-    if (preset) state.selectedPresetNames = togglePresetSelection(state.selectedPresetNames, preset.name);
+    if (preset)
+      state.selectedPresetNames = togglePresetSelection(state.selectedPresetNames, presetSelectionKey(state, preset));
     state.notice = "";
   } else if (state.cursor === continueIndex && state.flow === "presetsOnly") {
     return continuePresetOnlyFlow(state);

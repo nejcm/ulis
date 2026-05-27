@@ -11,6 +11,7 @@ import {
   isEditedPlan,
   planSource,
   planItems,
+  presetSelectionKey,
   showsPresetSourcePicker,
   visiblePresetChoices,
   type TuiState,
@@ -350,7 +351,7 @@ function renderPresets(state: TuiState) {
           bold: true,
         });
       }
-      const checked = state.selectedPresetNames.includes(preset.name) ? "x" : " ";
+      const checked = state.selectedPresetNames.includes(presetSelectionKey(state, preset)) ? "x" : " ";
       lines.push(selectableLine(state.cursor, index + sourceRows, `[${checked}] ${preset.name} (${preset.source})`));
       if (preset.description) lines.push({ text: preset.description, indent: 4, fgColor: "color08" });
     }

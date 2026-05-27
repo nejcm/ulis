@@ -31,6 +31,7 @@ const presetInstallCalls: Array<{
   backup?: boolean;
   presets: readonly { name: string; dir: string }[];
   installExtensions?: boolean;
+  signal?: AbortSignal;
 }> = [];
 const spawnedChildren: Array<{
   stdout: EventEmitter;
@@ -178,7 +179,7 @@ describe("tui actions child process flow", () => {
       { name: "a", displayName: "A", description: "", source: "project", dir: "/project/presets/a" },
     ]);
     state.flow = "presetsOnly";
-    state.selectedPresetNames = ["a", "b"];
+    state.selectedPresetNames = ["project:a", "project:b"];
     state.platforms = ["codex"];
     state.destinationMode = "global";
     state.backup = true;
@@ -199,6 +200,34 @@ describe("tui actions child process flow", () => {
         { name: "b", dir: "/project/presets/b" },
       ],
     });
+  });
+
+  it("preset install action forwards cancellation to the installer", async () => {
+    installRuntimeFakes();
+    presetInstallCalls.length = 0;
+    const state = createInitialState([
+      { name: "team", displayName: "Team", description: "", source: "project", dir: "/project/presets/team" },
+    ]);
+    state.flow = "presetsOnly";
+    state.selectedPresetNames = ["project:team"];
+    const logger = createLogger();
+    const controller = new AbortController();
+    __test.setRuntimeDependencies({
+      runPresetInstall: ((options: (typeof presetInstallCalls)[number]) => {
+        presetInstallCalls.push(options);
+        return new Promise<readonly string[]>((_resolve, reject) => {
+          options.signal?.addEventListener("abort", () => reject(new Error("Preset install stopped by user.")), {
+            once: true,
+          });
+        });
+      }) as never,
+    });
+
+    const run = runTuiAction(state, "presetInstall", logger, { signal: controller.signal });
+    controller.abort();
+
+    await expect(run).rejects.toThrow("Preset install stopped by user.");
+    expect(presetInstallCalls[0]?.signal).toBe(controller.signal);
   });
 
   it("forwards an empty target when no platforms are selected", async () => {

@@ -78,8 +78,8 @@ export async function runTuiAction(
       logger,
       presets,
       installExtensions: state.presetInstallExtensions,
+      signal: options.signal,
     });
-    throwIfAborted(options.signal, action);
     return;
   }
 

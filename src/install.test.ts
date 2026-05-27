@@ -1246,6 +1246,28 @@ describe("runPresetInstall", () => {
       runPresetInstall({ presets: [], destBase: root, userHome: root, logger: silentLogger }),
     ).rejects.toThrow("Select at least one preset to install.");
   });
+
+  it("stops preset install when the signal is aborted", async () => {
+    const root = createTempRoot();
+    const presetDir = join(root, "preset");
+    const projectDir = join(root, "project");
+    mkdirSync(projectDir, { recursive: true });
+    write(join(presetDir, "config.yaml"), "version: 1\nname: preset\n");
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      runPresetInstall({
+        presets: [{ name: "preset", dir: presetDir }],
+        destBase: projectDir,
+        userHome: root,
+        platforms: ["claude"],
+        logger: silentLogger,
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow("Preset install stopped by user.");
+    expect(existsSync(join(projectDir, ".claude"))).toBe(false);
+  });
 });
 
 describe("resolveRunner", () => {

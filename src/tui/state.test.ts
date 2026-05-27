@@ -173,7 +173,7 @@ describe("tui state", () => {
       ]);
       state.screen = "presets";
       state.flow = "presetsOnly";
-      state.selectedPresetNames = ["team"];
+      state.selectedPresetNames = ["user:team"];
       state.cursor = 2;
 
       expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
@@ -190,7 +190,7 @@ describe("tui state", () => {
     ]);
     state.flow = "presetsOnly";
     state.screen = "plan";
-    state.selectedPresetNames = ["team"];
+    state.selectedPresetNames = ["user:team"];
 
     expect(planItems(state)).not.toContain("Build only");
 
@@ -225,6 +225,17 @@ describe("tui state", () => {
     expect(state.selectedPresetNames).toEqual(["team"]);
   });
 
+  it("normal preset layers keep project presets out of CLI-resolved selections", () => {
+    const state = createInitialState([
+      { name: "team", displayName: "Team", description: "", source: "project", dir: "/project/team" },
+      { name: "team", displayName: "Team", description: "", source: "global", dir: "/global/team" },
+    ]);
+    state.selectedPresetNames = ["team"];
+
+    expect(visiblePresetChoices(state).map((preset) => preset.source)).toEqual(["global"]);
+    expect(selectedPresets(state)).toEqual([{ name: "team", dir: "/global/team" }]);
+  });
+
   it("preset picker cycles source locations and resolves from the visible source", () => {
     const state = createInitialState([
       { name: "team", displayName: "Team", description: "", source: "project", dir: "/project/team" },
@@ -233,7 +244,7 @@ describe("tui state", () => {
     state.screen = "presets";
     state.flow = "presetsOnly";
 
-    expect(selectedPresets({ ...state, selectedPresetNames: ["team"] })).toEqual([
+    expect(selectedPresets({ ...state, selectedPresetNames: ["project:team"] })).toEqual([
       { name: "team", dir: "/project/team" },
     ]);
 
@@ -251,8 +262,22 @@ describe("tui state", () => {
       Date.now = originalNow;
     }
 
-    state.selectedPresetNames = ["team"];
+    state.selectedPresetNames = ["project:team"];
+    expect(selectedPresets(state)).toEqual([]);
+
+    state.selectedPresetNames = ["global:team"];
     expect(selectedPresets(state)).toEqual([{ name: "team", dir: "/global/team" }]);
+  });
+
+  it("preset-only auto source checks project and global before bundled", () => {
+    const state = createInitialState([
+      { name: "bundled", displayName: "Bundled", description: "", source: "bundled", dir: "/bundled/preset" },
+      { name: "project", displayName: "Project", description: "", source: "project", dir: "/project/preset" },
+      { name: "global", displayName: "Global", description: "", source: "global", dir: "/global/preset" },
+    ]);
+    state.flow = "presetsOnly";
+
+    expect(visiblePresetChoices(state).map((preset) => preset.source)).toEqual(["project", "global"]);
   });
 
   it("platform screen can toggle all platforms off", () => {

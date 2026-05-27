@@ -62,6 +62,7 @@ export interface PresetInstallOptions {
   readonly runner?: InstallRunner;
   /** When false, skip running extensions installers (`extensions.yaml`). */
   readonly installExtensions?: boolean;
+  readonly signal?: AbortSignal;
 }
 
 type RunCommand = (
@@ -104,6 +105,7 @@ interface GeneratedInstallOptions {
   readonly runner: InstallRunner;
   readonly installExtensionsEnabled: boolean;
   readonly logger: Logger;
+  readonly signal?: AbortSignal;
 }
 
 const defaultRuntimeDependencies: RuntimeDependencies = {
@@ -263,14 +265,17 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
       return [];
     }
 
+    throwIfAborted(options.signal);
     const analysis = analyzePresets({ presets, logger });
     for (const target of platforms) {
+      throwIfAborted(options.signal);
       const outDir = join(outputDir, target);
       const result = generate(target, analysis.project);
       if (!result) throw new Error(`No generator registered for platform: ${target}`);
       writeResult(result, outDir, target, logger);
     }
 
+    throwIfAborted(options.signal);
     const skillsConfig = mergeSkillsConfigs(presets.map((preset) => loadSkills(preset.dir)));
     const extensionsConfig = mergeExtensionsConfigs(presets.map((preset) => loadExtensions(preset.dir)));
 
@@ -286,8 +291,10 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
       runner,
       installExtensionsEnabled,
       logger,
+      signal: options.signal,
     });
 
+    throwIfAborted(options.signal);
     logHeader(logger, "Preset Installation Complete");
     return platforms;
   } finally {
@@ -311,6 +318,7 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
   };
 
   for (const platform of options.platforms) {
+    throwIfAborted(options.signal);
     switch (platform) {
       case "opencode":
         await installOpencode(context);
@@ -331,28 +339,46 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
   }
 
   for (const platform of options.platforms) {
+    throwIfAborted(options.signal);
     const platformSkills = options.skillsConfig[platform]?.skills ?? [];
     if (platformSkills.length > 0) {
-      await installSkills(platformSkills, platform, options.destBase, options.globalInstall, options.logger);
+      await installSkills(
+        platformSkills,
+        platform,
+        options.destBase,
+        options.globalInstall,
+        options.logger,
+        [],
+        options.signal,
+      );
     }
   }
 
   const allSkills = options.skillsConfig["*"]?.skills ?? [];
   if (allSkills.length > 0) {
     logHeader(options.logger, "Installing External Skills");
-    await installSkills(allSkills, "*", options.destBase, options.globalInstall, options.logger, options.platforms);
+    await installSkills(
+      allSkills,
+      "*",
+      options.destBase,
+      options.globalInstall,
+      options.logger,
+      options.platforms,
+      options.signal,
+    );
   }
 
   if (!options.installExtensionsEnabled) return;
 
   for (const platform of options.platforms) {
-    runPlatformExtensions(context, platform);
+    throwIfAborted(options.signal);
+    await runPlatformExtensions(context, platform, options.signal);
   }
 
   const allExtensions = options.extensionsConfig["*"]?.extensions ?? [];
   if (allExtensions.length > 0) {
     logHeader(options.logger, "Installing Extensions");
-    installExtensions(allExtensions, "*", options.destBase, options.runner, options.logger);
+    await installExtensions(allExtensions, "*", options.destBase, options.runner, options.logger, options.signal);
   }
 }
 
@@ -374,6 +400,7 @@ async function installSkills(
   globalInstall: boolean,
   logger?: Logger,
   selectedPlatforms: readonly Platform[] = [],
+  signal?: AbortSignal,
 ): Promise<void> {
   if (skills.length === 0) return;
   const agentNames =
@@ -386,30 +413,38 @@ async function installSkills(
   if (agentNames.length === 0) return;
   const agentFlags = ["-a", ...agentNames];
 
-  const results = await runBounded(skills, SKILL_INSTALL_CONCURRENCY, async (skill): Promise<SkillInstallLog> => {
-    const npxArgs = [
-      "skills@latest",
-      "add",
-      skill.name,
-      ...agentFlags,
-      ...(globalInstall ? ["-g"] : ["--project"]),
-      "--yes",
-      ...(skill.args ?? []),
-    ];
-    logInfo(logger, `Installing ${platform} skill: ${skill.key ?? skill.name}`);
-    const result = await runSkillCommand("npx", npxArgs, {
-      stdio: ["ignore", "pipe", "pipe"],
-      cwd: installBaseDir,
-      shell: process.platform === "win32",
-    });
-    if (result.status !== 0) {
-      return {
-        level: "warn",
-        message: `Failed to install ${platform} skill: ${skill.key ?? skill.name} (${formatCommandFailure(result)})`,
-      };
-    }
-    return { level: "success", message: `${platform} skill: ${skill.key ?? skill.name}` };
-  });
+  const results = await runBounded(
+    skills,
+    SKILL_INSTALL_CONCURRENCY,
+    async (skill): Promise<SkillInstallLog> => {
+      throwIfAborted(signal);
+      const npxArgs = [
+        "skills@latest",
+        "add",
+        skill.name,
+        ...agentFlags,
+        ...(globalInstall ? ["-g"] : ["--project"]),
+        "--yes",
+        ...(skill.args ?? []),
+      ];
+      logInfo(logger, `Installing ${platform} skill: ${skill.key ?? skill.name}`);
+      const result = await runSkillCommand("npx", npxArgs, {
+        stdio: ["ignore", "pipe", "pipe"],
+        cwd: installBaseDir,
+        shell: process.platform === "win32",
+        signal,
+      });
+      throwIfAborted(signal);
+      if (result.status !== 0) {
+        return {
+          level: "warn",
+          message: `Failed to install ${platform} skill: ${skill.key ?? skill.name} (${formatCommandFailure(result)})`,
+        };
+      }
+      return { level: "success", message: `${platform} skill: ${skill.key ?? skill.name}` };
+    },
+    signal,
+  );
 
   for (const result of results) {
     if (result.level === "warn") logWarn(logger, result.message);
@@ -421,12 +456,14 @@ async function runBounded<T, U>(
   items: readonly T[],
   concurrency: number,
   runItem: (item: T) => Promise<U>,
+  signal?: AbortSignal,
 ): Promise<readonly U[]> {
   let nextIndex = 0;
   const results: U[] = [];
   const workerCount = Math.min(concurrency, items.length);
   const workers = Array.from({ length: workerCount }, async () => {
     while (nextIndex < items.length) {
+      throwIfAborted(signal);
       const itemIndex = nextIndex;
       const item = items[itemIndex]!;
       nextIndex += 1;
@@ -437,20 +474,21 @@ async function runBounded<T, U>(
   return results;
 }
 
-function runPlatformExtensions(context: InstallContext, platform: Platform): void {
+async function runPlatformExtensions(context: InstallContext, platform: Platform, signal?: AbortSignal): Promise<void> {
   if (!context.installExtensionsEnabled) return;
   const entries = context.extensions[platform]?.extensions ?? [];
   if (entries.length === 0) return;
-  installExtensions(entries, platform, context.destBase, context.runner, context.logger);
+  await installExtensions(entries, platform, context.destBase, context.runner, context.logger, signal);
 }
 
-function installExtensions(
+async function installExtensions(
   extensions: readonly { key?: string; name: string; args?: readonly string[] }[],
   platform: Platform | "*",
   installBaseDir: string,
   runner: InstallRunner,
   logger?: Logger,
-): void {
+  signal?: AbortSignal,
+): Promise<void> {
   if (extensions.length === 0) return;
   if (!commandExists(runner)) {
     logWarn(logger, `${runner} not found on PATH - skipping ${platform} extensions.`);
@@ -458,15 +496,17 @@ function installExtensions(
   }
 
   for (const extension of extensions) {
+    throwIfAborted(signal);
     const args = [extension.name, ...(extension.args ?? [])];
     logInfo(logger, `Will run: ${runner} ${args.join(" ")}`);
 
-    const result = runCommand(runner, args, {
+    const result = await runSkillCommand(runner, args, {
       stdio: ["ignore", "pipe", "pipe"],
       cwd: installBaseDir,
       shell: process.platform === "win32",
-      encoding: "utf8",
+      signal,
     });
+    throwIfAborted(signal);
     if (result.status !== 0) {
       logWarn(
         logger,
@@ -476,6 +516,10 @@ function installExtensions(
     }
     logSuccess(logger, `${platform} extension: ${extension.key ?? extension.name}`);
   }
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new Error("Preset install stopped by user.");
 }
 
 /**
