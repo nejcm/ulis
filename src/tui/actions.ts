@@ -86,15 +86,25 @@ async function runActionInChildProcess(
     throw new Error("Unable to resolve current CLI entry script.");
   }
 
-  const args = [...process.execArgv, entryScript, action, "--source", planSource(state).sourceDir];
+  const args =
+    action === "presetInstall"
+      ? [...process.execArgv, entryScript, "preset", "install", ...presetNames]
+      : [...process.execArgv, entryScript, action, "--source", planSource(state).sourceDir];
   args.push("--target", state.platforms.join(","));
-  if (presetNames.length > 0) args.push("--preset", presetNames.join(","));
+  if (action !== "presetInstall" && presetNames.length > 0) args.push("--preset", presetNames.join(","));
 
   if (action === "install") {
     args.push("--yes");
     if (planSource(state).globalInstall) args.push("--global");
     if (!state.rebuild) args.push("--no-rebuild");
     if (state.backup) args.push("--backup");
+  }
+
+  if (action === "presetInstall") {
+    args.push("--yes");
+    if (planSource(state).globalInstall) args.push("--global");
+    if (state.backup) args.push("--backup");
+    if (!state.presetInstallExtensions) args.push("--no-extensions");
   }
 
   await new Promise<void>((resolve, reject) => {
