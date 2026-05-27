@@ -27,6 +27,8 @@ interface UiLine {
 }
 
 const CARD_MAX_WIDTH = 104;
+const OVERVIEW_BORDER_WIDTH = CARD_MAX_WIDTH - 6;
+const OVERVIEW_BORDER = `+${"-".repeat(OVERVIEW_BORDER_WIDTH - 2)}+`;
 const TITLE = [
   " _   _ _     ___ ____  ",
   "| | | | |   |_ _/ ___| ",
@@ -129,34 +131,37 @@ function renderPlan(state: TuiState) {
     state.flow === "presetsOnly"
       ? "Base source: none (preset-only install)"
       : `Base source: ${formatSourceMode(state.sourceMode, state.customSource)} -> ${plan.sourceDir}`;
+  const overviewLines: UiLine[] = [
+    { text: "Input", fgColor: "color06", bold: true },
+    ...(showsPresetSourcePicker(state)
+      ? [{ text: `${presetLabel} location: ${formatPresetSourceMode(state.presetSourceMode)}` }]
+      : []),
+    { text: `${presetLabel}: ${formatPresets(state)}` },
+    { text: baseSourceLine },
+    { text: "" },
+    { text: "Output", fgColor: "color06", bold: true },
+    { text: `Platforms: ${formatPlatforms(state.platforms)}` },
+    { text: `Install destination: ${formatDestinationMode(state.destinationMode)} -> ${plan.destBase}` },
+    { text: "" },
+    { text: "Install options", fgColor: "color06", bold: true },
+    { text: `Backup: ${state.backup ? "on" : "off"}` },
+    { text: `Use latest build output: ${state.rebuild ? "on" : "off"}` },
+  ];
 
-  return renderCard(
+  return renderCardShell(
     isEditedPlan(state) ? "Edited Plan" : formatFlow(state.flow),
     "Review and adjust the plan before choosing an action.",
     [
-      { text: "Input", fgColor: "color06", bold: true },
-      ...(showsPresetSourcePicker(state)
-        ? [{ text: `${presetLabel} location: ${formatPresetSourceMode(state.presetSourceMode)}` }]
-        : []),
-      { text: `${presetLabel}: ${formatPresets(state)}` },
-      { text: baseSourceLine },
-      { text: "" },
-      { text: "Output", fgColor: "color06", bold: true },
-      { text: `Platforms: ${formatPlatforms(state.platforms)}` },
-      { text: `Install destination: ${formatDestinationMode(state.destinationMode)} -> ${plan.destBase}` },
-      { text: "" },
-      { text: "Install options", fgColor: "color06", bold: true },
-      { text: `Backup: ${state.backup ? "on" : "off"}` },
-      { text: `Use latest build output: ${state.rebuild ? "on" : "off"}` },
-      { text: "" },
-      { text: "Actions", fgColor: "color06", bold: true },
-      { text: "" },
-      ...rows,
-      { text: "" },
-      {
+      renderOverviewBox(overviewLines),
+      renderUiLine({ text: "" }),
+      renderUiLine({ text: "Actions", fgColor: "color06", bold: true }),
+      renderUiLine({ text: "" }),
+      ...rows.map(renderUiLine),
+      renderUiLine({ text: "" }),
+      renderUiLine({
         text: state.notice || "Tip: validate checks source and presets without writing generated files.",
         fgColor: state.notice ? "color03" : "color08",
-      },
+      }),
     ],
   );
 }
@@ -263,6 +268,58 @@ function renderUiLine(line: UiLine): Node {
           }),
         ],
       );
+}
+
+function renderOverviewBox(lines: readonly UiLine[]): Node {
+  return VStack(
+    {
+      width: "100%",
+      padding: { x: 1 },
+      fgColor: "color08",
+      alignItems: "stretch",
+    },
+    [Text(OVERVIEW_BORDER), ...lines.map(renderOverviewLine), Text(OVERVIEW_BORDER)],
+  );
+}
+
+function renderOverviewLine(line: UiLine): Node {
+  const content =
+    line.value === undefined
+      ? Text(line.text || " ", { bold: line.bold, fgColor: line.fgColor, wrap: "word" })
+      : HStack(
+          {
+            flex: 1,
+            alignItems: "start",
+            justifyContent: "space-between",
+          },
+          [
+            Text(line.text || " ", { bold: line.bold, fgColor: line.fgColor, wrap: "word" }),
+            Text(line.value, {
+              bold: line.bold,
+              fgColor: "color06",
+              wrap: "word",
+            }),
+          ],
+        );
+
+  return HStack(
+    {
+      width: "100%",
+      alignItems: "start",
+    },
+    [
+      Text("|"),
+      HStack(
+        {
+          flex: 1,
+          padding: { x: 1 + (line.indent ?? 0) },
+          fgColor: line.fgColor,
+        },
+        [content],
+      ),
+      Text("|"),
+    ],
+  );
 }
 
 function renderCardShell(title: string, subtitle: string, children: readonly Node[]) {
