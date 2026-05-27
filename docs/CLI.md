@@ -140,14 +140,14 @@ ulis preset install <names...> [-g | --global] [--target <platforms>]
 
 `ulis preset install <names...>` installs selected presets **without** merging a project or global source. Names may be comma-separated (`a,b`) or repeated (`a b`) and are merged in the order given. Generated output is temporary and is removed after install.
 
-| Flag                   | Effect                                                                                           |
-| ---------------------- | ------------------------------------------------------------------------------------------------ |
-| `-g`, `--global`       | Install to home-level platform config directories instead of the current project.                 |
-| `--target <platforms>` | Only install the listed platforms.                                                               |
-| `-y`, `--yes`          | Skip overwrite confirmation prompts and fail fast for missing presets.                           |
-| `--backup`             | Copy existing platform dirs/configs before writing.                                              |
-| `--runner <name>`      | Package runner for preset `extensions.yaml` entries. `npx` or `bunx`; default: auto-detect.      |
-| `--no-extensions`      | Skip preset `extensions.yaml` entries. Preset `skills.yaml` entries still run when declared.      |
+| Flag                   | Effect                                                                                       |
+| ---------------------- | -------------------------------------------------------------------------------------------- |
+| `-g`, `--global`       | Install to home-level platform config directories instead of the current project.            |
+| `--target <platforms>` | Only install the listed platforms.                                                           |
+| `-y`, `--yes`          | Skip overwrite confirmation prompts and fail fast for missing presets.                       |
+| `--backup`             | Copy existing platform dirs/configs before writing.                                          |
+| `--runner <name>`      | Package runner for preset `extensions.yaml` entries. `npx` or `bunx`; default: auto-detect.  |
+| `--no-extensions`      | Skip preset `extensions.yaml` entries. Preset `skills.yaml` entries still run when declared. |
 
 ---
 

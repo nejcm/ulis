@@ -83,30 +83,28 @@ async function main(): Promise<void> {
     );
 
   cli
-    .command("preset install [...names]", "Install selected presets without a base source")
-    .option("-g, --global", "Install to ~/.claude/, ~/.codex/, ~/forge/, etc.")
-    .option("-y, --yes", "Skip confirmation prompts (useful for CI)")
-    .option("--target <platform>", "Only build/install the given platform(s) (comma-separated)")
-    .option("--backup", "Back up existing platform dirs before overwriting")
-    .option("--runner <name>", "Package runner used for extension installs (npx | bunx)")
-    .option("--no-extensions", "Skip running entries from extensions.yaml")
-    .action((names: string[] | undefined, options) =>
-      presetInstallCmd(names, {
-        global: Boolean(options.global),
-        yes: Boolean(options.yes),
-        target: options.target,
-        backup: Boolean(options.backup),
-        runner: parseRunner(options.runner),
-        extensions: options.extensions !== false,
-      }),
-    );
-
-  cli
-    .command("preset [action]", "Manage presets (action: list, or use -l / --list)")
+    .command("preset [...args]", "Manage presets (actions: list, install)")
     .option("-l, --list", "List user-global and bundled presets")
-    .action((action: string | undefined, options: { list?: boolean }) => {
-      if (options.list || !action || action === "list") return presetListCmd();
-      throw new Error(`Unknown preset action: "${action}". Available: list (or use --list)`);
+    .option("-g, --global", "Install presets to ~/.claude/, ~/.codex/, ~/forge/, etc.")
+    .option("-y, --yes", "Skip preset install confirmation prompts (useful for CI)")
+    .option("--target <platform>", "Only install the given platform(s) for preset install (comma-separated)")
+    .option("--backup", "Back up existing platform dirs before preset install")
+    .option("--runner <name>", "Package runner used for preset extension installs (npx | bunx)")
+    .option("--no-extensions", "Skip running entries from preset extensions.yaml")
+    .action((args: string[] | undefined, options) => {
+      const [action, ...names] = args ?? [];
+      if (options.list || action == null || action === "list") return presetListCmd();
+      if (action === "install") {
+        return presetInstallCmd(names, {
+          global: Boolean(options.global),
+          yes: Boolean(options.yes),
+          target: options.target,
+          backup: Boolean(options.backup),
+          runner: parseRunner(options.runner),
+          extensions: options.extensions !== false,
+        });
+      }
+      throw new Error(`Unknown preset action: "${action}". Available: list, install`);
     });
 
   cli.command("tui", "Launch the interactive terminal UI").action(() => tuiCmd());

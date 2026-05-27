@@ -1200,9 +1200,9 @@ describe("runPresetInstall", () => {
 
   it("rejects empty preset install requests", async () => {
     const root = createTempRoot();
-    await expect(runPresetInstall({ presets: [], destBase: root, userHome: root, logger: silentLogger })).rejects.toThrow(
-      "Select at least one preset to install.",
-    );
+    await expect(
+      runPresetInstall({ presets: [], destBase: root, userHome: root, logger: silentLogger }),
+    ).rejects.toThrow("Select at least one preset to install.");
   });
 });
 
