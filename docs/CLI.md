@@ -50,6 +50,20 @@ ulis build [-g | --global] [--source <path>] [--target <platforms>] [--preset <n
 
 Output is always written under `<source>/generated/<platform>/`. Existing contents there are cleared before each build.
 
+Parse and validation failures print compact multi-line diagnostics before the final `No files written.` summary:
+
+```text
+[agent:worker] References MCP server "db" which is not defined in mcp.yaml
+  source: base
+  file: agents/worker.md
+  path: /absolute/path/.ulis/agents/worker.md
+  field: mcpServers[]
+  target: all
+  fix: Add "db" to mcp.yaml or remove the reference
+```
+
+`source` is `base` or `preset:<name>`. `target` is a specific platform, `all` for cross-platform fields, or `none` for source-only config issues. TUI validate uses the same diagnostic shape.
+
 ---
 
 ## `ulis install`
@@ -78,27 +92,27 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 
 **Install strategy per platform:**
 
-| Platform  | Managed dirs (replaced)                       | Preserved native config                                                       |
-| --------- | --------------------------------------------- | ----------------------------------------------------------------------------- |
-| Claude    | `agents/`, `commands/`, `rules/`, `hooks/`, … | `settings.json` `hooks`, UI/plugin settings; `.claude.json` `mcpServers`      |
-| OpenCode  | target dir contents                           | `opencode.json` `mcp`                                                         |
-| Codex     | target dir contents                           | `config.toml` `projects`, `hooks`, `mcp_servers`, `tui`, `notice`, `features` |
-| Cursor    | `agents/` (`.mdc` files)                      | `mcp.json` `mcpServers`                                                       |
-| ForgeCode | `.forge/agents`, `.forge/skills`, `AGENTS.md` | `.forge/.mcp.json` `mcpServers`, `.forge.toml`                                |
+| Platform  | Managed entries                                                              | Preserved native config                                                       |
+| --------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Claude    | generated `agents/` and `skills/` entries by name; `commands/`, `rules/`, …  | `settings.json` `hooks`, UI/plugin settings; `.claude.json` `mcpServers`      |
+| OpenCode  | generated `agents/core`, `agents/specialized`, and `skills/` entries by name | `opencode.json` `mcp`                                                         |
+| Codex     | generated `agents/` and `skills/` entries by name                            | `config.toml` `projects`, `hooks`, `mcp_servers`, `tui`, `notice`, `features` |
+| Cursor    | generated `agents/` and `skills/` entries by name                            | `mcp.json` `mcpServers`                                                       |
+| ForgeCode | generated `.forge/agents` and `.forge/skills` entries by name; `AGENTS.md`   | `.forge/.mcp.json` `mcpServers`, `.forge.toml`                                |
 
-Install preserves only the allowlisted native config values and files above. Generated output wins at the same config path, and raw fragments win through the generated output because raw is merged during build. Existing non-allowlisted native config values are removed. If `--backup` is set, backups are created before parsing preserved native config.
+Install preserves unmanaged destination agents and skills unless generated output has the same native name. Generated output wins at the same config path, and raw fragments win through the generated output because raw is merged during build. Existing non-allowlisted native config values are removed. If `--backup` is set, backups are created before parsing preserved native config.
 
 ---
 
 ## `ulis tui`
 
-Launch the interactive terminal dashboard. Use it to choose a source, select presets and platforms, validate without writing files, build generated outputs, or install with an explicit destination review.
+Launch the interactive terminal dashboard. Use it to choose a source, select presets and platforms, validate without writing files, build generated outputs, install with an explicit destination review, or install selected presets by themselves.
 
 ```bash
 ulis tui
 ```
 
-The TUI supports project `.ulis/`, global `~/.ulis/`, and custom source paths. Install destinations are explicit: project-local configs or home-level configs. If a project or global source is missing, the TUI can initialize it before continuing. Installs require a review screen where `backup` and `rebuild` can be toggled before execution.
+The TUI supports project `.ulis/`, global `~/.ulis/`, and custom source paths. Install destinations are explicit: project-local configs or home-level configs. If a project or global source is missing, the TUI can initialize it before continuing. Installs require a review screen where `backup` and `rebuild` can be toggled before execution. The Presets screen also has **Install selected presets**, which installs only the selected presets without reading the current source.
 
 Keyboard controls:
 
@@ -117,9 +131,23 @@ List presets from **both** `~/.ulis/presets/` and the bundled preset set. User p
 ```bash
 ulis preset [--list]
 ulis preset list
+ulis preset install <names...> [-g | --global] [--target <platforms>]
+                    [-y | --yes] [--backup] [--runner <npx|bunx>]
+                    [--no-extensions]
 ```
 
 `-l` / `--list` is accepted. The default action is `list`. Each line shows the directory name (what you pass to `--preset`), a `user` or `bundled` label, optional `name` / `description` from `preset.yaml`, and the display title when it differs from the folder name.
+
+`ulis preset install <names...>` installs selected presets **without** merging a project or global source. Names may be comma-separated (`a,b`) or repeated (`a b`) and are merged in the order given. Generated output is temporary and is removed after install.
+
+| Flag                   | Effect                                                                                       |
+| ---------------------- | -------------------------------------------------------------------------------------------- |
+| `-g`, `--global`       | Install to home-level platform config directories instead of the current project.            |
+| `--target <platforms>` | Only install the listed platforms.                                                           |
+| `-y`, `--yes`          | Skip overwrite confirmation prompts and fail fast for missing presets.                       |
+| `--backup`             | Copy existing platform dirs/configs before writing.                                          |
+| `--runner <name>`      | Package runner for preset `extensions.yaml` entries. `npx` or `bunx`; default: auto-detect.  |
+| `--no-extensions`      | Skip preset `extensions.yaml` entries. Preset `skills.yaml` entries still run when declared. |
 
 ---
 

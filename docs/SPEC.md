@@ -25,7 +25,7 @@ ULIS is a CLI (`ulis`) that lets you define AI agent configurations **once** and
 └── config.yaml          ◄─── version + name + optional install + runner settings
 ```
 
-`ulis install` deploys the generated tree to the per-platform destination (`./.claude/`, `./.forge/`, etc.), preserving only allowlisted existing native config values or files such as MCP servers, hooks, trusted projects, selected Claude Code preferences, Codex `tui`, `notice`, and `features`, and ForgeCode `.forge.toml`.
+`ulis install` deploys the generated tree to the per-platform destination (`./.claude/`, `./.forge/`, etc.). Existing unmanaged destination agents and skills are left in place unless a generated entry has the same native name. Install also preserves allowlisted existing native config values or files such as MCP servers, hooks, trusted projects, selected Claude Code preferences, Codex `tui`, `notice`, and `features`, and ForgeCode `.forge.toml`.
 
 **Why it exists:** Claude Code, OpenCode, Codex, Cursor, and ForgeCode all have incompatible config formats. Without ULIS you maintain separate, drift-prone config trees. ULIS keeps one source of truth and compiles it.
 
@@ -57,12 +57,16 @@ Each `generate*` function:
 2. Maps canonical types (model aliases, tool groups, permission levels) to platform specifics
 3. Emits native files (YAML frontmatter, JSON, TOML, MDC)
 
+Provider adapters own their own parsing-to-native behavior, generated file layout, and install semantics. Prefer keeping agent, skill, MCP, permission, and install handling inside the relevant platform implementation even when this duplicates some code across adapters. Platform config formats and install locations change independently, so localized duplication is acceptable when it keeps future platform updates isolated. Extract shared helpers only for stable, cross-platform mechanics that are clearly reusable, such as path utilities, environment placeholder rewriting, config merging, or policy comment formatting.
+
 Between parsing and generation the orchestrator runs **validators** (`src/validators/`):
 
 - `validateCrossRefs(agents, skills, mcp)` — agent → skill (warn), agent → mcp (**error**), agent → subagent allowlist (warn)
 - `validateCollisions(agents, skills)` — duplicate agent or skill names (**error**)
 
 Errors abort the build (exit code 1, no files written). Warnings print and the build proceeds.
+
+Parse and validation failures are reported as **Diagnostics**. A diagnostic includes the source label (`base` or `preset:<name>`), source-relative file, absolute file path, field path, target platform (`claude`, `codex`, `cursor`, `opencode`, `forgecode`, `all`, or `none`), optional line/column, and a suggested fix when ULIS can infer one. Platform override fields such as `platforms.codex.*` report that platform; wildcard or cross-platform fields report `all`; source-only config errors report `none`.
 
 ## 2.1 Build configuration
 
@@ -74,9 +78,11 @@ Capability mismatches are handled with **best-effort + comments**: if a target l
 
 ## 2.2 Presets {#presets}
 
-**Presets** are additional ULIS source trees merged into the build before the selected base source (`./.ulis/`, `~/.ulis/`, or `--source`). Each preset name resolves to a directory: `~/.ulis/presets/<name>/` is tried first, then bundled presets adjacent to the CLI package. User and bundled trees share the same on-disk layout as a normal source; optional `preset.yaml` carries display metadata only (see [Field Reference — Preset metadata](./REFERENCE.md#preset-metadata-presets-name-preset-yaml)).
+**Presets** are reusable ULIS source trees. They can be merged into a build before the selected base source (`./.ulis/`, `~/.ulis/`, or `--source`), or installed by themselves with preset-only install. Each preset name resolves to a directory: `~/.ulis/presets/<name>/` is tried first, then bundled presets adjacent to the CLI package. User and bundled trees share the same on-disk layout as a normal source; optional `preset.yaml` carries display metadata only (see [Field Reference — Preset metadata](./REFERENCE.md#preset-metadata-presets-name-preset-yaml)).
 
 Parsed preset projects are merged **in CLI order** (comma-separated `--preset` values), then the base project is merged last so **the base wins** on duplicate entities and conflicting config keys. The same rules apply to `build`, `install`, and the TUI (including its validate action) when presets are selected. Discovery and labeling (`user` vs `bundled`) are implemented in `src/presets.ts` and `src/utils/resolve-presets.ts`. Optional fields for `preset.yaml` are documented under [Preset metadata](./REFERENCE.md#preset-metadata).
+
+Preset-only install (`ulis preset install <names...>` and the TUI Presets screen action) parses and validates only the selected presets, merges them in the requested order, generates selected platform output in a temporary directory, installs that output to the chosen destination, then removes the temporary output. It does not require a project/global source and does not read or merge base source files. Preset `skills.yaml` and `extensions.yaml` entries run during preset-only install; extension runner selection is CLI flag first, then auto-detect (`bunx` if present, otherwise `npx`).
 
 ---
 
@@ -322,7 +328,7 @@ generateCursor(agents, skills, mcp, sourceDir, join(generatedDir, "cursor"));
 generateForgecode(agents, skills, mcp, sourceDir, join(generatedDir, "forgecode"));
 ```
 
-Parsing validates against Zod schemas and fails fast with a descriptive error if a field is invalid.
+Parsing validates against Zod schemas and reports localized diagnostics for broken Markdown frontmatter, YAML/JSON config syntax, and schema failures. Semantic validators reuse the same diagnostic shape for cross-reference and collision failures.
 
 ---
 

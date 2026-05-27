@@ -40,6 +40,7 @@ describe("mergeProjects", () => {
     expect(merged.rules[0]?.body).toBe("base");
     expect(merged.ulisConfig.name).toBe("base");
     expect(merged.sourceDir).toBe("/base");
+    expect(merged.sourceDirs).toEqual(["/preset", "/base"]);
   });
 
   it("preserves preset order before base for non-duplicate entries", () => {

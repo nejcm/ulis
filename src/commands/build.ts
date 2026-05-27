@@ -1,14 +1,13 @@
 import { runBuild } from "../build.js";
+import type { TargetOptionInput } from "../build.js";
 import { parsePlatformList, type Platform } from "../platforms.js";
 import { logger as log } from "../utils/logger.js";
 import { parsePresetNames, resolvePresets } from "../utils/resolve-presets.js";
 import { resolveSource } from "../utils/resolve-source.js";
 
-export interface BuildCmdOptions {
+export interface BuildCmdOptions extends TargetOptionInput {
   readonly global?: boolean;
   readonly source?: string;
-  readonly target?: string | string[];
-  readonly targets?: string | string[];
   readonly preset?: string | string[];
 }
 
@@ -27,7 +26,7 @@ export async function buildCmd(options: BuildCmdOptions = {}): Promise<void> {
 /**
  * Parse `--target/--targets` values into deduplicated platform identifiers.
  */
-export function parseTargets(options: BuildCmdOptions): readonly Platform[] | undefined {
+export function parseTargets(options: TargetOptionInput): readonly Platform[] | undefined {
   const raw = options.target ?? options.targets;
   if (raw === undefined) return undefined;
   const list = Array.isArray(raw) ? raw : [raw];

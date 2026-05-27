@@ -3,7 +3,19 @@ import { join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { ZodError, type z } from "zod";
 
+import { ParseError } from "../parsers/_shared.js";
 import { fileExists, readFile } from "./fs.js";
+
+export interface ConfigDiagnosticOptions {
+  readonly source?: string;
+  readonly sourceDir?: string;
+}
+
+interface ConfigParseContext extends ConfigDiagnosticOptions {
+  readonly content?: string;
+  readonly relativeFile?: string;
+  readonly isJson?: boolean;
+}
 
 function formatSchemaError(cause: unknown): string {
   if (cause instanceof ZodError) {
@@ -21,10 +33,22 @@ export function parseConfigOrThrow<T>(
   raw: unknown,
   baseName: string,
   filePath: string | undefined,
+  diagnostic?: ConfigParseContext,
 ): T {
   try {
     return schema.parse(raw);
   } catch (err) {
+    if (diagnostic) {
+      throw new ParseError(baseName, diagnostic.relativeFile ?? filePath ?? `${baseName}.{yaml,yml,json}`, err, {
+        source: diagnostic.source,
+        sourceDir: diagnostic.sourceDir,
+        relativeFile: diagnostic.relativeFile,
+        absoluteFile: filePath,
+        content: diagnostic.content,
+        lineOffset: 1,
+        isJson: diagnostic.isJson,
+      });
+    }
     const location = filePath ?? `${baseName}.{yaml,yml,json}`;
     throw new Error(`Failed to validate ${baseName} (${location}): ${formatSchemaError(err)}`);
   }
@@ -50,6 +74,7 @@ interface BaseValidatedConfigOptions<T> {
   readonly dir: string;
   readonly baseName: string;
   readonly schema: z.ZodType<T>;
+  readonly diagnostic?: ConfigDiagnosticOptions;
 }
 
 type RequiredValidatedConfigOptions<T> = BaseValidatedConfigOptions<T> & {
@@ -75,6 +100,22 @@ type OptionalValidatedConfigOptions<T> = BaseValidatedConfigOptions<T> & {
  * fallback for legacy JSON-based layouts.
  */
 export function loadConfigFile(dir: string, baseName: string): unknown | undefined {
+  return loadConfigEntry(dir, baseName)?.value;
+}
+
+interface LoadedConfigEntry {
+  readonly value: unknown;
+  readonly filePath: string;
+  readonly relativeFile: string;
+  readonly content: string;
+  readonly isJson: boolean;
+}
+
+function loadConfigEntry(
+  dir: string,
+  baseName: string,
+  diagnostic?: ConfigDiagnosticOptions,
+): LoadedConfigEntry | undefined {
   for (const candidate of configCandidates(baseName)) {
     const filePath = join(dir, candidate);
     if (!fileExists(filePath)) continue;
@@ -82,10 +123,21 @@ export function loadConfigFile(dir: string, baseName: string): unknown | undefin
     const content = readFile(filePath);
     try {
       if (candidate.endsWith(".json")) {
-        return JSON.parse(content) as unknown;
+        return { value: JSON.parse(content) as unknown, filePath, relativeFile: candidate, content, isJson: true };
       }
-      return parseYaml(content) as unknown;
+      return { value: parseYaml(content) as unknown, filePath, relativeFile: candidate, content, isJson: false };
     } catch (err) {
+      if (diagnostic) {
+        throw new ParseError(baseName, candidate, err, {
+          source: diagnostic.source,
+          sourceDir: diagnostic.sourceDir,
+          relativeFile: candidate,
+          absoluteFile: filePath,
+          content,
+          lineOffset: 1,
+          isJson: candidate.endsWith(".json"),
+        });
+      }
       throw new Error(`Failed to parse ${filePath}: ${(err as Error).message}`);
     }
   }
@@ -97,11 +149,11 @@ export function loadConfigFile(dir: string, baseName: string): unknown | undefin
  * Like `loadConfigFile`, but throws when no file is found.
  */
 export function loadRequiredConfigFile(dir: string, baseName: string): unknown {
-  const value = loadConfigFile(dir, baseName);
+  const value = loadConfigEntry(dir, baseName);
   if (value === undefined) {
     throw new Error(`Required config file not found: ${baseName}.{yaml,yml,json} in ${dir}`);
   }
-  return value;
+  return value.value;
 }
 
 export function loadValidatedConfigFile<T>(options: RequiredValidatedConfigOptions<T>): T;
@@ -111,14 +163,33 @@ export function loadValidatedConfigFile<T>(
   options: RequiredValidatedConfigOptions<T> | DefaultedValidatedConfigOptions<T> | OptionalValidatedConfigOptions<T>,
 ): T | undefined {
   const raw = options.required
-    ? loadRequiredConfigFile(options.dir, options.baseName)
-    : loadConfigFile(options.dir, options.baseName);
+    ? loadRequiredConfigEntry(options.dir, options.baseName, options.diagnostic)
+    : loadConfigEntry(options.dir, options.baseName, options.diagnostic);
 
   if (raw === undefined) {
     if ("defaultValue" in options) return options.schema.parse(options.defaultValue);
     return undefined;
   }
 
-  const filePath = resolveLoadedConfigPath(options.dir, options.baseName);
-  return parseConfigOrThrow(options.schema, raw, options.baseName, filePath);
+  const diagnostic = options.diagnostic
+    ? {
+        ...options.diagnostic,
+        relativeFile: raw.relativeFile,
+        content: raw.content,
+        isJson: raw.isJson,
+      }
+    : undefined;
+  return parseConfigOrThrow(options.schema, raw.value, options.baseName, raw.filePath, diagnostic);
+}
+
+function loadRequiredConfigEntry(
+  dir: string,
+  baseName: string,
+  diagnostic?: ConfigDiagnosticOptions,
+): LoadedConfigEntry {
+  const value = loadConfigEntry(dir, baseName, diagnostic);
+  if (value === undefined) {
+    throw new Error(`Required config file not found: ${baseName}.{yaml,yml,json} in ${dir}`);
+  }
+  return value;
 }

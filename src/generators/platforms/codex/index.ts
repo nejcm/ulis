@@ -5,6 +5,7 @@ import { enabledRulesFor } from "../../../parsers/rule.js";
 import { enabledSkillsFor } from "../../../parsers/skill.js";
 import { PLATFORM_DIRS, resolvePlatformDirSegment } from "../../../platforms.js";
 import { buildRulesIndex } from "../../shared/rules-index.js";
+import { rawDirs } from "../../source-dirs.js";
 import type { FileArtifact, GenerationResult, ProjectBundle } from "../../types.js";
 import { buildCodexAgentArtifact } from "./agents.js";
 import { buildCodexConfigToml } from "./config.js";
@@ -27,7 +28,6 @@ export function generateCodex(project: ProjectBundle): GenerationResult {
   const appendAfterRaw: { path: string; content: string }[] = [];
   if (unsupportedPlatformRules === "inject") {
     const result = buildRulesIndex(enabledRulesFor(project.rules, "codex"), {
-      sourceDir: project.sourceDir,
       artifactPrefix: "rules",
       indexPath: "AGENTS.md",
       referencePrefix: join("~", resolvePlatformDirSegment(PLATFORM_DIRS.codex.home), "rules"),
@@ -41,7 +41,7 @@ export function generateCodex(project: ProjectBundle): GenerationResult {
   return {
     artifacts,
     post: {
-      rawDirs: [join(project.sourceDir, "raw", "common"), join(project.sourceDir, "raw", "codex")],
+      rawDirs: rawDirs(project, "codex"),
       aliasFiles: [],
       skillDirs: [],
       appendAfterRaw,

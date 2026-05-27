@@ -1,34 +1,23 @@
 import { spawn, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { runBuild, type Logger } from "./build.js";
+import { analyzePresets, runBuild, type Logger } from "./build.js";
 import { ULIS_GENERATED_DIRNAME } from "./config.js";
+import { generate, writeResult } from "./generators/index.js";
+import { InstallError } from "./install/errors.js";
+import { installClaude, installCodex, installCursor, installForgecode, installOpencode } from "./install/platforms.js";
+import type { InstallContext, Runner as InstallRunner } from "./install/types.js";
 import { loadExtensions, mergeExtensionsConfigs } from "./parsers/extensions.js";
 import { loadSkills, mergeSkillsConfigs } from "./parsers/skills.js";
-import {
-  isSamePath,
-  PLATFORM_DIRS,
-  PLATFORM_LABELS,
-  platformConfigDir,
-  PLATFORMS,
-  resolvePlatformDirSegment,
-  uniquePlatforms,
-  type Platform,
-} from "./platforms.js";
+import { isSamePath, PLATFORMS, uniquePlatforms, type Platform } from "./platforms.js";
 import { UlisConfigSchema, type ExtensionsConfig, type SkillsConfig } from "./schema.js";
 import { loadValidatedConfigFile } from "./utils/config-loader.js";
-import {
-  capturePreservedNativeConfigs,
-  PreservedNativeConfigParseError,
-  writePreservedNativeConfigs,
-  type CapturedPreservedNativeConfig,
-} from "./utils/config-merger.js";
 import { logger as defaultLogger } from "./utils/logger.js";
 import type { ResolvedPreset } from "./utils/resolve-presets.js";
 
-export type Runner = "npx" | "bunx";
+export type { Runner } from "./install/types.js";
 
 export interface InstallOptions {
   readonly platforms?: readonly Platform[];
@@ -53,7 +42,24 @@ export interface InstallOptions {
   /** Resolved presets to merge at build time and for external skill installs. */
   readonly presets?: readonly ResolvedPreset[];
   /** Override the package runner used for `extensions.yaml` entries. */
-  readonly runner?: Runner;
+  readonly runner?: InstallRunner;
+  /** When false, skip running extensions installers (`extensions.yaml`). */
+  readonly installExtensions?: boolean;
+}
+
+export interface PresetInstallOptions {
+  readonly platforms?: readonly Platform[];
+  /** Presets to install as the complete source. Applied in order; later presets win conflicts. */
+  readonly presets: readonly ResolvedPreset[];
+  /** Where the per-platform configs land — typically `~` for global, CWD for project. */
+  readonly destBase: string;
+  /** Install skills globally (`npx skills ... -g`) instead of project-local. */
+  readonly globalInstall?: boolean;
+  readonly backup?: boolean;
+  readonly logger?: Logger;
+  readonly userHome?: string;
+  /** Override the package runner used for `extensions.yaml` entries. */
+  readonly runner?: InstallRunner;
   /** When false, skip running extensions installers (`extensions.yaml`). */
   readonly installExtensions?: boolean;
 }
@@ -86,6 +92,20 @@ interface RuntimeDependencies {
   readonly runAsyncCommand: RunAsyncCommand;
 }
 
+interface GeneratedInstallOptions {
+  readonly outputDir: string;
+  readonly destBase: string;
+  readonly userHome: string;
+  readonly globalInstall: boolean;
+  readonly backup: boolean;
+  readonly platforms: readonly Platform[];
+  readonly skillsConfig: SkillsConfig;
+  readonly extensionsConfig: ExtensionsConfig;
+  readonly runner: InstallRunner;
+  readonly installExtensionsEnabled: boolean;
+  readonly logger: Logger;
+}
+
 const defaultRuntimeDependencies: RuntimeDependencies = {
   runCommand(command, args, options) {
     return spawnSync(command, [...args], options);
@@ -96,16 +116,6 @@ const defaultRuntimeDependencies: RuntimeDependencies = {
 };
 
 let runtimeDependencies: RuntimeDependencies = { ...defaultRuntimeDependencies };
-
-class InstallError extends Error {
-  constructor(
-    message: string,
-    readonly cause?: unknown,
-  ) {
-    super(message);
-    this.name = "InstallError";
-  }
-}
 
 /**
  * Load environment variables from `<rootDir>/.env` without overriding existing values.
@@ -201,20 +211,106 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
   });
   const runner = resolveRunner({ cliFlag: options.runner, configValue: ulisConfig.runner });
 
-  const timestamp = makeTimestamp();
-  for (const platform of platforms) {
-    const context: InstallContext = {
+  await installGeneratedOutput({
+    outputDir,
+    destBase,
+    userHome,
+    globalInstall,
+    backup,
+    platforms,
+    skillsConfig,
+    extensionsConfig,
+    runner,
+    installExtensionsEnabled,
+    logger,
+  });
+
+  logHeader(logger, "Installation Complete");
+  return platforms;
+}
+
+/**
+ * Install selected presets as the complete source without requiring a base source tree.
+ */
+export async function runPresetInstall(options: PresetInstallOptions): Promise<readonly Platform[]> {
+  const logger = options.logger ?? defaultLogger;
+  const presets = options.presets;
+  if (presets.length === 0) {
+    throw new Error("Select at least one preset to install.");
+  }
+
+  const destBase = resolve(options.destBase);
+  const platforms = options.platforms ? uniquePlatforms(options.platforms) : [...PLATFORMS];
+  const userHome = resolve(options.userHome ?? homedir());
+  const globalInstall = options.globalInstall ?? isSamePath(destBase, userHome);
+  const backup = options.backup ?? false;
+  const installExtensionsEnabled = options.installExtensions ?? true;
+  const runner = resolveRunner({ cliFlag: options.runner });
+  const tempRoot = mkdtempSync(join(tmpdir(), "ulis-preset-install-"));
+  const outputDir = join(tempRoot, ULIS_GENERATED_DIRNAME);
+
+  try {
+    loadDotEnv(destBase);
+
+    logHeader(logger, `ULIS Preset Install (${process.platform === "win32" ? "Windows" : "Linux/macOS"})`);
+    logInfo(logger, `Presets: ${presets.map((preset) => preset.name).join(", ")}`);
+    logInfo(logger, `Output (temporary): ${outputDir}`);
+    logInfo(logger, `Destination base: ${destBase}`);
+    logInfo(logger, `Platforms: ${platforms.join(", ")}`);
+
+    if (platforms.length === 0) {
+      logWarn(logger, "No platforms selected. Nothing to install.");
+      return [];
+    }
+
+    const analysis = analyzePresets({ presets, logger });
+    for (const target of platforms) {
+      const outDir = join(outputDir, target);
+      const result = generate(target, analysis.project);
+      if (!result) throw new Error(`No generator registered for platform: ${target}`);
+      writeResult(result, outDir, target, logger);
+    }
+
+    const skillsConfig = mergeSkillsConfigs(presets.map((preset) => loadSkills(preset.dir)));
+    const extensionsConfig = mergeExtensionsConfigs(presets.map((preset) => loadExtensions(preset.dir)));
+
+    await installGeneratedOutput({
       outputDir,
       destBase,
       userHome,
       globalInstall,
       backup,
-      timestamp,
-      extensions: extensionsConfig,
+      platforms,
+      skillsConfig,
+      extensionsConfig,
       runner,
       installExtensionsEnabled,
       logger,
-    };
+    });
+
+    logHeader(logger, "Preset Installation Complete");
+    return platforms;
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+}
+
+async function installGeneratedOutput(options: GeneratedInstallOptions): Promise<void> {
+  const timestamp = makeTimestamp();
+  const context: InstallContext = {
+    outputDir: options.outputDir,
+    destBase: options.destBase,
+    userHome: options.userHome,
+    globalInstall: options.globalInstall,
+    backup: options.backup,
+    timestamp,
+    extensions: options.extensionsConfig,
+    runner: options.runner,
+    installExtensionsEnabled: options.installExtensionsEnabled,
+    logger: options.logger,
+  };
+
+  for (const platform of options.platforms) {
     switch (platform) {
       case "opencode":
         await installOpencode(context);
@@ -234,217 +330,30 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
     }
   }
 
-  for (const platform of platforms) {
-    const platformSkills = skillsConfig[platform]?.skills ?? [];
+  for (const platform of options.platforms) {
+    const platformSkills = options.skillsConfig[platform]?.skills ?? [];
     if (platformSkills.length > 0) {
-      await installSkills(platformSkills, platform, destBase, globalInstall, logger);
+      await installSkills(platformSkills, platform, options.destBase, options.globalInstall, options.logger);
     }
   }
 
-  const allSkills = skillsConfig["*"]?.skills ?? [];
+  const allSkills = options.skillsConfig["*"]?.skills ?? [];
   if (allSkills.length > 0) {
-    logHeader(logger, "Installing External Skills");
-    await installSkills(allSkills, "*", destBase, globalInstall, logger, platforms);
+    logHeader(options.logger, "Installing External Skills");
+    await installSkills(allSkills, "*", options.destBase, options.globalInstall, options.logger, options.platforms);
   }
 
-  if (installExtensionsEnabled) {
-    for (const platform of platforms) {
-      runPlatformExtensions(
-        {
-          outputDir,
-          destBase,
-          userHome,
-          globalInstall,
-          backup,
-          timestamp,
-          extensions: extensionsConfig,
-          runner,
-          installExtensionsEnabled,
-          logger,
-        },
-        platform,
-      );
-    }
+  if (!options.installExtensionsEnabled) return;
 
-    const allExtensions = extensionsConfig["*"]?.extensions ?? [];
-    if (allExtensions.length > 0) {
-      logHeader(logger, "Installing Extensions");
-      installExtensions(allExtensions, "*", destBase, runner, logger);
-    }
+  for (const platform of options.platforms) {
+    runPlatformExtensions(context, platform);
   }
 
-  logHeader(logger, "Installation Complete");
-  return platforms;
-}
-
-interface InstallContext {
-  readonly outputDir: string;
-  readonly destBase: string;
-  readonly userHome: string;
-  readonly globalInstall: boolean;
-  readonly backup: boolean;
-  readonly timestamp: string;
-  readonly extensions: ExtensionsConfig;
-  readonly runner: Runner;
-  readonly installExtensionsEnabled: boolean;
-  readonly logger?: Logger;
-}
-
-async function installOpencode(context: InstallContext): Promise<void> {
-  const targetDir = platformConfigDir("opencode", context.destBase, context.userHome);
-  const sourceDir = join(context.outputDir, "opencode");
-
-  logHeader(context.logger, `Installing ${PLATFORM_LABELS.opencode}`);
-  backupDirectory(targetDir, context);
-  const preservedConfigs = capturePlatformPreservedNativeConfigs("opencode", context);
-
-  removePath(targetDir);
-  copyPath(sourceDir, targetDir);
-  writePlatformPreservedNativeConfigs("opencode", preservedConfigs, context);
-  logSuccess(context.logger, `OpenCode -> ${targetDir}`);
-}
-
-async function installClaude(context: InstallContext): Promise<void> {
-  const targetDir = platformConfigDir("claude", context.destBase, context.userHome);
-  const sourceDir = join(context.outputDir, "claude");
-  // For global install: MCP servers live in user-scope `~/.claude.json`.
-  // For project install: Claude Code reads project-scoped servers from `<project>/.mcp.json`.
-  const targetRootConfig = context.globalInstall
-    ? join(context.destBase, ".claude.json")
-    : join(context.destBase, ".mcp.json");
-
-  logHeader(context.logger, `Installing ${PLATFORM_LABELS.claude}`);
-  backupDirectory(targetDir, context);
-  backupFile(targetRootConfig, context);
-  const preservedConfigs = capturePlatformPreservedNativeConfigs("claude", context);
-  ensureDir(targetDir);
-
-  writePlatformPreservedNativeConfigs("claude", preservedConfigs, context);
-
-  copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["settings.json", ".claude.json"]));
-}
-
-async function installCodex(context: InstallContext): Promise<void> {
-  const targetDir = platformConfigDir("codex", context.destBase, context.userHome);
-  const sourceDir = join(context.outputDir, "codex");
-
-  logHeader(context.logger, `Installing ${PLATFORM_LABELS.codex}`);
-  backupDirectory(targetDir, context);
-  const preservedConfigs = capturePlatformPreservedNativeConfigs("codex", context);
-  ensureDir(targetDir);
-  copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["config.toml"]));
-  writePlatformPreservedNativeConfigs("codex", preservedConfigs, context);
-}
-
-async function installCursor(context: InstallContext): Promise<void> {
-  const targetDir = platformConfigDir("cursor", context.destBase, context.userHome);
-  const sourceDir = join(context.outputDir, "cursor");
-
-  logHeader(context.logger, `Installing ${PLATFORM_LABELS.cursor}`);
-  backupDirectory(targetDir, context);
-  const preservedConfigs = capturePlatformPreservedNativeConfigs("cursor", context);
-  ensureDir(targetDir);
-
-  writePlatformPreservedNativeConfigs("cursor", preservedConfigs, context);
-
-  copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["mcp.json"]));
-}
-
-async function installForgecode(context: InstallContext): Promise<void> {
-  const sourceDir = join(context.outputDir, "forgecode");
-  const sourceForgeDir = join(sourceDir, resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project));
-  const targetForgeDir = platformConfigDir("forgecode", context.destBase, context.userHome);
-  const targetMcp = join(targetForgeDir, ".mcp.json");
-
-  logHeader(context.logger, `Installing ${PLATFORM_LABELS.forgecode}`);
-  backupDirectory(targetForgeDir, context);
-  backupFile(targetMcp, context);
-  const preservedConfigs = capturePlatformPreservedNativeConfigs("forgecode", context);
-  ensureDir(targetForgeDir);
-
-  if (existsSync(sourceForgeDir)) {
-    copyPlatformContents(sourceForgeDir, targetForgeDir, context.logger, new Set([".mcp.json"]));
+  const allExtensions = options.extensionsConfig["*"]?.extensions ?? [];
+  if (allExtensions.length > 0) {
+    logHeader(options.logger, "Installing Extensions");
+    installExtensions(allExtensions, "*", options.destBase, options.runner, options.logger);
   }
-
-  copyPlatformContents(
-    sourceDir,
-    targetForgeDir,
-    context.logger,
-    new Set([resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project), ".forge.toml"]),
-  );
-
-  writePlatformPreservedNativeConfigs("forgecode", preservedConfigs, context);
-}
-
-function copyPlatformContents(
-  sourceDir: string,
-  targetDir: string,
-  logger?: Logger,
-  skipNames: ReadonlySet<string> = new Set(),
-): void {
-  ensureDir(targetDir);
-  if (!existsSync(sourceDir)) {
-    throw new InstallError(`Generated platform directory does not exist: ${sourceDir}`);
-  }
-
-  const entries = readDirectoryEntries(sourceDir);
-  for (const entry of entries) {
-    if (skipNames.has(entry)) {
-      continue;
-    }
-
-    const sourcePath = join(sourceDir, entry);
-    const targetPath = join(targetDir, entry);
-    removePath(targetPath);
-    copyPath(sourcePath, targetPath);
-    logSuccess(logger, entry);
-  }
-}
-
-function capturePlatformPreservedNativeConfigs(
-  platform: Platform,
-  context: InstallContext,
-): readonly CapturedPreservedNativeConfig[] {
-  try {
-    return capturePreservedNativeConfigs(platform, context);
-  } catch (error) {
-    if (error instanceof PreservedNativeConfigParseError) {
-      throw new InstallError(error.message, error);
-    }
-    throw new InstallError(`Failed to capture preserved native config for ${platform}`, error);
-  }
-}
-
-function writePlatformPreservedNativeConfigs(
-  platform: Platform,
-  entries: readonly CapturedPreservedNativeConfig[],
-  context: InstallContext,
-): void {
-  try {
-    writePreservedNativeConfigs(entries, context.logger);
-  } catch (error) {
-    throw new InstallError(`Failed to write preserved native config for ${platform}`, error);
-  }
-}
-
-function backupDirectory(targetDir: string, context: InstallContext): void {
-  if (!context.backup || !existsSync(targetDir)) {
-    return;
-  }
-
-  const backupPath = `${targetDir}.${context.timestamp}.backup`;
-  copyPath(targetDir, backupPath);
-  logInfo(context.logger, `[backup] ${targetDir} -> ${backupPath}`);
-}
-
-function backupFile(targetPath: string, context: InstallContext): void {
-  if (!context.backup || !existsSync(targetPath)) {
-    return;
-  }
-
-  const backupPath = `${targetPath}.${context.timestamp}.backup`;
-  copyPath(targetPath, backupPath);
-  logInfo(context.logger, `[backup] ${targetPath} -> ${backupPath}`);
 }
 
 // map platform key to skills argument agent name
@@ -539,7 +448,7 @@ function installExtensions(
   extensions: readonly { key?: string; name: string; args?: readonly string[] }[],
   platform: Platform | "*",
   installBaseDir: string,
-  runner: Runner,
+  runner: InstallRunner,
   logger?: Logger,
 ): void {
   if (extensions.length === 0) return;
@@ -578,10 +487,10 @@ export function resolveRunner({
   configValue,
   hasCommand = commandExists,
 }: {
-  cliFlag?: Runner;
-  configValue?: Runner;
+  cliFlag?: InstallRunner;
+  configValue?: InstallRunner;
   hasCommand?: (cmd: string) => boolean;
-}): Runner {
+}): InstallRunner {
   if (cliFlag) return cliFlag;
   if (configValue) return configValue;
   return hasCommand("bunx") ? "bunx" : "npx";
@@ -607,44 +516,12 @@ function formatCommandFailure(result: { stdout?: unknown; stderr?: unknown; stat
   return combined[combined.length - 1] || result.error?.message || `exit ${result.status}`;
 }
 
-function ensureDir(dirPath: string): void {
-  try {
-    mkdirSync(dirPath, { recursive: true });
-  } catch (error) {
-    throw new InstallError(`Failed to create directory: ${dirPath}`, error);
-  }
-}
-
 function makeTimestamp(): string {
   const now = new Date();
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(
     now.getMinutes(),
   )}${pad(now.getSeconds())}`;
-}
-
-function readDirectoryEntries(dirPath: string): readonly string[] {
-  try {
-    return readdirSync(dirPath);
-  } catch (error) {
-    throw new InstallError(`Failed to list directory: ${dirPath}`, error);
-  }
-}
-
-function removePath(path: string): void {
-  try {
-    rmSync(path, { recursive: true, force: true });
-  } catch (error) {
-    throw new InstallError(`Failed to remove path: ${path}`, error);
-  }
-}
-
-function copyPath(sourcePath: string, targetPath: string): void {
-  try {
-    cpSync(sourcePath, targetPath, { recursive: true });
-  } catch (error) {
-    throw new InstallError(`Failed to copy ${sourcePath} -> ${targetPath}`, error);
-  }
 }
 
 function runCommand(command: string, args: readonly string[], options: Parameters<typeof spawnSync>[2]) {

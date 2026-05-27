@@ -48,6 +48,25 @@ describe("validateCollisions", () => {
     expect(out[0]?.suggestion).toContain("`name:` frontmatter");
   });
 
+  it("includes file and field path for duplicate names", () => {
+    const first = agent("dup");
+    const second = {
+      ...agent("dup"),
+      origin: {
+        source: "base",
+        relativeFile: "agents/dup-two.md",
+        absoluteFile: "/repo/.ulis/agents/dup-two.md",
+        target: "all" as const,
+      },
+    };
+
+    const out = validateCollisions([first, second], []);
+
+    expect(out[0]?.relativeFile).toBe("agents/dup-two.md");
+    expect(out[0]?.fieldPath).toBe("name");
+    expect(out[0]?.target).toBe("all");
+  });
+
   it("flags duplicate skill directory names", () => {
     const out = validateCollisions([], [skill("dup"), skill("dup")]);
     expect(out).toHaveLength(1);

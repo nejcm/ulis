@@ -68,6 +68,8 @@ export interface ProjectBundle {
   readonly ulisConfig: UlisConfig;
   /** Absolute path to the `.ulis/` source tree. Generators may read raw/, commands/, etc. from here. */
   readonly sourceDir: string;
+  /** Ordered source trees that contributed to this bundle. Later sources win pass-through conflicts. */
+  readonly sourceDirs?: readonly string[];
 }
 
 export type GeneratorFn = (project: ProjectBundle, platform: Platform) => GenerationResult;

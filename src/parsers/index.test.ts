@@ -39,6 +39,29 @@ describe("parseProject (happy path)", () => {
     expect(p.ulisConfig.name).toBe("fixtures");
     expect(p.sourceDir).toBe(fixturesDir);
   });
+
+  it("keeps rule filenames relative to rules/ while origin points to source file", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "ulis-test-"));
+    try {
+      mkdirSync(join(tmp, "rules", "common"), { recursive: true });
+      writeBaseProjectConfig(tmp);
+      writeFileSync(
+        join(tmp, "rules", "common", "security.md"),
+        `---
+description: Security rules
+---
+Body.
+`,
+      );
+
+      const p = parseProject(tmp);
+
+      expect(p.rules[0]?.filename).toBe("common/security.md");
+      expect(p.rules[0]?.origin?.relativeFile).toBe("rules/common/security.md");
+    } finally {
+      rmSync(tmp, { recursive: true });
+    }
+  });
 });
 
 // ─── Missing directory handling ───────────────────────────────────────────────
@@ -221,7 +244,131 @@ Body.
 `,
       );
 
-      expect(() => parseProject(tmp)).toThrow(ParseAggregateError);
+      try {
+        parseProject(tmp);
+        throw new Error("Expected parseProject to throw");
+      } catch (err) {
+        expect(err instanceof ParseAggregateError).toBe(true);
+        const diag = (err as ParseAggregateError).errors[0]?.toDiagnostic();
+        expect(diag?.relativeFile).toBe("agents/broken-yaml.md");
+        expect(diag?.absoluteFile).toBe(join(tmp, "agents", "broken-yaml.md"));
+        expect(diag?.target).toBe("none");
+        expect(diag?.line).toBe(5);
+      }
+    } finally {
+      rmSync(tmp, { recursive: true });
+    }
+  });
+
+  it("localizes invalid frontmatter fields", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "ulis-test-"));
+    try {
+      mkdirSync(join(tmp, "agents"));
+      writeBaseProjectConfig(tmp);
+      writeFileSync(
+        join(tmp, "agents", "bad-field.md"),
+        `---
+description: Bad field
+model: 123
+tools:
+  read: true
+---
+Body.
+`,
+      );
+
+      try {
+        parseProject(tmp);
+      } catch (err) {
+        expect(err instanceof ParseAggregateError).toBe(true);
+        const diag = (err as ParseAggregateError).errors[0]?.toDiagnostic();
+        expect(diag?.source).toBe("base");
+        expect(diag?.relativeFile).toBe("agents/bad-field.md");
+        expect(diag?.absoluteFile).toBe(join(tmp, "agents", "bad-field.md"));
+        expect(diag?.fieldPath).toBe("model");
+        expect(diag?.target).toBe("all");
+      }
+    } finally {
+      rmSync(tmp, { recursive: true });
+    }
+  });
+
+  it("localizes invalid YAML config fields", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "ulis-test-"));
+    try {
+      writeFileSync(join(tmp, "config.yaml"), "version: 1\nname: test\nunsupportedPlatformRules: nope\n");
+      writeFileSync(join(tmp, "mcp.json"), JSON.stringify({ servers: {} }));
+
+      try {
+        parseProject(tmp);
+      } catch (err) {
+        expect(err instanceof ParseAggregateError).toBe(true);
+        const diag = (err as ParseAggregateError).errors[0]?.toDiagnostic();
+        expect(diag?.relativeFile).toBe("config.yaml");
+        expect(diag?.fieldPath).toBe("unsupportedPlatformRules");
+        expect(diag?.target).toBe("none");
+        expect(diag?.line).toBe(3);
+      }
+    } finally {
+      rmSync(tmp, { recursive: true });
+    }
+  });
+
+  it("localizes platform-specific config fields to their target", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "ulis-test-"));
+    try {
+      writeBaseProjectConfig(tmp);
+      writeFileSync(join(tmp, "permissions.yaml"), "codex:\n  approvalMode: no-such-mode\n");
+
+      try {
+        parseProject(tmp);
+      } catch (err) {
+        expect(err instanceof ParseAggregateError).toBe(true);
+        const diag = (err as ParseAggregateError).errors[0]?.toDiagnostic();
+        expect(diag?.relativeFile).toBe("permissions.yaml");
+        expect(diag?.fieldPath).toBe("codex.approvalMode");
+        expect(diag?.target).toBe("codex");
+      }
+    } finally {
+      rmSync(tmp, { recursive: true });
+    }
+  });
+
+  it("localizes config syntax errors without field paths to no target", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "ulis-test-"));
+    try {
+      writeBaseProjectConfig(tmp);
+      writeFileSync(join(tmp, "permissions.yaml"), "codex: [\n");
+
+      try {
+        parseProject(tmp);
+      } catch (err) {
+        expect(err instanceof ParseAggregateError).toBe(true);
+        const diag = (err as ParseAggregateError).errors[0]?.toDiagnostic();
+        expect(diag?.relativeFile).toBe("permissions.yaml");
+        expect(diag?.fieldPath).toBeUndefined();
+        expect(diag?.target).toBe("none");
+      }
+    } finally {
+      rmSync(tmp, { recursive: true });
+    }
+  });
+
+  it("localizes invalid JSON config syntax", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "ulis-test-"));
+    try {
+      writeFileSync(join(tmp, "config.json"), "{");
+      writeFileSync(join(tmp, "mcp.json"), JSON.stringify({ servers: {} }));
+
+      try {
+        parseProject(tmp);
+      } catch (err) {
+        expect(err instanceof ParseAggregateError).toBe(true);
+        const diag = (err as ParseAggregateError).errors[0]?.toDiagnostic();
+        expect(diag?.relativeFile).toBe("config.json");
+        expect(diag?.absoluteFile).toBe(join(tmp, "config.json"));
+        expect(diag?.target).toBe("none");
+      }
     } finally {
       rmSync(tmp, { recursive: true });
     }

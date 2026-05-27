@@ -131,6 +131,52 @@ describe("tui state", () => {
     expect(selectedPresets(state)).toEqual([{ name: "team", dir: "/presets/team" }]);
   });
 
+  it("resolves selected presets in displayed list order", () => {
+    const state: TuiState = createInitialState([
+      { name: "b", displayName: "B", description: "", source: "user", dir: "/presets/b" },
+      { name: "a", displayName: "A", description: "", source: "user", dir: "/presets/a" },
+    ]);
+
+    state.selectedPresetNames = ["a", "b"];
+
+    expect(selectedPresets(state)).toEqual([
+      { name: "b", dir: "/presets/b" },
+      { name: "a", dir: "/presets/a" },
+    ]);
+  });
+
+  it("presets screen blocks preset install with no selected presets", () => {
+    const state = createInitialState([
+      { name: "team", displayName: "Team", description: "", source: "user", dir: "/presets/team" },
+    ]);
+    state.screen = "presets";
+    state.cursor = 1;
+
+    expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
+    expect(state.screen as string).toBe("presets");
+    expect(state.notice).toContain("preset");
+  });
+
+  it("presets screen opens preset install review without requiring a source", () => {
+    const root = createTempRoot();
+    const originalCwd = process.cwd();
+    process.chdir(root);
+    try {
+      const state = createInitialState([
+        { name: "team", displayName: "Team", description: "", source: "user", dir: "/presets/team" },
+      ]);
+      state.screen = "presets";
+      state.selectedPresetNames = ["team"];
+      state.cursor = 1;
+
+      expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
+      expect(state.screen as string).toBe("presetInstallReview");
+      expect(state.cursor).toBe(0);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
   it("platform screen can toggle all platforms off", () => {
     const state = createInitialState();
     state.screen = "platforms";
@@ -237,6 +283,48 @@ describe("tui state", () => {
 
     expect(state.screen as string).toBe("dashboard");
     expect(state.cursor).toBe(6);
+  });
+
+  it("presetInstallReview toggles extension installs with space", () => {
+    const state = createInitialState();
+    state.screen = "presetInstallReview";
+    state.cursor = 1;
+    state.presetInstallExtensions = true;
+
+    handleTuiKey(state, " ");
+
+    expect(state.presetInstallExtensions).toBe(false);
+  });
+
+  it("presetInstallReview start returns preset install effect", () => {
+    const state = createInitialState();
+    state.screen = "presetInstallReview";
+    state.cursor = 2;
+
+    expect(handleTuiKey(state, "enter")).toEqual({ type: "start", action: "presetInstall" });
+  });
+
+  it("presetInstallReview blocks start when no platforms are selected", () => {
+    const state = createInitialState();
+    state.screen = "presetInstallReview";
+    state.cursor = 2;
+    state.platforms = [];
+
+    expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
+    expect(state.notice).toContain("platform");
+  });
+
+  it("presetInstallReview back navigates to presets", () => {
+    const state = createInitialState([
+      { name: "team", displayName: "Team", description: "", source: "user", dir: "/presets/team" },
+    ]);
+    state.screen = "presetInstallReview";
+    state.cursor = 3;
+
+    handleTuiKey(state, "enter");
+
+    expect(state.screen as string).toBe("presets");
+    expect(state.cursor).toBe(1);
   });
 
   it("customSource path value syncs like TextInput onChange", () => {
@@ -442,7 +530,7 @@ describe("tui state", () => {
       { name: "team", displayName: "Team", description: "", source: "user", dir: "/p" },
     ]);
     state.screen = "presets";
-    state.cursor = 1; // Back to dashboard
+    state.cursor = 2; // Back to dashboard
     const originalNow = Date.now;
     let now = 1_000;
     Date.now = () => now;

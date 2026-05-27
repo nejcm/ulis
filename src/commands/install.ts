@@ -1,10 +1,9 @@
-import { existsSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 
 import { runInstall } from "../install.js";
-import { PLATFORMS, platformConfigDir, type Platform } from "../platforms.js";
+import { detectInstallCollisions } from "../install/platforms.js";
+import { PLATFORMS } from "../platforms.js";
 import { logger as log } from "../utils/logger.js";
 import { parsePresetNames, resolvePresets } from "../utils/resolve-presets.js";
 import { resolveSource } from "../utils/resolve-source.js";
@@ -28,7 +27,7 @@ export async function installCmd(options: InstallCmdOptions = {}): Promise<void>
     ? await resolvePresets(parsePresetNames(options.preset), { nonInteractive: options.yes ?? false })
     : [];
 
-  const collisions = detectCollisions(destBase, targets, mode === "global");
+  const collisions = detectInstallCollisions(destBase, targets, mode === "global");
   if (collisions.length > 0 && !options.yes) {
     log.warn("The following folders already exist and will be modified/overwritten:");
     for (const path of collisions) {
@@ -53,45 +52,6 @@ export async function installCmd(options: InstallCmdOptions = {}): Promise<void>
     runner: options.runner,
     installExtensions: options.extensions ?? true,
   });
-}
-
-// TODO: improve this function
-function detectCollisions(destBase: string, targets: readonly Platform[], globalInstall: boolean): string[] {
-  const paths: string[] = [];
-  for (const platform of targets) {
-    if (platform === "claude") {
-      const rootConfigPath = globalInstall ? join(destBase, ".claude.json") : join(destBase, ".mcp.json");
-      if (existsSync(rootConfigPath)) {
-        paths.push(rootConfigPath);
-      }
-    }
-
-    if (platform === "forgecode") {
-      const forgeDir = platformConfigDir(platform, destBase);
-      if (existsSync(forgeDir)) {
-        try {
-          if (readdirSync(forgeDir).length > 0) paths.push(forgeDir);
-        } catch {
-          // ignore
-        }
-      }
-      const mcpPath = join(forgeDir, ".mcp.json");
-      if (existsSync(mcpPath)) {
-        paths.push(mcpPath);
-      }
-      continue;
-    }
-
-    const platformDir = platformConfigDir(platform, destBase);
-    if (existsSync(platformDir)) {
-      try {
-        if (readdirSync(platformDir).length > 0) paths.push(platformDir);
-      } catch {
-        // ignore
-      }
-    }
-  }
-  return paths;
 }
 
 async function confirm(question: string): Promise<boolean> {

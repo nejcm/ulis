@@ -60,6 +60,26 @@ describe("validateCrossRefs", () => {
     expect(diags[0]?.message).toContain("does-not-exist");
   });
 
+  it("includes file and field path for missing references", () => {
+    const agent = {
+      ...makeAgent("alpha", { mcpServers: ["ghost"] }),
+      origin: {
+        source: "preset:team",
+        relativeFile: "agents/alpha.md",
+        absoluteFile: "/presets/team/agents/alpha.md",
+        target: "all" as const,
+      },
+    };
+
+    const [diag] = validateCrossRefs([agent], [], emptyMcp);
+
+    expect(diag?.source).toBe("preset:team");
+    expect(diag?.relativeFile).toBe("agents/alpha.md");
+    expect(diag?.absoluteFile).toBe("/presets/team/agents/alpha.md");
+    expect(diag?.fieldPath).toBe("mcpServers[]");
+    expect(diag?.target).toBe("all");
+  });
+
   it("errors on missing mcp reference", () => {
     const agents = [makeAgent("alpha", { mcpServers: ["ghost"] })];
     const diags = validateCrossRefs(agents, [], emptyMcp);

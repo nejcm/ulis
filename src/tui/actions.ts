@@ -3,7 +3,9 @@ import { createInterface } from "node:readline";
 
 import { analyzeProject, type Logger } from "../build.js";
 import { initCmd } from "../commands/init.js";
+import { formatDiagnostic } from "../diagnostics.js";
 import { loadExtensions } from "../parsers/extensions.js";
+import { ParseError } from "../parsers/index.js";
 import { planSource, selectedPresets, type TuiAction, type TuiState } from "./state.js";
 
 interface RuntimeDependencies {
@@ -32,7 +34,16 @@ export async function runTuiAction(
     logger.info(`Source: ${planned.sourceDir}`);
     if (presets.length > 0) logger.info(`Presets: ${presets.map((preset) => preset.name).join(", ")}`);
     const analysis = analyzeProject({ sourceDir: planned.sourceDir, presets, logger });
-    const extensionsConfig = loadExtensions(planned.sourceDir);
+    let extensionsConfig: ReturnType<typeof loadExtensions>;
+    try {
+      extensionsConfig = loadExtensions(planned.sourceDir, { source: "base", sourceDir: planned.sourceDir });
+    } catch (err) {
+      if (err instanceof ParseError) {
+        logger.error(formatDiagnostic(err.toDiagnostic()));
+        throw new Error("Parsing failed: 1 error(s). No files written.");
+      }
+      throw err;
+    }
     const extensionCount = Object.values(extensionsConfig).reduce(
       (acc, entry) => acc + (entry?.extensions?.length ?? 0),
       0,
@@ -75,15 +86,25 @@ async function runActionInChildProcess(
     throw new Error("Unable to resolve current CLI entry script.");
   }
 
-  const args = [...process.execArgv, entryScript, action, "--source", planSource(state).sourceDir];
+  const args =
+    action === "presetInstall"
+      ? [...process.execArgv, entryScript, "preset", "install", ...presetNames]
+      : [...process.execArgv, entryScript, action, "--source", planSource(state).sourceDir];
   args.push("--target", state.platforms.join(","));
-  if (presetNames.length > 0) args.push("--preset", presetNames.join(","));
+  if (action !== "presetInstall" && presetNames.length > 0) args.push("--preset", presetNames.join(","));
 
   if (action === "install") {
     args.push("--yes");
     if (planSource(state).globalInstall) args.push("--global");
     if (!state.rebuild) args.push("--no-rebuild");
     if (state.backup) args.push("--backup");
+  }
+
+  if (action === "presetInstall") {
+    args.push("--yes");
+    if (planSource(state).globalInstall) args.push("--global");
+    if (state.backup) args.push("--backup");
+    if (!state.presetInstallExtensions) args.push("--no-extensions");
   }
 
   await new Promise<void>((resolve, reject) => {

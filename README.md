@@ -13,6 +13,23 @@ Instead of maintaining separate "dialects" per platform, you keep a single canon
 
 ---
 
+## Project status
+
+`ulis` is still in active development. It writes real tool configuration files, and bugs or platform changes can produce bad generated config.
+
+Before using global mode, keep your home-level AI tool configs under local Git so you can inspect and revert changes:
+
+- `~/.ulis/`
+- `~/.claude/`
+- `~/.codex/`
+- `~/.cursor/`
+- `~/.config/opencode/`
+- `~/.forge/`
+
+For extra caution, run `ulis build` first to inspect generated files, and use `ulis install --backup` when installing over existing config.
+
+---
+
 ## Install
 
 ```bash
@@ -214,13 +231,13 @@ For the full field-level schema and examples, see [docs/REFERENCE.md](docs/REFER
 
 | Tool        | Strategy         | Target (project mode) | Target (global mode)                                                 |
 | ----------- | ---------------- | --------------------- | -------------------------------------------------------------------- |
-| OpenCode    | Overwrite        | `./.opencode/`        | `~/.config/opencode/` (`%USERPROFILE%\.config\opencode\` on Windows) |
+| OpenCode    | Merge by entry   | `./.opencode/`        | `~/.config/opencode/` (`%USERPROFILE%\.config\opencode\` on Windows) |
 | Claude Code | Merge (additive) | `./.claude/`          | `~/.claude/`                                                         |
-| Codex       | Overwrite        | `./.codex/`           | `~/.codex/`                                                          |
+| Codex       | Merge by entry   | `./.codex/`           | `~/.codex/`                                                          |
 | Cursor      | Merge (additive) | `./.cursor/`          | `~/.cursor/`                                                         |
 | ForgeCode   | Merge (additive) | `./.forge/`           | `~/.forge/`                                                          |
 
-`settings.json`, `.claude.json`, `mcp.json`, and ForgeCode's `.forge/.mcp.json` are deep-merged so user content outside `ulis`-managed keys is preserved. With `--backup`, existing platform directories/files are copied aside before overwriting.
+Generated agent and skill entries replace destination entries with the same native name; unrelated destination agents and skills are left in place. `settings.json`, `.claude.json`, `mcp.json`, and ForgeCode's `.forge/.mcp.json` are deep-merged so user content outside `ulis`-managed keys is preserved. With `--backup`, existing platform directories/files are copied aside before overwriting.
 
 `ulis install` runs phases in this order: **build → files → skills → extensions**. Extensions run last because they typically mutate the same files ulis just deployed.
 

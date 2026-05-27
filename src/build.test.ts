@@ -16,6 +16,19 @@ const silentLogger = {
   dim: () => {},
 };
 
+function captureLogger() {
+  const errors: string[] = [];
+  return {
+    header: () => {},
+    info: () => {},
+    success: () => {},
+    warn: () => {},
+    error: (message: string) => errors.push(message),
+    dim: () => {},
+    errors,
+  };
+}
+
 function createTempRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "ulis-build-"));
   tmpRoots.push(root);
@@ -67,5 +80,54 @@ Duplicate skill for test.`,
     // failures are both acceptable so long as no generated files are written.
     expect(() => analyzeProject({ sourceDir, logger: silentLogger })).toThrow("No files written.");
     expect(existsSync(join(sourceDir, "generated"))).toBe(false);
+  });
+
+  it("reports validation diagnostics against the original preset file", () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const presetDir = join(root, "preset");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(join(presetDir, "agents"), { recursive: true });
+    writeFileSync(join(sourceDir, "config.yaml"), "version: 1\nname: base\n");
+    writeFileSync(join(presetDir, "config.yaml"), "version: 1\nname: preset\n");
+    writeFileSync(
+      join(presetDir, "agents", "preset-agent.md"),
+      `---
+description: Preset agent
+tools:
+  read: true
+mcpServers:
+  - missing
+---
+Body.
+`,
+    );
+    const logger = captureLogger();
+
+    expect(() => analyzeProject({ sourceDir, logger, presets: [{ name: "team", dir: presetDir }] })).toThrow(
+      "Validation failed",
+    );
+
+    expect(logger.errors.join("\n")).toContain("source: preset:team");
+    expect(logger.errors.join("\n")).toContain("path: " + join(presetDir, "agents", "preset-agent.md"));
+  });
+
+  it("collects parse diagnostics across presets and base before failing", () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const presetDir = join(root, "preset");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(presetDir, { recursive: true });
+    writeFileSync(join(sourceDir, "config.yaml"), "version: 1\nname: base\nrunner: nope\n");
+    writeFileSync(join(presetDir, "config.yaml"), "version: 1\nname: preset\nunsupportedPlatformRules: nope\n");
+    const logger = captureLogger();
+
+    expect(() => analyzeProject({ sourceDir, logger, presets: [{ name: "team", dir: presetDir }] })).toThrow(
+      "Parsing failed: 2 error(s). No files written.",
+    );
+
+    const errors = logger.errors.join("\n");
+    expect(errors).toContain("source: preset:team");
+    expect(errors).toContain("source: base");
   });
 });
