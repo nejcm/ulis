@@ -29,6 +29,7 @@ export interface TuiPreferences {
 }
 
 const TUI_PREFERENCES_FILE = ".ulis-tui.json";
+const TUI_PREFERENCES_VERSION = 2;
 type MutableFlowPreferences = {
   -readonly [Key in keyof TuiFlowPreferences]?: TuiFlowPreferences[Key];
 };
@@ -40,12 +41,14 @@ export function getTuiPreferencesPath(userHome: string = homedir()): string {
 export function snapshotTuiPreferences(state: TuiState): TuiPreferences {
   storeCurrentFlowPreferences(state);
   return {
-    version: 2,
+    version: TUI_PREFERENCES_VERSION,
     scopes: { ...state.flowPreferences },
   };
 }
 
 export function applyTuiPreferences(state: TuiState, preferences: TuiPreferences): void {
+  if (typeof preferences.version === "number" && preferences.version > TUI_PREFERENCES_VERSION) return;
+
   state.flowPreferences = parsePreferenceScopes(preferences.scopes);
 
   const legacyPreferences = legacyFlowPreferences(state, preferences);

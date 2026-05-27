@@ -16,7 +16,7 @@ import {
 } from "./tui/state.js";
 
 const state: TuiState = createInitialState();
-let lastSavedPreferences = JSON.stringify(snapshotTuiPreferences(state));
+let lastSavedPreferences = "";
 let currentRunAbortController: AbortController | undefined;
 
 function main(): void {

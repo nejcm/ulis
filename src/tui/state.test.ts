@@ -330,7 +330,7 @@ describe("tui state", () => {
     handleTuiKey(state, "enter");
 
     expect(state.screen as string).toBe("plan");
-    expect(state.cursor).toBe(8);
+    expect(state.cursor).toBe(planItems(state).indexOf("Install"));
   });
 
   it("presetInstallReview toggles extension installs with space", () => {
@@ -372,7 +372,21 @@ describe("tui state", () => {
     handleTuiKey(state, "enter");
 
     expect(state.screen as string).toBe("plan");
-    expect(state.cursor).toBe(8);
+    expect(state.cursor).toBe(planItems(state).indexOf("Install"));
+  });
+
+  it("presetInstallReview back navigates to the preset-only install row", () => {
+    const state = createInitialState([
+      { name: "team", displayName: "Team", description: "", source: "user", dir: "/presets/team" },
+    ]);
+    state.flow = "presetsOnly";
+    state.screen = "presetInstallReview";
+    state.cursor = 3;
+
+    handleTuiKey(state, "enter");
+
+    expect(state.screen as string).toBe("plan");
+    expect(state.cursor).toBe(planItems(state).indexOf("Install"));
   });
 
   it("customSource path value syncs like TextInput onChange", () => {
@@ -783,7 +797,7 @@ describe("tui state", () => {
     handleTuiKey(state, "backspace");
 
     expect(state.screen as string).toBe("plan");
-    expect(state.cursor).toBe(8);
+    expect(state.cursor).toBe(planItems(state).indexOf("Install"));
   });
 
   it("pendingAction is cleared when navigating away from result screen", () => {

@@ -83,6 +83,10 @@ export interface TuiState {
   pendingAction?: Exclude<TuiAction, "init">;
 }
 
+type MutableFlowPreferences = {
+  -readonly [Key in keyof TuiFlowPreferences]?: TuiFlowPreferences[Key];
+};
+
 export type TuiEffect =
   | { readonly type: "none" }
   | { readonly type: "exit"; readonly code: number }
@@ -273,9 +277,8 @@ export function planItems(state: TuiState): readonly TuiPlanItem[] {
 }
 
 export function flowPreferencesFromState(state: TuiState): TuiFlowPreferences {
-  return {
+  const preferences: MutableFlowPreferences = {
     destinationMode: state.destinationMode,
-    customSource: state.customSource,
     recentCustomSources: [...state.recentCustomSources],
     platforms: [...state.platforms],
     selectedPresetNames: [...state.selectedPresetNames],
@@ -283,6 +286,10 @@ export function flowPreferencesFromState(state: TuiState): TuiFlowPreferences {
     rebuild: state.rebuild,
     presetInstallExtensions: state.presetInstallExtensions,
   };
+
+  if (state.flow === "custom" && state.customSource) preferences.customSource = state.customSource;
+
+  return preferences;
 }
 
 export function storeCurrentFlowPreferences(state: TuiState): void {
@@ -309,7 +316,10 @@ export function applyFlowPreferences(state: TuiState, flow: TuiFlow = state.flow
     state.recentCustomSources = rememberCustomSource(state.recentCustomSources, preferences.customSource);
   }
 
-  if (preferences.platforms) state.platforms = uniquePlatforms(preferences.platforms);
+  if (preferences.platforms) {
+    const platforms = uniquePlatforms(preferences.platforms);
+    state.platforms = platforms.length > 0 ? platforms : [...PLATFORMS];
+  }
   if (preferences.selectedPresetNames) {
     const availablePresetNames = new Set(state.availablePresets.map((preset) => preset.name));
     state.selectedPresetNames = [...new Set(preferences.selectedPresetNames)].filter((name) =>
@@ -390,14 +400,14 @@ function navigateBack(state: TuiState): TuiEffect {
 
   if (state.screen === "installReview") {
     state.screen = "plan";
-    state.cursor = 8;
+    state.cursor = planItemCursor(state, "Install");
     state.notice = "";
     return { type: "none" };
   }
 
   if (state.screen === "presetInstallReview") {
     state.screen = "plan";
-    state.cursor = state.flow === "presetsOnly" ? 6 : 8;
+    state.cursor = planItemCursor(state, "Install");
     state.notice = "";
     return { type: "none" };
   }
@@ -718,7 +728,7 @@ function handleInstallReviewKey(state: TuiState, key: string): TuiEffect {
     return { type: "start", action: "install" };
   } else {
     state.screen = "plan";
-    state.cursor = 8;
+    state.cursor = planItemCursor(state, "Install");
   }
   return { type: "none" };
 }
@@ -739,9 +749,14 @@ function handlePresetInstallReviewKey(state: TuiState, key: string): TuiEffect {
     return { type: "start", action: "presetInstall" };
   } else {
     state.screen = "plan";
-    state.cursor = state.flow === "presetsOnly" ? 6 : 8;
+    state.cursor = planItemCursor(state, "Install");
   }
   return { type: "none" };
+}
+
+function planItemCursor(state: TuiState, item: TuiPlanItem): number {
+  const index = planItems(state).indexOf(item);
+  return index === -1 ? 0 : index;
 }
 
 function handleResultKey(state: TuiState, key: string): TuiEffect {

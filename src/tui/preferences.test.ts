@@ -3,7 +3,14 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { applyTuiPreferences, getTuiPreferencesPath, loadTuiPreferences, saveTuiPreferences } from "./preferences.js";
+import { PLATFORMS } from "../platforms.js";
+import {
+  applyTuiPreferences,
+  getTuiPreferencesPath,
+  loadTuiPreferences,
+  saveTuiPreferences,
+  snapshotTuiPreferences,
+} from "./preferences.js";
 import { createInitialState, handleTuiKey } from "./state.js";
 
 const tmpRoots: string[] = [];
@@ -80,6 +87,48 @@ describe("tui preferences", () => {
     expect(state.selectedPresetNames).toEqual(["team"]);
     expect(state.backup).toBe(true);
     expect(state.rebuild).toBe(true);
+  });
+
+  it("falls back to all platforms when scoped preferences contain an empty platform list", () => {
+    const state = createInitialState();
+
+    applyTuiPreferences(state, {
+      version: 2,
+      scopes: {
+        project: {
+          platforms: [],
+        },
+      },
+    });
+
+    expect(state.platforms).toEqual([...PLATFORMS]);
+  });
+
+  it("ignores preferences from newer schema versions", () => {
+    const state = createInitialState();
+
+    applyTuiPreferences(state, {
+      version: 999,
+      scopes: {
+        project: {
+          platforms: ["codex"],
+          backup: false,
+        },
+      },
+    });
+
+    expect(state.platforms).toEqual([...PLATFORMS]);
+    expect(state.backup).toBe(true);
+  });
+
+  it("only snapshots custom source paths for the custom flow", () => {
+    const state = createInitialState();
+    state.flow = "project";
+    state.customSource = "/tmp/project/.ulis";
+
+    const preferences = snapshotTuiPreferences(state);
+
+    expect(preferences.scopes?.project?.customSource).toBeUndefined();
   });
 
   it("saves the current state to disk", () => {
