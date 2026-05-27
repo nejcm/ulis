@@ -27,8 +27,7 @@ interface UiLine {
 }
 
 const CARD_MAX_WIDTH = 104;
-const OVERVIEW_BORDER_WIDTH = CARD_MAX_WIDTH - 6;
-const OVERVIEW_BORDER = `+${"-".repeat(OVERVIEW_BORDER_WIDTH - 2)}+`;
+const PLAN_DIVIDER = "-".repeat(CARD_MAX_WIDTH - 6);
 const TITLE = [
   " _   _ _     ___ ____  ",
   "| | | | |   |_ _/ ___| ",
@@ -152,7 +151,9 @@ function renderPlan(state: TuiState) {
     isEditedPlan(state) ? "Edited Plan" : formatFlow(state.flow),
     "Review and adjust the plan before choosing an action.",
     [
-      renderOverviewBox(overviewLines),
+      ...overviewLines.map(renderUiLine),
+      renderUiLine({ text: "" }),
+      renderUiLine({ text: PLAN_DIVIDER, fgColor: "color08" }),
       renderUiLine({ text: "" }),
       renderUiLine({ text: "Actions", fgColor: "color06", bold: true }),
       renderUiLine({ text: "" }),
@@ -268,58 +269,6 @@ function renderUiLine(line: UiLine): Node {
           }),
         ],
       );
-}
-
-function renderOverviewBox(lines: readonly UiLine[]): Node {
-  return VStack(
-    {
-      width: "100%",
-      padding: { x: 1 },
-      fgColor: "color08",
-      alignItems: "stretch",
-    },
-    [Text(OVERVIEW_BORDER), ...lines.map(renderOverviewLine), Text(OVERVIEW_BORDER)],
-  );
-}
-
-function renderOverviewLine(line: UiLine): Node {
-  const content =
-    line.value === undefined
-      ? Text(line.text || " ", { bold: line.bold, fgColor: line.fgColor, wrap: "word" })
-      : HStack(
-          {
-            flex: 1,
-            alignItems: "start",
-            justifyContent: "space-between",
-          },
-          [
-            Text(line.text || " ", { bold: line.bold, fgColor: line.fgColor, wrap: "word" }),
-            Text(line.value, {
-              bold: line.bold,
-              fgColor: "color06",
-              wrap: "word",
-            }),
-          ],
-        );
-
-  return HStack(
-    {
-      width: "100%",
-      alignItems: "start",
-    },
-    [
-      Text("|"),
-      HStack(
-        {
-          flex: 1,
-          padding: { x: 1 + (line.indent ?? 0) },
-          fgColor: line.fgColor,
-        },
-        [content],
-      ),
-      Text("|"),
-    ],
-  );
 }
 
 function renderCardShell(title: string, subtitle: string, children: readonly Node[]) {
