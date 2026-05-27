@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { buildCmd } from "./build.js";
 import { initCmd } from "./init.js";
 import { installCmd } from "./install.js";
+import { presetInstallCmd } from "./preset.js";
 
 const fixturesDir = resolve(join(import.meta.dirname, "../../tests/fixtures"));
 const originalCwd = process.cwd();
@@ -136,5 +137,64 @@ describe("commands", () => {
     await expect(installCmd({ yes: true, target: "claude", preset: missingPreset })).rejects.toThrow(
       `Preset "${missingPreset}" not found`,
     );
+  });
+
+  it("presetInstallCmd installs a preset without requiring a project source", async () => {
+    const projectRoot = createTempRoot();
+    const presetsRoot = join(projectRoot, "presets");
+    const bundledPresetsRoot = join(projectRoot, "bundled-presets");
+    const presetDir = join(presetsRoot, "team");
+    mkdirSync(join(presetDir, "agents"), { recursive: true });
+    writeFileSync(join(presetDir, "config.yaml"), "version: 1\nname: team\n");
+    writeFileSync(
+      join(presetDir, "agents", "worker.md"),
+      [
+        "---",
+        "description: Preset worker",
+        "model: claude-haiku-4-5-20251001",
+        "tools:",
+        "  read: true",
+        "---",
+        "Preset worker.",
+      ].join("\n"),
+    );
+    mkdirSync(bundledPresetsRoot, { recursive: true });
+    process.chdir(projectRoot);
+
+    await presetInstallCmd("team", { yes: true, target: "claude", presetsRoot, bundledPresetsRoot });
+
+    expect(existsSync(join(projectRoot, ".claude", "agents", "worker.md"))).toBe(true);
+    expect(existsSync(join(projectRoot, ".ulis"))).toBe(false);
+    expect(existsSync(join(presetDir, "generated"))).toBe(false);
+  });
+
+  it("presetInstallCmd accepts comma-separated and repeated names in order", async () => {
+    const projectRoot = createTempRoot();
+    const presetsRoot = join(projectRoot, "presets");
+    const bundledPresetsRoot = join(projectRoot, "bundled-presets");
+    for (const name of ["a", "b", "c"]) {
+      const presetDir = join(presetsRoot, name);
+      mkdirSync(join(presetDir, "agents"), { recursive: true });
+      writeFileSync(join(presetDir, "config.yaml"), `version: 1\nname: ${name}\n`);
+      writeFileSync(
+        join(presetDir, "agents", "worker.md"),
+        [
+          "---",
+          `description: Preset ${name}`,
+          "model: claude-haiku-4-5-20251001",
+          "tools:",
+          "  read: true",
+          "---",
+          `Preset ${name}.`,
+        ].join("\n"),
+      );
+    }
+    mkdirSync(bundledPresetsRoot, { recursive: true });
+    process.chdir(projectRoot);
+
+    await presetInstallCmd(["a,b", "c"], { yes: true, target: "claude", presetsRoot, bundledPresetsRoot });
+
+    const installedAgent = readFileSync(join(projectRoot, ".claude", "agents", "worker.md"), "utf8");
+    expect(installedAgent).toContain("Preset c");
   });
 });

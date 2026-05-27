@@ -7,7 +7,7 @@ import { cac } from "cac";
 import { buildCmd } from "./commands/build.js";
 import { initCmd } from "./commands/init.js";
 import { installCmd } from "./commands/install.js";
-import { presetListCmd } from "./commands/preset.js";
+import { presetInstallCmd, presetListCmd } from "./commands/preset.js";
 import { tuiCmd } from "./commands/tui.js";
 
 function resolvePackageVersion(): string {
@@ -79,6 +79,25 @@ async function main(): Promise<void> {
         source: options.source,
         target: options.target,
         preset: options.preset,
+      }),
+    );
+
+  cli
+    .command("preset install [...names]", "Install selected presets without a base source")
+    .option("-g, --global", "Install to ~/.claude/, ~/.codex/, ~/forge/, etc.")
+    .option("-y, --yes", "Skip confirmation prompts (useful for CI)")
+    .option("--target <platform>", "Only build/install the given platform(s) (comma-separated)")
+    .option("--backup", "Back up existing platform dirs before overwriting")
+    .option("--runner <name>", "Package runner used for extension installs (npx | bunx)")
+    .option("--no-extensions", "Skip running entries from extensions.yaml")
+    .action((names: string[] | undefined, options) =>
+      presetInstallCmd(names, {
+        global: Boolean(options.global),
+        yes: Boolean(options.yes),
+        target: options.target,
+        backup: Boolean(options.backup),
+        runner: parseRunner(options.runner),
+        extensions: options.extensions !== false,
       }),
     );
 
