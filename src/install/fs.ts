@@ -8,6 +8,13 @@ export interface NamedDirectoryCopyRule {
   readonly alternateRelativeDirs?: readonly string[];
 }
 
+export interface CopyPlatformContentsOptions {
+  readonly logger?: Logger;
+  readonly skipNames?: ReadonlySet<string>;
+  readonly namedDirectories?: Readonly<Record<string, NamedDirectoryCopyRule>>;
+  readonly pruneExtraNames?: boolean;
+}
+
 export function backupPath(targetPath: string, timestamp: string): string {
   return `${targetPath}.${timestamp}.backup`;
 }
@@ -47,11 +54,9 @@ export function copyPath(sourcePath: string, targetPath: string): void {
 export function copyPlatformContents(
   sourceDir: string,
   targetDir: string,
-  logger?: Logger,
-  skipNames: ReadonlySet<string> = new Set(),
-  namedDirectories: Readonly<Record<string, NamedDirectoryCopyRule>> = {},
-  pruneExtraNames = false,
+  options: CopyPlatformContentsOptions = {},
 ): void {
+  const { logger, skipNames = new Set(), namedDirectories = {}, pruneExtraNames = false } = options;
   ensureDir(targetDir);
   if (!existsSync(sourceDir)) {
     throw new InstallError(`Generated platform directory does not exist: ${sourceDir}`);

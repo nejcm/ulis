@@ -15,10 +15,11 @@ export type TuiScreen =
   | "platforms"
   | "missingSource"
   | "installReview"
+  | "presetInstallReview"
   | "running"
   | "result";
 
-export type TuiAction = "validate" | "build" | "install" | "init";
+export type TuiAction = "validate" | "build" | "install" | "presetInstall" | "init";
 export type SourceMode = "project" | "global" | "custom";
 export type DestinationMode = "project" | "global";
 
@@ -45,6 +46,7 @@ export interface TuiState {
   selectedPresetNames: string[];
   backup: boolean;
   rebuild: boolean;
+  presetInstallExtensions: boolean;
   logs: string[];
   notice: string;
   resultTitle: string;
@@ -92,6 +94,7 @@ export function createInitialState(availablePresets: readonly PresetListEntry[] 
     selectedPresetNames: [],
     backup: true,
     rebuild: true,
+    presetInstallExtensions: true,
     logs: [],
     notice: "",
     resultTitle: "",
@@ -121,9 +124,9 @@ export function planSource(state: TuiState, cwd: string = process.cwd(), userHom
 }
 
 export function selectedPresets(state: TuiState): readonly ResolvedPreset[] {
-  return state.selectedPresetNames
-    .map((name) => state.availablePresets.find((preset) => preset.name === name))
-    .filter((preset): preset is PresetListEntry => preset != null)
+  const selected = new Set(state.selectedPresetNames);
+  return state.availablePresets
+    .filter((preset) => selected.has(preset.name))
     .map((preset) => ({ name: preset.name, dir: preset.dir }));
 }
 
@@ -138,7 +141,8 @@ export function formatDestinationMode(mode: DestinationMode): string {
 }
 
 export function formatPresets(state: TuiState): string {
-  return state.selectedPresetNames.length > 0 ? state.selectedPresetNames.join(", ") : "none";
+  const presets = selectedPresets(state).map((preset) => preset.name);
+  return presets.length > 0 ? presets.join(", ") : "none";
 }
 
 export function togglePlatformSelection(selected: readonly Platform[], platform: Platform): Platform[] {
@@ -226,6 +230,8 @@ export function handleTuiKey(state: TuiState, key: string): TuiEffect {
       return handleMissingSourceKey(state, key);
     case "installReview":
       return handleInstallReviewKey(state, key);
+    case "presetInstallReview":
+      return handlePresetInstallReviewKey(state, key);
     case "result":
       return handleResultKey(state, key);
   }
@@ -247,6 +253,13 @@ function navigateBack(state: TuiState): TuiEffect {
   if (state.screen === "installReview") {
     state.screen = "dashboard";
     state.cursor = 6;
+    state.notice = "";
+    return { type: "none" };
+  }
+
+  if (state.screen === "presetInstallReview") {
+    state.screen = "presets";
+    state.cursor = state.availablePresets.length;
     state.notice = "";
     return { type: "none" };
   }
@@ -414,16 +427,28 @@ function handleCustomSourceListKey(state: TuiState, key: string): TuiEffect {
 }
 
 function handlePresetsKey(state: TuiState, key: string): TuiEffect {
-  const lastIndex = state.availablePresets.length;
+  const installIndex = state.availablePresets.length;
+  const backIndex = installIndex + 1;
+  const lastIndex = backIndex;
   moveCursor(state, key, lastIndex);
   if (!isConfirmKey(key) && !isToggleKey(key)) return { type: "none" };
 
   if (state.cursor < state.availablePresets.length) {
     const preset = state.availablePresets[state.cursor];
     if (preset) state.selectedPresetNames = togglePresetSelection(state.selectedPresetNames, preset.name);
-  } else {
+    state.notice = "";
+  } else if (state.cursor === installIndex) {
+    if (state.selectedPresetNames.length === 0) {
+      state.notice = "Select at least one preset first.";
+      return { type: "none" };
+    }
+    state.screen = "presetInstallReview";
+    state.cursor = 0;
+    state.notice = "";
+  } else if (state.cursor === backIndex) {
     state.screen = "dashboard";
     state.cursor = 0;
+    state.notice = "";
   }
   return { type: "none" };
 }
@@ -480,6 +505,27 @@ function handleInstallReviewKey(state: TuiState, key: string): TuiEffect {
   } else {
     state.screen = "dashboard";
     state.cursor = 6;
+  }
+  return { type: "none" };
+}
+
+function handlePresetInstallReviewKey(state: TuiState, key: string): TuiEffect {
+  moveCursor(state, key, 3);
+  if (!isConfirmKey(key) && !isToggleKey(key)) return { type: "none" };
+
+  if (state.cursor === 0) {
+    state.backup = !state.backup;
+  } else if (state.cursor === 1) {
+    state.presetInstallExtensions = !state.presetInstallExtensions;
+  } else if (state.cursor === 2) {
+    if (state.platforms.length === 0) {
+      state.notice = "Select at least one platform first.";
+      return { type: "none" };
+    }
+    return { type: "start", action: "presetInstall" };
+  } else {
+    state.screen = "presets";
+    state.cursor = state.availablePresets.length;
   }
   return { type: "none" };
 }

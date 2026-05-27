@@ -49,6 +49,8 @@ export function renderScreen(state: TuiState, customSourceHandlers?: CustomSourc
       return renderMissingSource(state);
     case "installReview":
       return renderInstallReview(state);
+    case "presetInstallReview":
+      return renderPresetInstallReview(state);
     case "running":
       return renderRunning(state);
     case "result":
@@ -279,16 +281,22 @@ function renderPresets(state: TuiState) {
     }
   }
 
-  const doneIndex = state.availablePresets.length;
+  const installIndex = state.availablePresets.length;
+  const backIndex = installIndex + 1;
   lines.push({ text: "" });
-  lines.push(selectableLine(state.cursor, doneIndex, "Back to dashboard"));
+  lines.push(selectableLine(state.cursor, installIndex, "Install selected presets"));
+  lines.push(selectableLine(state.cursor, backIndex, "Back to dashboard"));
   lines.push({ text: "" });
   lines.push({
-    text: "Selected presets are applied before the base source, so the base source wins on conflicts.",
+    text: state.notice || "Selected presets are applied before the base source for Validate, Build, and Install.",
+    fgColor: state.notice ? "color03" : "color08",
+  });
+  lines.push({
+    text: "Install selected presets deploys only those presets, without reading the current source.",
     fgColor: "color08",
   });
 
-  return renderCard("Select Presets", "Choose optional presets for Validate, Build, and Install.", lines);
+  return renderCard("Select Presets", "Choose optional presets or install selected presets by themselves.", lines);
 }
 
 function renderPlatforms(state: TuiState) {
@@ -364,6 +372,26 @@ function renderInstallReview(state: TuiState) {
     { text: "" },
     selectableLine(state.cursor, 2, "Start install"),
     selectableLine(state.cursor, 3, "Back to dashboard"),
+  ]);
+}
+
+function renderPresetInstallReview(state: TuiState) {
+  const plan = planSource(state);
+  return renderCard("Review Preset Install", "Confirm preset install settings before anything is written.", [
+    { text: `Destination: ${plan.destBase}` },
+    { text: `Platforms: ${formatPlatforms(state.platforms)}` },
+    { text: `Presets: ${formatPresets(state)}` },
+    { text: "" },
+    selectableLine(state.cursor, 0, `[${state.backup ? "x" : " "}] Backup existing configs before install`),
+    selectableLine(state.cursor, 1, `[${state.presetInstallExtensions ? "x" : " "}] Run preset extensions`),
+    { text: "" },
+    selectableLine(state.cursor, 2, "Start preset install"),
+    selectableLine(state.cursor, 3, "Back to presets"),
+    { text: "" },
+    {
+      text: state.notice || "Preset install does not read or merge the current source.",
+      fgColor: state.notice ? "color03" : "color08",
+    },
   ]);
 }
 

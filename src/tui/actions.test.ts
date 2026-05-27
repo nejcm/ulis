@@ -6,7 +6,7 @@ import { createInitialState } from "./state.js";
 const actionsModule = (await import(`./actions.ts?real=${Date.now()}`)) as {
   runTuiAction: (
     state: ReturnType<typeof createInitialState>,
-    action: "validate" | "build" | "install",
+    action: "validate" | "build" | "install" | "presetInstall",
     logger: ReturnType<typeof createLogger>,
     options?: { signal?: AbortSignal },
   ) => Promise<void>;
@@ -154,6 +154,40 @@ describe("tui actions child process flow", () => {
     expect(args).toContain("--global");
     expect(args).toContain("--no-rebuild");
     expect(args).toContain("--backup");
+  });
+
+  it("preset install action shells out through the preset install command", async () => {
+    installRuntimeFakes();
+    spawnCalls.length = 0;
+    spawnedChildren.length = 0;
+    const state = createInitialState([
+      { name: "b", displayName: "B", description: "", source: "user", dir: "/presets/b" },
+      { name: "a", displayName: "A", description: "", source: "user", dir: "/presets/a" },
+    ]);
+    state.selectedPresetNames = ["a", "b"];
+    state.platforms = ["codex"];
+    state.destinationMode = "global";
+    state.backup = true;
+    state.presetInstallExtensions = false;
+    const logger = createLogger();
+
+    const run = runTuiAction(state, "presetInstall", logger);
+    const child = spawnedChildren[0];
+    expect(child).toBeDefined();
+    child!.emitClose(0);
+    await run;
+
+    const args = spawnCalls[0]!.args;
+    expect(args).toContain("preset");
+    expect(args).toContain("install");
+    expect(args.indexOf("b")).toBeLessThan(args.indexOf("a"));
+    expect(args).toContain("--target");
+    expect(args).toContain("codex");
+    expect(args).toContain("--yes");
+    expect(args).toContain("--global");
+    expect(args).toContain("--backup");
+    expect(args).toContain("--no-extensions");
+    expect(args).not.toContain("--source");
   });
 
   it("forwards an empty target when no platforms are selected", async () => {

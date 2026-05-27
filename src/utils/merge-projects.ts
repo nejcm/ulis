@@ -80,5 +80,6 @@ export function mergeProjects(projects: readonly ParsedProject[]): ParsedProject
     permissions: mergePermissions(projects.map((p) => p.permissions)),
     ulisConfig: base.ulisConfig,
     sourceDir: base.sourceDir,
+    sourceDirs: projects.flatMap((project) => project.sourceDirs ?? [project.sourceDir]),
   };
 }

@@ -78,9 +78,11 @@ Capability mismatches are handled with **best-effort + comments**: if a target l
 
 ## 2.2 Presets {#presets}
 
-**Presets** are additional ULIS source trees merged into the build before the selected base source (`./.ulis/`, `~/.ulis/`, or `--source`). Each preset name resolves to a directory: `~/.ulis/presets/<name>/` is tried first, then bundled presets adjacent to the CLI package. User and bundled trees share the same on-disk layout as a normal source; optional `preset.yaml` carries display metadata only (see [Field Reference — Preset metadata](./REFERENCE.md#preset-metadata-presets-name-preset-yaml)).
+**Presets** are reusable ULIS source trees. They can be merged into a build before the selected base source (`./.ulis/`, `~/.ulis/`, or `--source`), or installed by themselves with preset-only install. Each preset name resolves to a directory: `~/.ulis/presets/<name>/` is tried first, then bundled presets adjacent to the CLI package. User and bundled trees share the same on-disk layout as a normal source; optional `preset.yaml` carries display metadata only (see [Field Reference — Preset metadata](./REFERENCE.md#preset-metadata-presets-name-preset-yaml)).
 
 Parsed preset projects are merged **in CLI order** (comma-separated `--preset` values), then the base project is merged last so **the base wins** on duplicate entities and conflicting config keys. The same rules apply to `build`, `install`, and the TUI (including its validate action) when presets are selected. Discovery and labeling (`user` vs `bundled`) are implemented in `src/presets.ts` and `src/utils/resolve-presets.ts`. Optional fields for `preset.yaml` are documented under [Preset metadata](./REFERENCE.md#preset-metadata).
+
+Preset-only install (`ulis preset install <names...>` and the TUI Presets screen action) parses and validates only the selected presets, merges them in the requested order, generates selected platform output in a temporary directory, installs that output to the chosen destination, then removes the temporary output. It does not require a project/global source and does not read or merge base source files. Preset `skills.yaml` and `extensions.yaml` entries run during preset-only install; extension runner selection is CLI flag first, then auto-detect (`bunx` if present, otherwise `npx`).
 
 ---
 

@@ -1,12 +1,9 @@
 import { join } from "node:path";
 
 import type { ParsedRule } from "../../parsers/rule.js";
-import { fileExists, readFile } from "../../utils/fs.js";
 import type { FileArtifact } from "../types.js";
 
 export interface RulesIndexOptions {
-  /** Absolute path to the `.ulis/` source tree (to locate `rules/` on disk). */
-  sourceDir: string;
   /**
    * Relative path prefix for rule artifact paths, e.g. `"rules"` or `".forge/rules"`.
    * Rule files are written as `<artifactPrefix>/<rule.filename>`.
@@ -41,10 +38,8 @@ export function buildRulesIndex(
   const artifacts: FileArtifact[] = [];
 
   for (const rule of enabledRules) {
-    const src = join(opts.sourceDir, "rules", rule.filename);
-    if (fileExists(src)) {
-      artifacts.push({ path: join(opts.artifactPrefix, rule.filename), contents: readFile(src) });
-    }
+    const contents = rule.body.endsWith("\n") ? rule.body : `${rule.body}\n`;
+    artifacts.push({ path: join(opts.artifactPrefix, rule.filename), contents });
   }
 
   const indexLines = [

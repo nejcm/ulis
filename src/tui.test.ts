@@ -55,6 +55,16 @@ describe("tui effect flow", () => {
     expect(state.resultMessage).toContain("completed successfully");
   });
 
+  it("formats preset install start effects", async () => {
+    runTuiActionMock.mockImplementation(() => {});
+
+    await __test.handleEffect({ type: "start", action: "presetInstall" });
+
+    const state = __test.getState();
+    expect(state.screen).toBe("result");
+    expect(state.resultTitle).toBe("Preset Install Complete");
+  });
+
   it("handles async start effect failure and records error", async () => {
     runTuiActionMock.mockImplementation(async () => {
       throw new Error("kaboom");

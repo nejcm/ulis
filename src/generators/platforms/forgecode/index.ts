@@ -5,6 +5,7 @@ import { enabledRulesFor } from "../../../parsers/rule.js";
 import { enabledSkillsFor } from "../../../parsers/skill.js";
 import { PLATFORM_DIRS, resolvePlatformDirSegment } from "../../../platforms.js";
 import { buildRulesIndex } from "../../shared/rules-index.js";
+import { rawDirs } from "../../source-dirs.js";
 import type { FileArtifact, GenerationResult, ProjectBundle } from "../../types.js";
 import { buildForgecodeAgentArtifact } from "./agents.js";
 import { buildForgecodeMcpArtifact } from "./mcp.js";
@@ -23,7 +24,6 @@ export function generateForgecode(project: ProjectBundle): GenerationResult {
   const appendAfterRaw: { path: string; content: string }[] = [];
   if (unsupportedPlatformRules === "inject") {
     const result = buildRulesIndex(enabledRulesFor(project.rules, "forgecode"), {
-      sourceDir: project.sourceDir,
       artifactPrefix: join(".forge", "rules"),
       indexPath: "AGENTS.md",
       referencePrefix: join("~", resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.home), "rules"),
@@ -37,7 +37,7 @@ export function generateForgecode(project: ProjectBundle): GenerationResult {
   return {
     artifacts,
     post: {
-      rawDirs: [join(project.sourceDir, "raw", "common"), join(project.sourceDir, "raw", "forgecode")],
+      rawDirs: rawDirs(project, "forgecode"),
       aliasFiles: [],
       skillDirs: buildForgecodeSkillDirs(enabledSkillsFor(project.skills, "forgecode")),
       skillsDestRelative: join(".forge", "skills"),
