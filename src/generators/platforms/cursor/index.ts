@@ -1,8 +1,7 @@
-import { join } from "node:path";
-
 import { enabledAgentsFor } from "../../../parsers/agent.js";
 import { enabledRulesFor } from "../../../parsers/rule.js";
 import { enabledSkillsFor } from "../../../parsers/skill.js";
+import { rawDirs } from "../../source-dirs.js";
 import type { FileArtifact, GenerationResult, ProjectBundle } from "../../types.js";
 import { buildCursorAgentArtifact } from "./agents.js";
 import { buildCursorConfigArtifacts } from "./config.js";
@@ -25,7 +24,7 @@ export function generateCursor(project: ProjectBundle): GenerationResult {
   return {
     artifacts,
     post: {
-      rawDirs: [join(project.sourceDir, "raw", "common"), join(project.sourceDir, "raw", "cursor")],
+      rawDirs: rawDirs(project, "cursor"),
       aliasFiles: [],
       skillDirs: buildCursorSkillDirs(enabledSkillsFor(project.skills, "cursor")),
     },

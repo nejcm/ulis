@@ -1125,11 +1125,17 @@ describe("runPresetInstall", () => {
       join(presetA, "agents", "worker.md"),
       "---\ndescription: From preset A\nmodel: claude-haiku-4-5-20251001\ntools:\n  read: true\n---\n\nPreset A body.\n",
     );
+    write(join(presetA, "commands", "from-a.md"), "---\ndescription: From A\n---\n\nCommand A.\n");
+    write(join(presetA, "raw", "claude", "from-a.txt"), "raw A\n");
+    write(join(presetA, "raw", "claude", "shared.txt"), "raw A shared\n");
     write(join(presetB, "config.yaml"), "version: 1\nname: preset-b\n");
     write(
       join(presetB, "agents", "worker.md"),
       "---\ndescription: From preset B\nmodel: claude-haiku-4-5-20251001\ntools:\n  read: true\n---\n\nPreset B body.\n",
     );
+    write(join(presetB, "commands", "from-b.md"), "---\ndescription: From B\n---\n\nCommand B.\n");
+    write(join(presetB, "raw", "claude", "from-b.txt"), "raw B\n");
+    write(join(presetB, "raw", "claude", "shared.txt"), "raw B shared\n");
 
     await runPresetInstall({
       presets: [
@@ -1146,6 +1152,11 @@ describe("runPresetInstall", () => {
     expect(installedAgent).toContain("From preset B");
     expect(installedAgent).toContain("Preset B body.");
     expect(installedAgent).not.toContain("Preset A body.");
+    expect(read(join(projectDir, ".claude", "commands", "from-a.md"))).toContain("Command A.");
+    expect(read(join(projectDir, ".claude", "commands", "from-b.md"))).toContain("Command B.");
+    expect(read(join(projectDir, ".claude", "from-a.txt"))).toBe("raw A\n");
+    expect(read(join(projectDir, ".claude", "from-b.txt"))).toBe("raw B\n");
+    expect(read(join(projectDir, ".claude", "shared.txt"))).toBe("raw B shared\n");
     expect(existsSync(join(presetA, "generated"))).toBe(false);
     expect(existsSync(join(presetB, "generated"))).toBe(false);
   });

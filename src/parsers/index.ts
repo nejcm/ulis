@@ -30,6 +30,7 @@ export interface ParsedProject {
   readonly permissions: PermissionsConfig | undefined;
   readonly ulisConfig: UlisConfig;
   readonly sourceDir: string;
+  readonly sourceDirs?: readonly string[];
 }
 
 export interface ParseProjectOptions {
@@ -96,6 +97,7 @@ export function parseProject(sourceDir: string, options: ParseProjectOptions = {
     permissions,
     ulisConfig,
     sourceDir,
+    sourceDirs: [sourceDir],
   };
 }
 
