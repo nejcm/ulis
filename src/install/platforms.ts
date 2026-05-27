@@ -15,8 +15,14 @@ import {
   type CapturedPreservedNativeConfig,
 } from "../utils/config-merger.js";
 import { InstallError } from "./errors.js";
-import { backupPath, copyPath, copyPlatformContents, ensureDir, readDirectoryEntries, removePath } from "./fs.js";
+import { backupPath, copyPath, copyPlatformContents, ensureDir, readDirectoryEntries } from "./fs.js";
 import type { InstallContext } from "./types.js";
+
+const AGENT_SKILL_DIRS = { agents: {}, skills: {} };
+const OPENCODE_AGENT_SKILL_DIRS = {
+  agents: { alternateRelativeDirs: ["core", "specialized"] },
+  skills: {},
+};
 
 export async function installOpencode(context: InstallContext): Promise<void> {
   const targetDir = platformConfigDir("opencode", context.destBase, context.userHome);
@@ -26,7 +32,7 @@ export async function installOpencode(context: InstallContext): Promise<void> {
   backupDirectory(targetDir, context);
   const preservedConfigs = capturePlatformPreservedNativeConfigs("opencode", context);
 
-  removeTargetAndCopy(sourceDir, targetDir);
+  copyPlatformContents(sourceDir, targetDir, context.logger, new Set(), OPENCODE_AGENT_SKILL_DIRS);
   writePlatformPreservedNativeConfigs("opencode", preservedConfigs, context);
   logSuccess(context, `OpenCode -> ${targetDir}`);
 }
@@ -46,7 +52,13 @@ export async function installClaude(context: InstallContext): Promise<void> {
 
   writePlatformPreservedNativeConfigs("claude", preservedConfigs, context);
 
-  copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["settings.json", ".claude.json"]));
+  copyPlatformContents(
+    sourceDir,
+    targetDir,
+    context.logger,
+    new Set(["settings.json", ".claude.json"]),
+    AGENT_SKILL_DIRS,
+  );
 }
 
 export async function installCodex(context: InstallContext): Promise<void> {
@@ -57,7 +69,7 @@ export async function installCodex(context: InstallContext): Promise<void> {
   backupDirectory(targetDir, context);
   const preservedConfigs = capturePlatformPreservedNativeConfigs("codex", context);
   ensureDir(targetDir);
-  copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["config.toml"]));
+  copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["config.toml"]), AGENT_SKILL_DIRS);
   writePlatformPreservedNativeConfigs("codex", preservedConfigs, context);
 }
 
@@ -72,7 +84,7 @@ export async function installCursor(context: InstallContext): Promise<void> {
 
   writePlatformPreservedNativeConfigs("cursor", preservedConfigs, context);
 
-  copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["mcp.json"]));
+  copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["mcp.json"]), AGENT_SKILL_DIRS);
 }
 
 export async function installForgecode(context: InstallContext): Promise<void> {
@@ -88,7 +100,7 @@ export async function installForgecode(context: InstallContext): Promise<void> {
   ensureDir(targetForgeDir);
 
   if (existsSync(sourceForgeDir)) {
-    copyPlatformContents(sourceForgeDir, targetForgeDir, context.logger, new Set([".mcp.json"]));
+    copyPlatformContents(sourceForgeDir, targetForgeDir, context.logger, new Set([".mcp.json"]), AGENT_SKILL_DIRS);
   }
 
   copyPlatformContents(
@@ -227,11 +239,6 @@ function backupFile(targetPath: string, context: InstallContext): void {
   const targetBackupPath = backupPath(targetPath, context.timestamp);
   copyPath(targetPath, targetBackupPath);
   logInfo(context, `[backup] ${targetPath} -> ${targetBackupPath}`);
-}
-
-function removeTargetAndCopy(sourceDir: string, targetDir: string): void {
-  removePath(targetDir);
-  copyPath(sourceDir, targetDir);
 }
 
 function logHeader(context: InstallContext, message: string): void {

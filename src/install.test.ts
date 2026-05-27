@@ -769,6 +769,114 @@ describe("runInstall", () => {
     expect(commands).toHaveLength(0);
   });
 
+  it("preserves unmanaged agents and skills while replacing generated same-name entries", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+
+    write(join(outputDir, "claude", "agents", "managed.md"), "Generated claude agent.\n");
+    write(join(outputDir, "claude", "skills", "managed", "SKILL.md"), "Generated claude skill.\n");
+    write(join(outputDir, "codex", "agents", "managed.toml"), "Generated codex agent.\n");
+    write(join(outputDir, "codex", "skills", "managed", "SKILL.md"), "Generated codex skill.\n");
+    write(join(outputDir, "cursor", "agents", "managed.mdc"), "Generated cursor agent.\n");
+    write(join(outputDir, "cursor", "skills", "managed", "SKILL.md"), "Generated cursor skill.\n");
+    write(join(outputDir, "opencode", "agents", "specialized", "managed.md"), "Generated opencode agent.\n");
+    write(join(outputDir, "opencode", "skills", "managed", "SKILL.md"), "Generated opencode skill.\n");
+    createForgecodeOutput(outputDir);
+    write(join(outputDir, "forgecode", ".forge", "agents", "managed.md"), "Generated forge agent.\n");
+    write(join(outputDir, "forgecode", ".forge", "skills", "managed", "SKILL.md"), "Generated forge skill.\n");
+
+    write(join(projectDir, ".claude", "agents", "managed.md"), "Old claude agent.\n");
+    write(join(projectDir, ".claude", "agents", "local.md"), "Local claude agent.\n");
+    write(join(projectDir, ".claude", "skills", "managed", "SKILL.md"), "Old claude skill.\n");
+    write(join(projectDir, ".claude", "skills", "local", "SKILL.md"), "Local claude skill.\n");
+    write(join(projectDir, ".codex", "agents", "managed.toml"), "Old codex agent.\n");
+    write(join(projectDir, ".codex", "agents", "local.toml"), "Local codex agent.\n");
+    write(join(projectDir, ".codex", "skills", "managed", "SKILL.md"), "Old codex skill.\n");
+    write(join(projectDir, ".codex", "skills", "local", "SKILL.md"), "Local codex skill.\n");
+    write(join(projectDir, ".cursor", "agents", "managed.mdc"), "Old cursor agent.\n");
+    write(join(projectDir, ".cursor", "agents", "local.mdc"), "Local cursor agent.\n");
+    write(join(projectDir, ".cursor", "skills", "managed", "SKILL.md"), "Old cursor skill.\n");
+    write(join(projectDir, ".cursor", "skills", "local", "SKILL.md"), "Local cursor skill.\n");
+    write(join(projectDir, ".opencode", "agents", "specialized", "managed.md"), "Old opencode agent.\n");
+    write(join(projectDir, ".opencode", "agents", "specialized", "local.md"), "Local opencode agent.\n");
+    write(join(projectDir, ".opencode", "skills", "managed", "SKILL.md"), "Old opencode skill.\n");
+    write(join(projectDir, ".opencode", "skills", "local", "SKILL.md"), "Local opencode skill.\n");
+    write(join(projectDir, ".forge", "agents", "managed.md"), "Old forge agent.\n");
+    write(join(projectDir, ".forge", "agents", "local.md"), "Local forge agent.\n");
+    write(join(projectDir, ".forge", "skills", "managed", "SKILL.md"), "Old forge skill.\n");
+    write(join(projectDir, ".forge", "skills", "local", "SKILL.md"), "Local forge skill.\n");
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["claude", "codex", "cursor", "opencode", "forgecode"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(read(join(projectDir, ".claude", "agents", "managed.md"))).toBe("Generated claude agent.\n");
+    expect(read(join(projectDir, ".claude", "agents", "local.md"))).toBe("Local claude agent.\n");
+    expect(read(join(projectDir, ".claude", "skills", "managed", "SKILL.md"))).toBe("Generated claude skill.\n");
+    expect(read(join(projectDir, ".claude", "skills", "local", "SKILL.md"))).toBe("Local claude skill.\n");
+    expect(read(join(projectDir, ".codex", "agents", "managed.toml"))).toBe("Generated codex agent.\n");
+    expect(read(join(projectDir, ".codex", "agents", "local.toml"))).toBe("Local codex agent.\n");
+    expect(read(join(projectDir, ".codex", "skills", "managed", "SKILL.md"))).toBe("Generated codex skill.\n");
+    expect(read(join(projectDir, ".codex", "skills", "local", "SKILL.md"))).toBe("Local codex skill.\n");
+    expect(read(join(projectDir, ".cursor", "agents", "managed.mdc"))).toBe("Generated cursor agent.\n");
+    expect(read(join(projectDir, ".cursor", "agents", "local.mdc"))).toBe("Local cursor agent.\n");
+    expect(read(join(projectDir, ".cursor", "skills", "managed", "SKILL.md"))).toBe("Generated cursor skill.\n");
+    expect(read(join(projectDir, ".cursor", "skills", "local", "SKILL.md"))).toBe("Local cursor skill.\n");
+    expect(read(join(projectDir, ".opencode", "agents", "specialized", "managed.md"))).toBe(
+      "Generated opencode agent.\n",
+    );
+    expect(read(join(projectDir, ".opencode", "agents", "specialized", "local.md"))).toBe("Local opencode agent.\n");
+    expect(read(join(projectDir, ".opencode", "skills", "managed", "SKILL.md"))).toBe("Generated opencode skill.\n");
+    expect(read(join(projectDir, ".opencode", "skills", "local", "SKILL.md"))).toBe("Local opencode skill.\n");
+    expect(read(join(projectDir, ".forge", "agents", "managed.md"))).toBe("Generated forge agent.\n");
+    expect(read(join(projectDir, ".forge", "agents", "local.md"))).toBe("Local forge agent.\n");
+    expect(read(join(projectDir, ".forge", "skills", "managed", "SKILL.md"))).toBe("Generated forge skill.\n");
+    expect(read(join(projectDir, ".forge", "skills", "local", "SKILL.md"))).toBe("Local forge skill.\n");
+  });
+
+  it("removes OpenCode same-name agents from the old category when the generated category changes", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+
+    write(join(outputDir, "opencode", "agents", "specialized", "worker.md"), "Generated worker.\n");
+    write(join(projectDir, ".opencode", "agents", "core", "worker.md"), "Old core worker.\n");
+    write(join(projectDir, ".opencode", "agents", "core", "local.md"), "Local core agent.\n");
+    write(join(projectDir, ".opencode", "agents", "specialized", "local.md"), "Local specialized agent.\n");
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["opencode"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(existsSync(join(projectDir, ".opencode", "agents", "core", "worker.md"))).toBe(false);
+    expect(read(join(projectDir, ".opencode", "agents", "core", "local.md"))).toBe("Local core agent.\n");
+    expect(read(join(projectDir, ".opencode", "agents", "specialized", "worker.md"))).toBe("Generated worker.\n");
+    expect(read(join(projectDir, ".opencode", "agents", "specialized", "local.md"))).toBe("Local specialized agent.\n");
+  });
+
   it("writes Claude MCP servers to <project>/.mcp.json on a project install", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");

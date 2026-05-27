@@ -92,15 +92,15 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 
 **Install strategy per platform:**
 
-| Platform  | Managed dirs (replaced)                       | Preserved native config                                                       |
-| --------- | --------------------------------------------- | ----------------------------------------------------------------------------- |
-| Claude    | `agents/`, `commands/`, `rules/`, `hooks/`, … | `settings.json` `hooks`, UI/plugin settings; `.claude.json` `mcpServers`      |
-| OpenCode  | target dir contents                           | `opencode.json` `mcp`                                                         |
-| Codex     | target dir contents                           | `config.toml` `projects`, `hooks`, `mcp_servers`, `tui`, `notice`, `features` |
-| Cursor    | `agents/` (`.mdc` files)                      | `mcp.json` `mcpServers`                                                       |
-| ForgeCode | `.forge/agents`, `.forge/skills`, `AGENTS.md` | `.forge/.mcp.json` `mcpServers`, `.forge.toml`                                |
+| Platform  | Managed entries                                                              | Preserved native config                                                       |
+| --------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Claude    | generated `agents/` and `skills/` entries by name; `commands/`, `rules/`, …  | `settings.json` `hooks`, UI/plugin settings; `.claude.json` `mcpServers`      |
+| OpenCode  | generated `agents/core`, `agents/specialized`, and `skills/` entries by name | `opencode.json` `mcp`                                                         |
+| Codex     | generated `agents/` and `skills/` entries by name                            | `config.toml` `projects`, `hooks`, `mcp_servers`, `tui`, `notice`, `features` |
+| Cursor    | generated `agents/` and `skills/` entries by name                            | `mcp.json` `mcpServers`                                                       |
+| ForgeCode | generated `.forge/agents` and `.forge/skills` entries by name; `AGENTS.md`   | `.forge/.mcp.json` `mcpServers`, `.forge.toml`                                |
 
-Install preserves only the allowlisted native config values and files above. Generated output wins at the same config path, and raw fragments win through the generated output because raw is merged during build. Existing non-allowlisted native config values are removed. If `--backup` is set, backups are created before parsing preserved native config.
+Install preserves unmanaged destination agents and skills unless generated output has the same native name. Generated output wins at the same config path, and raw fragments win through the generated output because raw is merged during build. Existing non-allowlisted native config values are removed. If `--backup` is set, backups are created before parsing preserved native config.
 
 ---
 
