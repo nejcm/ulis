@@ -32,7 +32,11 @@ export async function installOpencode(context: InstallContext): Promise<void> {
   backupDirectory(targetDir, context);
   const preservedConfigs = capturePlatformPreservedNativeConfigs("opencode", context);
 
-  copyPlatformContents(sourceDir, targetDir, context.logger, new Set(), OPENCODE_AGENT_SKILL_DIRS, true);
+  copyPlatformContents(sourceDir, targetDir, {
+    logger: context.logger,
+    namedDirectories: OPENCODE_AGENT_SKILL_DIRS,
+    pruneExtraNames: true,
+  });
   writePlatformPreservedNativeConfigs("opencode", preservedConfigs, context);
   logSuccess(context, `OpenCode -> ${targetDir}`);
 }
@@ -52,13 +56,11 @@ export async function installClaude(context: InstallContext): Promise<void> {
 
   writePlatformPreservedNativeConfigs("claude", preservedConfigs, context);
 
-  copyPlatformContents(
-    sourceDir,
-    targetDir,
-    context.logger,
-    new Set(["settings.json", ".claude.json"]),
-    AGENT_SKILL_DIRS,
-  );
+  copyPlatformContents(sourceDir, targetDir, {
+    logger: context.logger,
+    skipNames: new Set(["settings.json", ".claude.json"]),
+    namedDirectories: AGENT_SKILL_DIRS,
+  });
 }
 
 export async function installCodex(context: InstallContext): Promise<void> {
@@ -69,7 +71,11 @@ export async function installCodex(context: InstallContext): Promise<void> {
   backupDirectory(targetDir, context);
   const preservedConfigs = capturePlatformPreservedNativeConfigs("codex", context);
   ensureDir(targetDir);
-  copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["config.toml"]), AGENT_SKILL_DIRS);
+  copyPlatformContents(sourceDir, targetDir, {
+    logger: context.logger,
+    skipNames: new Set(["config.toml"]),
+    namedDirectories: AGENT_SKILL_DIRS,
+  });
   writePlatformPreservedNativeConfigs("codex", preservedConfigs, context);
 }
 
@@ -84,7 +90,11 @@ export async function installCursor(context: InstallContext): Promise<void> {
 
   writePlatformPreservedNativeConfigs("cursor", preservedConfigs, context);
 
-  copyPlatformContents(sourceDir, targetDir, context.logger, new Set(["mcp.json"]), AGENT_SKILL_DIRS);
+  copyPlatformContents(sourceDir, targetDir, {
+    logger: context.logger,
+    skipNames: new Set(["mcp.json"]),
+    namedDirectories: AGENT_SKILL_DIRS,
+  });
 }
 
 export async function installForgecode(context: InstallContext): Promise<void> {
@@ -100,15 +110,17 @@ export async function installForgecode(context: InstallContext): Promise<void> {
   ensureDir(targetForgeDir);
 
   if (existsSync(sourceForgeDir)) {
-    copyPlatformContents(sourceForgeDir, targetForgeDir, context.logger, new Set([".mcp.json"]), AGENT_SKILL_DIRS);
+    copyPlatformContents(sourceForgeDir, targetForgeDir, {
+      logger: context.logger,
+      skipNames: new Set([".mcp.json"]),
+      namedDirectories: AGENT_SKILL_DIRS,
+    });
   }
 
-  copyPlatformContents(
-    sourceDir,
-    targetForgeDir,
-    context.logger,
-    new Set([resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project), ".forge.toml"]),
-  );
+  copyPlatformContents(sourceDir, targetForgeDir, {
+    logger: context.logger,
+    skipNames: new Set([resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project), ".forge.toml"]),
+  });
 
   writePlatformPreservedNativeConfigs("forgecode", preservedConfigs, context);
 }

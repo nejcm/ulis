@@ -39,6 +39,11 @@ export interface BuildOptions {
   readonly presets?: readonly ResolvedPreset[];
 }
 
+export interface TargetOptionInput {
+  readonly target?: string | string[];
+  readonly targets?: string | string[];
+}
+
 export interface AnalyzeProjectOptions {
   /**
    * Path to the ulis source tree (e.g. `./.ulis/` or `~/.ulis/` or a fixture path).
@@ -57,7 +62,7 @@ export interface AnalyzePresetsOptions {
 }
 
 export interface ProjectAnalysis {
-  readonly project: ReturnType<typeof parseProject>;
+  readonly project: ParsedProject;
   readonly diagnostics: readonly Diagnostic[];
   readonly errorCount: number;
   readonly warningCount: number;
@@ -67,6 +72,44 @@ export interface BuildResult {
   readonly targets: readonly Platform[];
   readonly sourceDir: string;
   readonly outputDir: string;
+}
+
+type ParsedProject = ReturnType<typeof parseProject>;
+
+function reportParseErrors(err: ParseAggregateError, logger: Logger): never {
+  for (const e of err.errors) logger.error(formatDiagnostic(e.toDiagnostic()));
+  throw new Error(`Parsing failed: ${err.errors.length} error(s). No files written.`);
+}
+
+function validateAndReport(parsed: ParsedProject, logger: Logger): ProjectAnalysis {
+  logger.success(`Parsed ${parsed.agents.length} agents`);
+  logger.success(`Parsed ${parsed.skills.length} skills`);
+  if (parsed.rules.length > 0) logger.success(`Parsed ${parsed.rules.length} rules`);
+  logger.success(`Parsed ${Object.keys(parsed.mcp.servers).length} MCP servers`);
+
+  logger.header("Validation");
+  const diagnostics: readonly Diagnostic[] = [
+    ...validateCrossRefs(parsed.agents, parsed.skills, parsed.mcp),
+    ...validateCollisions(parsed.agents, parsed.skills),
+  ];
+
+  for (const diagnostic of diagnostics) {
+    const line = formatDiagnostic(diagnostic);
+    if (diagnostic.level === "error") {
+      logger.error(line);
+    } else {
+      logger.warn(line);
+    }
+  }
+
+  const errorCount = diagnostics.filter((diagnostic) => diagnostic.level === "error").length;
+  const warningCount = diagnostics.length - errorCount;
+  if (errorCount > 0) {
+    throw new Error(`Validation failed: ${errorCount} error(s), ${warningCount} warning(s). No files written.`);
+  }
+  logger.success(`Validation passed (${warningCount} warning(s))`);
+
+  return { project: parsed, diagnostics, errorCount, warningCount };
 }
 
 /**
@@ -83,13 +126,13 @@ export function analyzeProject(options: AnalyzeProjectOptions): ProjectAnalysis 
     logger.info(`Presets: ${presets.map((p) => p.name).join(", ")}`);
   }
 
-  let parsed: ReturnType<typeof parseProject>;
+  let parsed: ParsedProject;
   try {
     if (presets.length === 0) {
       parsed = parseProject(sourceDir, { source: "base" });
     } else {
       const parseErrors: ParseError[] = [];
-      const parseWithErrors = (dir: string, source: string): ReturnType<typeof parseProject> | undefined => {
+      const parseWithErrors = (dir: string, source: string): ParsedProject | undefined => {
         try {
           return parseProject(dir, { source });
         } catch (err) {
@@ -105,9 +148,7 @@ export function analyzeProject(options: AnalyzeProjectOptions): ProjectAnalysis 
         return parseWithErrors(preset.dir, `preset:${preset.name}`);
       });
       const baseProject = parseWithErrors(sourceDir, "base");
-      const completePresetProjects = presetProjects.filter(
-        (project): project is ReturnType<typeof parseProject> => project != null,
-      );
+      const completePresetProjects = presetProjects.filter((project): project is ParsedProject => project != null);
       if (parseErrors.length > 0) throw new ParseAggregateError(parseErrors);
       if (!baseProject || completePresetProjects.length !== presetProjects.length) {
         throw new Error("Parsing failed before project merge.");
@@ -116,39 +157,11 @@ export function analyzeProject(options: AnalyzeProjectOptions): ProjectAnalysis 
     }
   } catch (err) {
     if (err instanceof ParseAggregateError) {
-      for (const e of err.errors) logger.error(formatDiagnostic(e.toDiagnostic()));
-      throw new Error(`Parsing failed: ${err.errors.length} error(s). No files written.`);
+      reportParseErrors(err, logger);
     }
     throw err;
   }
-  logger.success(`Parsed ${parsed.agents.length} agents`);
-  logger.success(`Parsed ${parsed.skills.length} skills`);
-  if (parsed.rules.length > 0) logger.success(`Parsed ${parsed.rules.length} rules`);
-  logger.success(`Parsed ${Object.keys(parsed.mcp.servers).length} MCP servers`);
-
-  logger.header("Validation");
-  const diagnostics: readonly Diagnostic[] = [
-    ...validateCrossRefs(parsed.agents, parsed.skills, parsed.mcp),
-    ...validateCollisions(parsed.agents, parsed.skills),
-  ];
-
-  for (const diagnostic of diagnostics) {
-    const line = formatDiagnostic(diagnostic);
-    if (diagnostic.level === "error") {
-      logger.error(line);
-    } else {
-      logger.warn(line);
-    }
-  }
-
-  const errorCount = diagnostics.filter((diagnostic) => diagnostic.level === "error").length;
-  const warningCount = diagnostics.length - errorCount;
-  if (errorCount > 0) {
-    throw new Error(`Validation failed: ${errorCount} error(s), ${warningCount} warning(s). No files written.`);
-  }
-  logger.success(`Validation passed (${warningCount} warning(s))`);
-
-  return { project: parsed, diagnostics, errorCount, warningCount };
+  return validateAndReport(parsed, logger);
 }
 
 /**
@@ -164,7 +177,7 @@ export function analyzePresets(options: AnalyzePresetsOptions): ProjectAnalysis 
   logger.header("Parsing");
   logger.info(`Presets: ${presets.map((p) => p.name).join(", ")}`);
 
-  let parsed: ReturnType<typeof parseProject>;
+  let parsed: ParsedProject;
   try {
     const parseErrors: ParseError[] = [];
     const presetProjects = presets.map((preset) => {
@@ -179,9 +192,7 @@ export function analyzePresets(options: AnalyzePresetsOptions): ProjectAnalysis 
         throw err;
       }
     });
-    const completePresetProjects = presetProjects.filter(
-      (project): project is ReturnType<typeof parseProject> => project != null,
-    );
+    const completePresetProjects = presetProjects.filter((project): project is ParsedProject => project != null);
     if (parseErrors.length > 0) throw new ParseAggregateError(parseErrors);
     if (completePresetProjects.length !== presetProjects.length) {
       throw new Error("Parsing failed before preset merge.");
@@ -189,39 +200,11 @@ export function analyzePresets(options: AnalyzePresetsOptions): ProjectAnalysis 
     parsed = mergeProjects(completePresetProjects);
   } catch (err) {
     if (err instanceof ParseAggregateError) {
-      for (const e of err.errors) logger.error(formatDiagnostic(e.toDiagnostic()));
-      throw new Error(`Parsing failed: ${err.errors.length} error(s). No files written.`);
+      reportParseErrors(err, logger);
     }
     throw err;
   }
-  logger.success(`Parsed ${parsed.agents.length} agents`);
-  logger.success(`Parsed ${parsed.skills.length} skills`);
-  if (parsed.rules.length > 0) logger.success(`Parsed ${parsed.rules.length} rules`);
-  logger.success(`Parsed ${Object.keys(parsed.mcp.servers).length} MCP servers`);
-
-  logger.header("Validation");
-  const diagnostics: readonly Diagnostic[] = [
-    ...validateCrossRefs(parsed.agents, parsed.skills, parsed.mcp),
-    ...validateCollisions(parsed.agents, parsed.skills),
-  ];
-
-  for (const diagnostic of diagnostics) {
-    const line = formatDiagnostic(diagnostic);
-    if (diagnostic.level === "error") {
-      logger.error(line);
-    } else {
-      logger.warn(line);
-    }
-  }
-
-  const errorCount = diagnostics.filter((diagnostic) => diagnostic.level === "error").length;
-  const warningCount = diagnostics.length - errorCount;
-  if (errorCount > 0) {
-    throw new Error(`Validation failed: ${errorCount} error(s), ${warningCount} warning(s). No files written.`);
-  }
-  logger.success(`Validation passed (${warningCount} warning(s))`);
-
-  return { project: parsed, diagnostics, errorCount, warningCount };
+  return validateAndReport(parsed, logger);
 }
 
 /**

@@ -109,8 +109,9 @@ export function readMarkdownDir<TFrontmatter, TItem>(
   for (const relFile of files) {
     const relativeFile = opts?.relativePrefix ? `${opts.relativePrefix}/${relFile}` : relFile;
     const absoluteFile = join(dir, relFile);
+    let raw: string | undefined;
     try {
-      const raw = readFile(absoluteFile);
+      raw = readFile(absoluteFile);
       const { data, content } = matter(raw);
       const frontmatter = schema.parse(data);
       const name = opts?.recursive ? relFile.replace(/\.md$/, "") : basename(relFile, ".md");
@@ -122,7 +123,6 @@ export function readMarkdownDir<TFrontmatter, TItem>(
       };
       items.push(build(name, frontmatter, content.trim(), relFile, origin));
     } catch (err) {
-      const raw = tryReadFile(absoluteFile);
       errors.push(
         new ParseError(kind, relativeFile, err, {
           source: opts?.source,
@@ -138,14 +138,6 @@ export function readMarkdownDir<TFrontmatter, TItem>(
   }
 
   return { items, errors };
-}
-
-function tryReadFile(filePath: string): string | undefined {
-  try {
-    return readFile(filePath);
-  } catch {
-    return undefined;
-  }
 }
 
 function frontmatterContent(raw: string): string | undefined {

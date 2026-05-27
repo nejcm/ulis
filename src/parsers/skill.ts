@@ -38,8 +38,9 @@ export function collectSkills(
     const skillFile = join(skillDir, "SKILL.md");
     const relativeFile = `skills/${entry.name}/SKILL.md`;
     if (!fileExists(skillFile)) continue;
+    let raw: string | undefined;
     try {
-      const raw = readFile(skillFile);
+      raw = readFile(skillFile);
       const { data, content } = matter(raw);
       const frontmatter = SkillFrontmatterSchema.parse(data);
       if (frontmatter?.name !== entry.name) {
@@ -58,7 +59,6 @@ export function collectSkills(
         },
       });
     } catch (err) {
-      const raw = tryReadFile(skillFile);
       errors.push(
         new ParseError("skill", relativeFile, err, {
           source: opts.source,
@@ -74,14 +74,6 @@ export function collectSkills(
   }
 
   return { items: skills, errors };
-}
-
-function tryReadFile(filePath: string): string | undefined {
-  try {
-    return readFile(filePath);
-  } catch {
-    return undefined;
-  }
 }
 
 function frontmatterContent(raw: string): string | undefined {

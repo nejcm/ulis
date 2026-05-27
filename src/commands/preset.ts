@@ -23,7 +23,6 @@ export interface PresetInstallCmdOptions {
   readonly global?: boolean;
   readonly yes?: boolean;
   readonly target?: string | string[];
-  readonly targets?: string | string[];
   readonly backup?: boolean;
   readonly runner?: "npx" | "bunx";
   readonly extensions?: boolean;
