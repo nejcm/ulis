@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import type { Logger } from "./build.js";
-import { __test, resolveRunner, runInstall } from "./install.js";
+import { __test, resolveRunner, runInstall, runPresetInstall } from "./install.js";
 import { readMergeableConfig } from "./utils/config-merger.js";
 
 const tmpRoots: string[] = [];
@@ -1108,6 +1108,101 @@ describe("runInstall", () => {
     expect(JSON.parse(read(join(projectDir, ".mcp.json")))).toEqual({
       mcpServers: { teamOnly: { command: "team" }, shared: { command: "generated" } },
     });
+  });
+});
+
+describe("runPresetInstall", () => {
+  it("installs selected presets without a base source or persistent generated output", async () => {
+    const root = createTempRoot();
+    const presetA = join(root, "preset-a");
+    const presetB = join(root, "preset-b");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(presetA, "config.yaml"), "version: 1\nname: preset-a\n");
+    write(
+      join(presetA, "agents", "worker.md"),
+      "---\ndescription: From preset A\nmodel: claude-haiku-4-5-20251001\ntools:\n  read: true\n---\n\nPreset A body.\n",
+    );
+    write(join(presetB, "config.yaml"), "version: 1\nname: preset-b\n");
+    write(
+      join(presetB, "agents", "worker.md"),
+      "---\ndescription: From preset B\nmodel: claude-haiku-4-5-20251001\ntools:\n  read: true\n---\n\nPreset B body.\n",
+    );
+
+    await runPresetInstall({
+      presets: [
+        { name: "a", dir: presetA },
+        { name: "b", dir: presetB },
+      ],
+      destBase: projectDir,
+      userHome,
+      platforms: ["claude"],
+      logger: silentLogger,
+    });
+
+    const installedAgent = read(join(projectDir, ".claude", "agents", "worker.md"));
+    expect(installedAgent).toContain("From preset B");
+    expect(installedAgent).toContain("Preset B body.");
+    expect(installedAgent).not.toContain("Preset A body.");
+    expect(existsSync(join(presetA, "generated"))).toBe(false);
+    expect(existsSync(join(presetB, "generated"))).toBe(false);
+  });
+
+  it("runs preset-declared external skills and extensions only", async () => {
+    const root = createTempRoot();
+    const presetDir = join(root, "preset");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(presetDir, "config.yaml"), "version: 1\nname: preset\nrunner: npx\n");
+    write(
+      join(presetDir, "agents", "worker.md"),
+      "---\ndescription: Preset worker\nmodel: claude-haiku-4-5-20251001\ntools:\n  read: true\n---\n\nPreset worker.\n",
+    );
+    write(join(presetDir, "skills.yaml"), ["codex:", "  skills:", "    - name: preset/skill", ""].join("\n"));
+    write(
+      join(presetDir, "extensions.yaml"),
+      ["codex:", "  extensions:", "    - name: preset-extension@latest", "      args: [install]", ""].join("\n"),
+    );
+
+    const commands: Array<{ command: string; args: readonly string[] }> = [];
+    __test.setRuntimeDependencies({
+      runCommand(command, args) {
+        commands.push({ command, args });
+        return { status: 0, stdout: "", stderr: "" } as never;
+      },
+      async runAsyncCommand(command, args) {
+        commands.push({ command, args });
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    await runPresetInstall({
+      presets: [{ name: "preset", dir: presetDir }],
+      destBase: projectDir,
+      userHome,
+      platforms: ["codex"],
+      runner: "bunx",
+      logger: silentLogger,
+    });
+
+    expect(commands.some((call) => call.command === "npx" && call.args.includes("preset/skill"))).toBe(true);
+    expect(commands.some((call) => call.command === "bunx" && call.args.includes("preset-extension@latest"))).toBe(
+      true,
+    );
+    expect(commands.some((call) => call.command === "npx" && call.args.includes("preset-extension@latest"))).toBe(
+      false,
+    );
+  });
+
+  it("rejects empty preset install requests", async () => {
+    const root = createTempRoot();
+    await expect(runPresetInstall({ presets: [], destBase: root, userHome: root, logger: silentLogger })).rejects.toThrow(
+      "Select at least one preset to install.",
+    );
   });
 });
 

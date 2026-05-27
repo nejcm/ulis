@@ -1,17 +1,18 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { runBuild, type Logger } from "./build.js";
+import { analyzePresets, runBuild, type Logger } from "./build.js";
 import { ULIS_GENERATED_DIRNAME } from "./config.js";
+import { generate, writeResult } from "./generators/index.js";
 import { InstallError } from "./install/errors.js";
 import { installClaude, installCodex, installCursor, installForgecode, installOpencode } from "./install/platforms.js";
 import type { InstallContext, Runner as InstallRunner } from "./install/types.js";
 import { loadExtensions, mergeExtensionsConfigs } from "./parsers/extensions.js";
 import { loadSkills, mergeSkillsConfigs } from "./parsers/skills.js";
 import { isSamePath, PLATFORMS, uniquePlatforms, type Platform } from "./platforms.js";
-import { UlisConfigSchema } from "./schema.js";
+import { UlisConfigSchema, type ExtensionsConfig, type SkillsConfig } from "./schema.js";
 import { loadValidatedConfigFile } from "./utils/config-loader.js";
 import { logger as defaultLogger } from "./utils/logger.js";
 import type { ResolvedPreset } from "./utils/resolve-presets.js";
@@ -46,6 +47,23 @@ export interface InstallOptions {
   readonly installExtensions?: boolean;
 }
 
+export interface PresetInstallOptions {
+  readonly platforms?: readonly Platform[];
+  /** Presets to install as the complete source. Applied in order; later presets win conflicts. */
+  readonly presets: readonly ResolvedPreset[];
+  /** Where the per-platform configs land — typically `~` for global, CWD for project. */
+  readonly destBase: string;
+  /** Install skills globally (`npx skills ... -g`) instead of project-local. */
+  readonly globalInstall?: boolean;
+  readonly backup?: boolean;
+  readonly logger?: Logger;
+  readonly userHome?: string;
+  /** Override the package runner used for `extensions.yaml` entries. */
+  readonly runner?: InstallRunner;
+  /** When false, skip running extensions installers (`extensions.yaml`). */
+  readonly installExtensions?: boolean;
+}
+
 type RunCommand = (
   command: string,
   args: readonly string[],
@@ -72,6 +90,20 @@ type RunAsyncCommand = (
 interface RuntimeDependencies {
   readonly runCommand: RunCommand;
   readonly runAsyncCommand: RunAsyncCommand;
+}
+
+interface GeneratedInstallOptions {
+  readonly outputDir: string;
+  readonly destBase: string;
+  readonly userHome: string;
+  readonly globalInstall: boolean;
+  readonly backup: boolean;
+  readonly platforms: readonly Platform[];
+  readonly skillsConfig: SkillsConfig;
+  readonly extensionsConfig: ExtensionsConfig;
+  readonly runner: InstallRunner;
+  readonly installExtensionsEnabled: boolean;
+  readonly logger: Logger;
 }
 
 const defaultRuntimeDependencies: RuntimeDependencies = {
@@ -179,20 +211,106 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
   });
   const runner = resolveRunner({ cliFlag: options.runner, configValue: ulisConfig.runner });
 
-  const timestamp = makeTimestamp();
-  for (const platform of platforms) {
-    const context: InstallContext = {
+  await installGeneratedOutput({
+    outputDir,
+    destBase,
+    userHome,
+    globalInstall,
+    backup,
+    platforms,
+    skillsConfig,
+    extensionsConfig,
+    runner,
+    installExtensionsEnabled,
+    logger,
+  });
+
+  logHeader(logger, "Installation Complete");
+  return platforms;
+}
+
+/**
+ * Install selected presets as the complete source without requiring a base source tree.
+ */
+export async function runPresetInstall(options: PresetInstallOptions): Promise<readonly Platform[]> {
+  const logger = options.logger ?? defaultLogger;
+  const presets = options.presets;
+  if (presets.length === 0) {
+    throw new Error("Select at least one preset to install.");
+  }
+
+  const destBase = resolve(options.destBase);
+  const platforms = options.platforms ? uniquePlatforms(options.platforms) : [...PLATFORMS];
+  const userHome = resolve(options.userHome ?? homedir());
+  const globalInstall = options.globalInstall ?? isSamePath(destBase, userHome);
+  const backup = options.backup ?? false;
+  const installExtensionsEnabled = options.installExtensions ?? true;
+  const runner = resolveRunner({ cliFlag: options.runner });
+  const tempRoot = mkdtempSync(join(tmpdir(), "ulis-preset-install-"));
+  const outputDir = join(tempRoot, ULIS_GENERATED_DIRNAME);
+
+  try {
+    loadDotEnv(destBase);
+
+    logHeader(logger, `ULIS Preset Install (${process.platform === "win32" ? "Windows" : "Linux/macOS"})`);
+    logInfo(logger, `Presets: ${presets.map((preset) => preset.name).join(", ")}`);
+    logInfo(logger, `Output (temporary): ${outputDir}`);
+    logInfo(logger, `Destination base: ${destBase}`);
+    logInfo(logger, `Platforms: ${platforms.join(", ")}`);
+
+    if (platforms.length === 0) {
+      logWarn(logger, "No platforms selected. Nothing to install.");
+      return [];
+    }
+
+    const analysis = analyzePresets({ presets, logger });
+    for (const target of platforms) {
+      const outDir = join(outputDir, target);
+      const result = generate(target, analysis.project);
+      if (!result) throw new Error(`No generator registered for platform: ${target}`);
+      writeResult(result, outDir, target, logger);
+    }
+
+    const skillsConfig = mergeSkillsConfigs(presets.map((preset) => loadSkills(preset.dir)));
+    const extensionsConfig = mergeExtensionsConfigs(presets.map((preset) => loadExtensions(preset.dir)));
+
+    await installGeneratedOutput({
       outputDir,
       destBase,
       userHome,
       globalInstall,
       backup,
-      timestamp,
-      extensions: extensionsConfig,
+      platforms,
+      skillsConfig,
+      extensionsConfig,
       runner,
       installExtensionsEnabled,
       logger,
-    };
+    });
+
+    logHeader(logger, "Preset Installation Complete");
+    return platforms;
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+}
+
+async function installGeneratedOutput(options: GeneratedInstallOptions): Promise<void> {
+  const timestamp = makeTimestamp();
+  const context: InstallContext = {
+    outputDir: options.outputDir,
+    destBase: options.destBase,
+    userHome: options.userHome,
+    globalInstall: options.globalInstall,
+    backup: options.backup,
+    timestamp,
+    extensions: options.extensionsConfig,
+    runner: options.runner,
+    installExtensionsEnabled: options.installExtensionsEnabled,
+    logger: options.logger,
+  };
+
+  for (const platform of options.platforms) {
     switch (platform) {
       case "opencode":
         await installOpencode(context);
@@ -212,47 +330,30 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
     }
   }
 
-  for (const platform of platforms) {
-    const platformSkills = skillsConfig[platform]?.skills ?? [];
+  for (const platform of options.platforms) {
+    const platformSkills = options.skillsConfig[platform]?.skills ?? [];
     if (platformSkills.length > 0) {
-      await installSkills(platformSkills, platform, destBase, globalInstall, logger);
+      await installSkills(platformSkills, platform, options.destBase, options.globalInstall, options.logger);
     }
   }
 
-  const allSkills = skillsConfig["*"]?.skills ?? [];
+  const allSkills = options.skillsConfig["*"]?.skills ?? [];
   if (allSkills.length > 0) {
-    logHeader(logger, "Installing External Skills");
-    await installSkills(allSkills, "*", destBase, globalInstall, logger, platforms);
+    logHeader(options.logger, "Installing External Skills");
+    await installSkills(allSkills, "*", options.destBase, options.globalInstall, options.logger, options.platforms);
   }
 
-  if (installExtensionsEnabled) {
-    for (const platform of platforms) {
-      runPlatformExtensions(
-        {
-          outputDir,
-          destBase,
-          userHome,
-          globalInstall,
-          backup,
-          timestamp,
-          extensions: extensionsConfig,
-          runner,
-          installExtensionsEnabled,
-          logger,
-        },
-        platform,
-      );
-    }
+  if (!options.installExtensionsEnabled) return;
 
-    const allExtensions = extensionsConfig["*"]?.extensions ?? [];
-    if (allExtensions.length > 0) {
-      logHeader(logger, "Installing Extensions");
-      installExtensions(allExtensions, "*", destBase, runner, logger);
-    }
+  for (const platform of options.platforms) {
+    runPlatformExtensions(context, platform);
   }
 
-  logHeader(logger, "Installation Complete");
-  return platforms;
+  const allExtensions = options.extensionsConfig["*"]?.extensions ?? [];
+  if (allExtensions.length > 0) {
+    logHeader(options.logger, "Installing Extensions");
+    installExtensions(allExtensions, "*", options.destBase, options.runner, options.logger);
+  }
 }
 
 // map platform key to skills argument agent name

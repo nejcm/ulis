@@ -50,6 +50,12 @@ export interface AnalyzeProjectOptions {
   readonly presets?: readonly ResolvedPreset[];
 }
 
+export interface AnalyzePresetsOptions {
+  readonly logger?: Logger;
+  /** Resolved presets to merge without a base source. Applied in order; later presets win conflicts. */
+  readonly presets: readonly ResolvedPreset[];
+}
+
 export interface ProjectAnalysis {
   readonly project: ReturnType<typeof parseProject>;
   readonly diagnostics: readonly Diagnostic[];
@@ -108,6 +114,79 @@ export function analyzeProject(options: AnalyzeProjectOptions): ProjectAnalysis 
       }
       parsed = mergeProjects([...completePresetProjects, baseProject]);
     }
+  } catch (err) {
+    if (err instanceof ParseAggregateError) {
+      for (const e of err.errors) logger.error(formatDiagnostic(e.toDiagnostic()));
+      throw new Error(`Parsing failed: ${err.errors.length} error(s). No files written.`);
+    }
+    throw err;
+  }
+  logger.success(`Parsed ${parsed.agents.length} agents`);
+  logger.success(`Parsed ${parsed.skills.length} skills`);
+  if (parsed.rules.length > 0) logger.success(`Parsed ${parsed.rules.length} rules`);
+  logger.success(`Parsed ${Object.keys(parsed.mcp.servers).length} MCP servers`);
+
+  logger.header("Validation");
+  const diagnostics: readonly Diagnostic[] = [
+    ...validateCrossRefs(parsed.agents, parsed.skills, parsed.mcp),
+    ...validateCollisions(parsed.agents, parsed.skills),
+  ];
+
+  for (const diagnostic of diagnostics) {
+    const line = formatDiagnostic(diagnostic);
+    if (diagnostic.level === "error") {
+      logger.error(line);
+    } else {
+      logger.warn(line);
+    }
+  }
+
+  const errorCount = diagnostics.filter((diagnostic) => diagnostic.level === "error").length;
+  const warningCount = diagnostics.length - errorCount;
+  if (errorCount > 0) {
+    throw new Error(`Validation failed: ${errorCount} error(s), ${warningCount} warning(s). No files written.`);
+  }
+  logger.success(`Validation passed (${warningCount} warning(s))`);
+
+  return { project: parsed, diagnostics, errorCount, warningCount };
+}
+
+/**
+ * Parse and validate selected presets as an installable source without a base tree.
+ */
+export function analyzePresets(options: AnalyzePresetsOptions): ProjectAnalysis {
+  const logger = options.logger ?? defaultLogger;
+  const presets = options.presets;
+  if (presets.length === 0) {
+    throw new Error("Select at least one preset.");
+  }
+
+  logger.header("Parsing");
+  logger.info(`Presets: ${presets.map((p) => p.name).join(", ")}`);
+
+  let parsed: ReturnType<typeof parseProject>;
+  try {
+    const parseErrors: ParseError[] = [];
+    const presetProjects = presets.map((preset) => {
+      logger.dim(`  Parsing preset: ${preset.name}`);
+      try {
+        return parseProject(resolve(preset.dir), { source: `preset:${preset.name}` });
+      } catch (err) {
+        if (err instanceof ParseAggregateError) {
+          parseErrors.push(...err.errors);
+          return undefined;
+        }
+        throw err;
+      }
+    });
+    const completePresetProjects = presetProjects.filter(
+      (project): project is ReturnType<typeof parseProject> => project != null,
+    );
+    if (parseErrors.length > 0) throw new ParseAggregateError(parseErrors);
+    if (completePresetProjects.length !== presetProjects.length) {
+      throw new Error("Parsing failed before preset merge.");
+    }
+    parsed = mergeProjects(completePresetProjects);
   } catch (err) {
     if (err instanceof ParseAggregateError) {
       for (const e of err.errors) logger.error(formatDiagnostic(e.toDiagnostic()));
