@@ -4,6 +4,7 @@ import { createInterface } from "node:readline";
 import { analyzePresets, analyzeProject, type Logger } from "../build.js";
 import { initCmd } from "../commands/init.js";
 import { formatDiagnostic } from "../diagnostics.js";
+import { runPresetInstall } from "../install.js";
 import { loadExtensions } from "../parsers/extensions.js";
 import { ParseError } from "../parsers/index.js";
 import { planSource, selectedPresets, type TuiAction, type TuiState } from "./state.js";
@@ -11,13 +12,14 @@ import { planSource, selectedPresets, type TuiAction, type TuiState } from "./st
 interface RuntimeDependencies {
   spawn: typeof spawn;
   createInterface: typeof createInterface;
+  runPresetInstall: typeof runPresetInstall;
 }
 
 interface RunTuiActionOptions {
   readonly signal?: AbortSignal;
 }
 
-const defaultRuntimeDependencies: RuntimeDependencies = { spawn, createInterface };
+const defaultRuntimeDependencies: RuntimeDependencies = { spawn, createInterface, runPresetInstall };
 let runtimeDependencies: RuntimeDependencies = { ...defaultRuntimeDependencies };
 
 export async function runTuiAction(
@@ -66,6 +68,21 @@ export async function runTuiAction(
     return;
   }
 
+  if (action === "presetInstall") {
+    throwIfAborted(options.signal, action);
+    await runtimeDependencies.runPresetInstall({
+      destBase: planned.destBase,
+      globalInstall: planned.globalInstall,
+      platforms: state.platforms,
+      backup: state.backup,
+      logger,
+      presets,
+      installExtensions: state.presetInstallExtensions,
+    });
+    throwIfAborted(options.signal, action);
+    return;
+  }
+
   await runActionInChildProcess(
     state,
     action,
@@ -86,7 +103,7 @@ export async function initializeMissingSource(state: TuiState, logger: Logger): 
 
 async function runActionInChildProcess(
   state: TuiState,
-  action: Exclude<TuiAction, "init" | "validate">,
+  action: Exclude<TuiAction, "init" | "validate" | "presetValidate" | "presetInstall">,
   logger: Logger,
   presetNames: readonly string[],
   signal?: AbortSignal,
@@ -96,25 +113,15 @@ async function runActionInChildProcess(
     throw new Error("Unable to resolve current CLI entry script.");
   }
 
-  const args =
-    action === "presetInstall"
-      ? [...process.execArgv, entryScript, "preset", "install", ...presetNames]
-      : [...process.execArgv, entryScript, action, "--source", planSource(state).sourceDir];
+  const args = [...process.execArgv, entryScript, action, "--source", planSource(state).sourceDir];
   args.push("--target", state.platforms.join(","));
-  if (action !== "presetInstall" && presetNames.length > 0) args.push("--preset", presetNames.join(","));
+  if (presetNames.length > 0) args.push("--preset", presetNames.join(","));
 
   if (action === "install") {
     args.push("--yes");
     if (planSource(state).globalInstall) args.push("--global");
     if (!state.rebuild) args.push("--no-rebuild");
     if (state.backup) args.push("--backup");
-  }
-
-  if (action === "presetInstall") {
-    args.push("--yes");
-    if (planSource(state).globalInstall) args.push("--global");
-    if (state.backup) args.push("--backup");
-    if (!state.presetInstallExtensions) args.push("--no-extensions");
   }
 
   await new Promise<void>((resolve, reject) => {
@@ -153,6 +160,10 @@ async function runActionInChildProcess(
       else reject(new Error(`${action} exited with code ${code ?? "unknown"}`));
     });
   });
+}
+
+function throwIfAborted(signal: AbortSignal | undefined, action: Exclude<TuiAction, "init">): void {
+  if (signal?.aborted) throw new Error(`${action} stopped by user.`);
 }
 
 function stripAnsi(value: string): string {

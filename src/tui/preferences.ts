@@ -8,6 +8,7 @@ import {
   rememberCustomSource,
   storeCurrentFlowPreferences,
   type DestinationMode,
+  type PresetSourceMode,
   type SourceMode,
   type TuiFlow,
   type TuiFlowPreferences,
@@ -23,6 +24,7 @@ export interface TuiPreferences {
   readonly recentCustomSources?: readonly string[];
   readonly platforms?: readonly Platform[];
   readonly selectedPresetNames?: readonly string[];
+  readonly presetSourceMode?: PresetSourceMode;
   readonly backup?: boolean;
   readonly rebuild?: boolean;
   readonly presetInstallExtensions?: boolean;
@@ -93,6 +95,9 @@ function legacyFlowPreferences(state: TuiState, preferences: TuiPreferences): Tu
       (name): name is string => typeof name === "string" && availablePresetNames.has(name),
     );
   }
+  if (typeof preferences.presetSourceMode === "string" && isPresetSourceMode(preferences.presetSourceMode)) {
+    next.presetSourceMode = preferences.presetSourceMode;
+  }
 
   if (typeof preferences.destinationMode === "string" && isDestinationMode(preferences.destinationMode)) {
     next.destinationMode = preferences.destinationMode;
@@ -147,6 +152,10 @@ function isDestinationMode(value: unknown): value is DestinationMode {
   return value === "project" || value === "global";
 }
 
+function isPresetSourceMode(value: unknown): value is PresetSourceMode {
+  return value === "auto" || value === "project" || value === "global" || value === "bundled";
+}
+
 function isPlatform(value: unknown): value is Platform {
   return typeof value === "string" && PLATFORMS.includes(value as Platform);
 }
@@ -179,6 +188,7 @@ function sanitizeFlowPreferences(raw: Record<string, unknown>): TuiFlowPreferenc
       (name): name is string => typeof name === "string",
     );
   }
+  if (isPresetSourceMode(raw.presetSourceMode)) next.presetSourceMode = raw.presetSourceMode;
   if (typeof raw.backup === "boolean") next.backup = raw.backup;
   if (typeof raw.rebuild === "boolean") next.rebuild = raw.rebuild;
   if (typeof raw.presetInstallExtensions === "boolean") {

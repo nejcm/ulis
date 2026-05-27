@@ -1,10 +1,10 @@
 import { ProcessTerminal, VStack, cel } from "@cel-tui/core";
 
 import type { Logger } from "./build.js";
-import { listPresets } from "./presets.js";
 import { initializeMissingSource, runTuiAction } from "./tui/actions.js";
 import { readClipboardText } from "./tui/clipboard.js";
 import { loadTuiPreferences, saveTuiPreferences, snapshotTuiPreferences } from "./tui/preferences.js";
+import { listTuiPresets } from "./tui/presets.js";
 import { renderScreen, type CustomSourceHandlers } from "./tui/render.js";
 import {
   appendTextInput,
@@ -20,7 +20,7 @@ let lastSavedPreferences = "";
 let currentRunAbortController: AbortController | undefined;
 
 function main(): void {
-  state.availablePresets = listPresets();
+  state.availablePresets = listTuiPresets();
   const loadError = loadTuiPreferences(state);
   if (loadError) state.notice = loadError;
   lastSavedPreferences = JSON.stringify(snapshotTuiPreferences(state));

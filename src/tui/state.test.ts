@@ -156,7 +156,7 @@ describe("tui state", () => {
     ]);
     state.flow = "presetsOnly";
     state.screen = "presets";
-    state.cursor = 1;
+    state.cursor = 2;
 
     expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
     expect(state.screen as string).toBe("presets");
@@ -174,7 +174,7 @@ describe("tui state", () => {
       state.screen = "presets";
       state.flow = "presetsOnly";
       state.selectedPresetNames = ["team"];
-      state.cursor = 1;
+      state.cursor = 2;
 
       expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
       expect(state.screen as string).toBe("plan");
@@ -223,6 +223,36 @@ describe("tui state", () => {
     handleTuiKey(state, "enter");
 
     expect(state.selectedPresetNames).toEqual(["team"]);
+  });
+
+  it("preset picker cycles source locations and resolves from the visible source", () => {
+    const state = createInitialState([
+      { name: "team", displayName: "Team", description: "", source: "project", dir: "/project/team" },
+      { name: "team", displayName: "Team", description: "", source: "global", dir: "/global/team" },
+    ]);
+    state.screen = "presets";
+    state.flow = "presetsOnly";
+
+    expect(selectedPresets({ ...state, selectedPresetNames: ["team"] })).toEqual([
+      { name: "team", dir: "/project/team" },
+    ]);
+
+    const originalNow = Date.now;
+    let now = 1_000;
+    Date.now = () => now;
+    try {
+      handleTuiKey(state, "enter");
+      expect(state.presetSourceMode).toBe("project");
+
+      now += 45;
+      handleTuiKey(state, "enter");
+      expect(state.presetSourceMode).toBe("global");
+    } finally {
+      Date.now = originalNow;
+    }
+
+    state.selectedPresetNames = ["team"];
+    expect(selectedPresets(state)).toEqual([{ name: "team", dir: "/global/team" }]);
   });
 
   it("platform screen can toggle all platforms off", () => {

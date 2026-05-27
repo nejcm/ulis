@@ -75,6 +75,7 @@ describe("tui preferences", () => {
       recentCustomSources: ["  ", "/a", "/a", 42 as never],
       platforms: ["codex", "bogus" as never],
       selectedPresetNames: ["team", 42 as never],
+      presetSourceMode: "sideways" as never,
       backup: "nope" as never,
       rebuild: null as never,
     });
@@ -85,6 +86,7 @@ describe("tui preferences", () => {
     expect(state.recentCustomSources).toEqual(["/a"]);
     expect(state.platforms).toEqual(["codex"]);
     expect(state.selectedPresetNames).toEqual(["team"]);
+    expect(state.presetSourceMode).toBe("auto");
     expect(state.backup).toBe(true);
     expect(state.rebuild).toBe(true);
   });
@@ -157,6 +159,7 @@ describe("tui preferences", () => {
           recentCustomSources: ["/tmp/project/.ulis", "/tmp/team/.ulis"],
           platforms: ["claude", "codex"],
           selectedPresetNames: ["team"],
+          presetSourceMode: "auto",
           backup: false,
           rebuild: false,
           presetInstallExtensions: true,

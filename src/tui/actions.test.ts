@@ -24,6 +24,14 @@ const spawnCalls: Array<{
   stdio: readonly string[];
   env?: NodeJS.ProcessEnv;
 }> = [];
+const presetInstallCalls: Array<{
+  destBase: string;
+  globalInstall?: boolean;
+  platforms?: readonly string[];
+  backup?: boolean;
+  presets: readonly { name: string; dir: string }[];
+  installExtensions?: boolean;
+}> = [];
 const spawnedChildren: Array<{
   stdout: EventEmitter;
   stderr: EventEmitter;
@@ -76,6 +84,10 @@ function installRuntimeFakes(): void {
         },
       };
     }) as unknown as typeof import("node:readline").createInterface,
+    runPresetInstall: (async (options: (typeof presetInstallCalls)[number]) => {
+      presetInstallCalls.push(options);
+      return options.platforms ?? [];
+    }) as never,
   });
 }
 
@@ -156,14 +168,16 @@ describe("tui actions child process flow", () => {
     expect(args).toContain("--backup");
   });
 
-  it("preset install action shells out through the preset install command", async () => {
+  it("preset install action uses resolved preset directories", async () => {
     installRuntimeFakes();
     spawnCalls.length = 0;
+    presetInstallCalls.length = 0;
     spawnedChildren.length = 0;
     const state = createInitialState([
-      { name: "b", displayName: "B", description: "", source: "user", dir: "/presets/b" },
-      { name: "a", displayName: "A", description: "", source: "user", dir: "/presets/a" },
+      { name: "b", displayName: "B", description: "", source: "project", dir: "/project/presets/b" },
+      { name: "a", displayName: "A", description: "", source: "project", dir: "/project/presets/a" },
     ]);
+    state.flow = "presetsOnly";
     state.selectedPresetNames = ["a", "b"];
     state.platforms = ["codex"];
     state.destinationMode = "global";
@@ -171,23 +185,20 @@ describe("tui actions child process flow", () => {
     state.presetInstallExtensions = false;
     const logger = createLogger();
 
-    const run = runTuiAction(state, "presetInstall", logger);
-    const child = spawnedChildren[0];
-    expect(child).toBeDefined();
-    child!.emitClose(0);
-    await run;
+    await runTuiAction(state, "presetInstall", logger);
 
-    const args = spawnCalls[0]!.args;
-    expect(args).toContain("preset");
-    expect(args).toContain("install");
-    expect(args.indexOf("a")).toBeLessThan(args.indexOf("b"));
-    expect(args).toContain("--target");
-    expect(args).toContain("codex");
-    expect(args).toContain("--yes");
-    expect(args).toContain("--global");
-    expect(args).toContain("--backup");
-    expect(args).toContain("--no-extensions");
-    expect(args).not.toContain("--source");
+    expect(spawnCalls).toHaveLength(0);
+    expect(presetInstallCalls).toHaveLength(1);
+    expect(presetInstallCalls[0]!).toMatchObject({
+      globalInstall: true,
+      platforms: ["codex"],
+      backup: true,
+      installExtensions: false,
+      presets: [
+        { name: "a", dir: "/project/presets/a" },
+        { name: "b", dir: "/project/presets/b" },
+      ],
+    });
   });
 
   it("forwards an empty target when no platforms are selected", async () => {

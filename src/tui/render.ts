@@ -5,11 +5,13 @@ import {
   FLOW_ITEMS,
   formatDestinationMode,
   formatFlow,
+  formatPresetSourceMode,
   formatPresets,
   formatSourceMode,
   isEditedPlan,
   planSource,
   planItems,
+  showsPresetSourcePicker,
   visiblePresetChoices,
   type TuiState,
   type TuiPlanItem,
@@ -132,6 +134,9 @@ function renderPlan(state: TuiState) {
     "Review and adjust the plan before choosing an action.",
     [
       { text: "Input", fgColor: "color06", bold: true },
+      ...(showsPresetSourcePicker(state)
+        ? [{ text: `${presetLabel} location: ${formatPresetSourceMode(state.presetSourceMode)}` }]
+        : []),
       { text: `${presetLabel}: ${formatPresets(state)}` },
       { text: baseSourceLine },
       { text: "" },
@@ -158,7 +163,7 @@ function renderPlan(state: TuiState) {
 function planLabel(state: TuiState, label: TuiPlanItem): string {
   if (label === "Base source") return formatSourceMode(state.sourceMode, state.customSource);
   if (label === "Install destination") return formatDestinationMode(state.destinationMode);
-  if (label === "Preset layers" || label === "Preset sources") return `${state.selectedPresetNames.length} selected`;
+  if (label === "Preset layers" || label === "Preset sources") return `${selectedPresetCount(state)} selected`;
   if (label === "Platforms") return `${state.platforms.length} selected`;
   if (label === "Backup") return state.backup ? "on" : "off";
   if (label === "Use latest build output") return state.rebuild ? "on" : "off";
@@ -314,10 +319,22 @@ function renderCardShell(title: string, subtitle: string, children: readonly Nod
 
 function renderPresets(state: TuiState) {
   const lines: UiLine[] = [];
+  const sourceRows = showsPresetSourcePicker(state) ? 1 : 0;
+  if (sourceRows === 1) {
+    lines.push(
+      selectableLabelValueLine(state.cursor, 0, "Preset location", formatPresetSourceMode(state.presetSourceMode)),
+      {
+        text: "Press Enter or Space to cycle where preset folders are searched.",
+        indent: 4,
+        fgColor: "color08",
+      },
+      { text: "" },
+    );
+  }
   const presets = visiblePresetChoices(state);
   if (presets.length === 0) {
     lines.push({
-      text: "No user-global or bundled presets found.",
+      text: "No presets found in the selected location.",
       fgColor: "color03",
     });
   } else {
@@ -328,18 +345,18 @@ function renderPresets(state: TuiState) {
       if (preset.source !== previousSource) {
         previousSource = preset.source;
         lines.push({
-          text: preset.source === "user" ? "User presets" : "Bundled presets",
+          text: formatPresetSourceHeading(preset.source),
           fgColor: "color06",
           bold: true,
         });
       }
       const checked = state.selectedPresetNames.includes(preset.name) ? "x" : " ";
-      lines.push(selectableLine(state.cursor, index, `[${checked}] ${preset.name} (${preset.source})`));
+      lines.push(selectableLine(state.cursor, index + sourceRows, `[${checked}] ${preset.name} (${preset.source})`));
       if (preset.description) lines.push({ text: preset.description, indent: 4, fgColor: "color08" });
     }
   }
 
-  const continueIndex = presets.length;
+  const continueIndex = presets.length + sourceRows;
   const backIndex = state.flow === "presetsOnly" ? continueIndex + 1 : continueIndex;
   lines.push({ text: "" });
   lines.push(
@@ -363,6 +380,12 @@ function renderPresets(state: TuiState) {
       : "Choose optional presets to merge before the base source.",
     lines,
   );
+}
+
+function formatPresetSourceHeading(source: string): string {
+  if (source === "project") return "Project presets";
+  if (source === "global" || source === "user") return "Global presets";
+  return "Bundled presets";
 }
 
 function renderPlatforms(state: TuiState) {
@@ -445,10 +468,11 @@ function renderInstallReview(state: TuiState) {
 function renderPresetInstallReview(state: TuiState) {
   const plan = planSource(state);
   return renderCard("Review Preset Install", "Confirm preset install settings before anything is written.", [
+    { text: `Preset location: ${formatPresetSourceMode(state.presetSourceMode)}` },
     { text: `Destination: ${plan.destBase}` },
     { text: `Platforms: ${formatPlatforms(state.platforms)}` },
     { text: `Presets: ${formatPresets(state)}` },
-    { text: `Command: ${formatPresetInstallCommand(state)}`, fgColor: "color08" },
+    { text: "Action: install selected preset directories resolved by the TUI", fgColor: "color08" },
     { text: "" },
     selectableLine(state.cursor, 0, `[${state.backup ? "x" : " "}] Backup existing configs before install`),
     selectableLine(state.cursor, 1, `[${state.presetInstallExtensions ? "x" : " "}] Run preset extensions`),
@@ -496,20 +520,9 @@ function formatInstallCommand(state: TuiState): string {
   return args.map(quoteCommandArg).join(" ");
 }
 
-function formatPresetInstallCommand(state: TuiState): string {
-  const args = [
-    "ulis",
-    "preset",
-    "install",
-    ...state.selectedPresetNames,
-    "--target",
-    state.platforms.join(","),
-    "--yes",
-  ];
-  if (state.destinationMode === "global") args.push("--global");
-  if (state.backup) args.push("--backup");
-  if (!state.presetInstallExtensions) args.push("--no-extensions");
-  return args.map(quoteCommandArg).join(" ");
+function selectedPresetCount(state: TuiState): number {
+  return state.selectedPresetNames.filter((name) => visiblePresetChoices(state).some((preset) => preset.name === name))
+    .length;
 }
 
 function quoteCommandArg(value: string): string {

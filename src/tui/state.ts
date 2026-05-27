@@ -24,6 +24,7 @@ export type TuiAction = "validate" | "presetValidate" | "build" | "install" | "p
 export type TuiFlow = "project" | "global" | "custom" | "presetsOnly";
 export type SourceMode = "project" | "global" | "custom";
 export type DestinationMode = "project" | "global";
+export type PresetSourceMode = "auto" | "project" | "global" | "bundled";
 export type TuiPreferenceScope = TuiFlow;
 export type TuiPlanItem =
   | "Preset layers"
@@ -54,6 +55,7 @@ export interface TuiFlowPreferences {
   readonly recentCustomSources?: readonly string[];
   readonly platforms?: readonly Platform[];
   readonly selectedPresetNames?: readonly string[];
+  readonly presetSourceMode?: PresetSourceMode;
   readonly backup?: boolean;
   readonly rebuild?: boolean;
   readonly presetInstallExtensions?: boolean;
@@ -72,6 +74,7 @@ export interface TuiState {
   platforms: Platform[];
   availablePresets: readonly PresetListEntry[];
   selectedPresetNames: string[];
+  presetSourceMode: PresetSourceMode;
   backup: boolean;
   rebuild: boolean;
   presetInstallExtensions: boolean;
@@ -147,6 +150,7 @@ export function createInitialState(availablePresets: readonly PresetListEntry[] 
     platforms: [...PLATFORMS],
     availablePresets,
     selectedPresetNames: [],
+    presetSourceMode: "auto",
     backup: true,
     rebuild: true,
     presetInstallExtensions: true,
@@ -180,7 +184,7 @@ export function planSource(state: TuiState, cwd: string = process.cwd(), userHom
 }
 
 export function selectedPresets(state: TuiState): readonly ResolvedPreset[] {
-  const available = new Map(state.availablePresets.map((preset) => [preset.name, preset]));
+  const available = new Map(visiblePresetChoices(state).map((preset) => [preset.name, preset]));
   return state.selectedPresetNames.flatMap((name) => {
     const preset = available.get(name);
     return preset ? [{ name: preset.name, dir: preset.dir }] : [];
@@ -200,6 +204,13 @@ export function formatDestinationMode(mode: DestinationMode): string {
 export function formatPresets(state: TuiState): string {
   const presets = selectedPresets(state).map((preset) => preset.name);
   return presets.length > 0 ? presets.join(", ") : "none";
+}
+
+export function formatPresetSourceMode(mode: PresetSourceMode): string {
+  if (mode === "project") return "Project ./.ulis/presets";
+  if (mode === "global") return "Global ~/.ulis/presets";
+  if (mode === "bundled") return "Bundled presets";
+  return "Auto project -> global -> bundled";
 }
 
 export function formatFlow(flow: TuiFlow): string {
@@ -266,10 +277,55 @@ export function togglePresetSelection(selected: readonly string[], presetName: s
 }
 
 export function visiblePresetChoices(state: TuiState): readonly PresetListEntry[] {
-  return [
-    ...state.availablePresets.filter((preset) => preset.source === "user"),
-    ...state.availablePresets.filter((preset) => preset.source === "bundled"),
-  ];
+  if (!showsPresetSourcePicker(state)) {
+    return dedupePresetChoices(
+      state.availablePresets.filter(
+        (preset) => presetSourceMatchesMode(preset.source, "global") || preset.source === "bundled",
+      ),
+    );
+  }
+
+  const mode = state.presetSourceMode;
+  const filtered =
+    mode === "auto"
+      ? state.availablePresets
+      : state.availablePresets.filter((preset) => presetSourceMatchesMode(preset.source, mode));
+  return dedupePresetChoices(filtered);
+}
+
+export function showsPresetSourcePicker(state: TuiState): boolean {
+  return state.flow === "presetsOnly";
+}
+
+function dedupePresetChoices(presets: readonly PresetListEntry[]): readonly PresetListEntry[] {
+  const byName = new Map<string, PresetListEntry>();
+  for (const preset of presets.slice().sort(comparePresetChoices)) {
+    if (!byName.has(preset.name)) byName.set(preset.name, preset);
+  }
+  return [...byName.values()];
+}
+
+function presetSourceMatchesMode(source: PresetListEntry["source"], mode: Exclude<PresetSourceMode, "auto">): boolean {
+  if (mode === "global") return source === "global" || source === "user";
+  return source === mode;
+}
+
+function comparePresetChoices(a: PresetListEntry, b: PresetListEntry): number {
+  const bySource = presetSourceRank(a.source) - presetSourceRank(b.source);
+  return bySource === 0 ? a.name.localeCompare(b.name) : bySource;
+}
+
+function presetSourceRank(source: PresetListEntry["source"]): number {
+  if (source === "project") return 0;
+  if (source === "global" || source === "user") return 1;
+  return 2;
+}
+
+function nextPresetSourceMode(mode: PresetSourceMode): PresetSourceMode {
+  if (mode === "auto") return "project";
+  if (mode === "project") return "global";
+  if (mode === "global") return "bundled";
+  return "auto";
 }
 
 export function planItems(state: TuiState): readonly TuiPlanItem[] {
@@ -282,6 +338,7 @@ export function flowPreferencesFromState(state: TuiState): TuiFlowPreferences {
     recentCustomSources: [...state.recentCustomSources],
     platforms: [...state.platforms],
     selectedPresetNames: [...state.selectedPresetNames],
+    presetSourceMode: state.presetSourceMode,
     backup: state.backup,
     rebuild: state.rebuild,
     presetInstallExtensions: state.presetInstallExtensions,
@@ -326,6 +383,7 @@ export function applyFlowPreferences(state: TuiState, flow: TuiFlow = state.flow
       availablePresetNames.has(name),
     );
   }
+  if (preferences.presetSourceMode) state.presetSourceMode = preferences.presetSourceMode;
   if (typeof preferences.backup === "boolean") state.backup = preferences.backup;
   if (typeof preferences.rebuild === "boolean") state.rebuild = preferences.rebuild;
   if (typeof preferences.presetInstallExtensions === "boolean") {
@@ -657,14 +715,18 @@ function handleCustomSourceListKey(state: TuiState, key: string): TuiEffect {
 
 function handlePresetsKey(state: TuiState, key: string): TuiEffect {
   const presets = visiblePresetChoices(state);
-  const continueIndex = presets.length;
+  const sourceRows = showsPresetSourcePicker(state) ? 1 : 0;
+  const continueIndex = presets.length + sourceRows;
   const backIndex = state.flow === "presetsOnly" ? continueIndex + 1 : continueIndex;
   const lastIndex = backIndex;
   moveCursor(state, key, lastIndex);
   if (!isConfirmKey(key) && !isToggleKey(key)) return { type: "none" };
 
-  if (state.cursor < presets.length) {
-    const preset = presets[state.cursor];
+  if (sourceRows === 1 && state.cursor === 0) {
+    state.presetSourceMode = nextPresetSourceMode(state.presetSourceMode);
+    state.notice = "";
+  } else if (state.cursor >= sourceRows && state.cursor < presets.length + sourceRows) {
+    const preset = presets[state.cursor - sourceRows];
     if (preset) state.selectedPresetNames = togglePresetSelection(state.selectedPresetNames, preset.name);
     state.notice = "";
   } else if (state.cursor === continueIndex && state.flow === "presetsOnly") {
@@ -770,7 +832,7 @@ function handleResultKey(state: TuiState, key: string): TuiEffect {
 }
 
 function startPresetOnlyAction(state: TuiState, action: "presetValidate"): TuiEffect {
-  if (state.selectedPresetNames.length === 0) {
+  if (selectedPresets(state).length === 0) {
     state.notice = "Select at least one preset first.";
     return { type: "none" };
   }
@@ -784,7 +846,7 @@ function startPresetOnlyAction(state: TuiState, action: "presetValidate"): TuiEf
 }
 
 function openPresetInstallReview(state: TuiState): TuiEffect {
-  if (state.selectedPresetNames.length === 0) {
+  if (selectedPresets(state).length === 0) {
     state.notice = "Select at least one preset first.";
     return { type: "none" };
   }
@@ -800,7 +862,7 @@ function openPresetInstallReview(state: TuiState): TuiEffect {
 }
 
 function continuePresetOnlyFlow(state: TuiState): TuiEffect {
-  if (state.selectedPresetNames.length === 0) {
+  if (selectedPresets(state).length === 0) {
     state.notice = "Select at least one preset first.";
     return { type: "none" };
   }
