@@ -1209,6 +1209,37 @@ describe("runPresetInstall", () => {
     );
   });
 
+  it("writes Claude MCP servers to <home>/.claude.json on a global preset install", async () => {
+    const root = createTempRoot();
+    const presetDir = join(root, "preset");
+    const userHome = join(root, "home");
+    mkdirSync(userHome, { recursive: true });
+    write(join(presetDir, "config.yaml"), "version: 1\nname: preset\n");
+    write(
+      join(presetDir, "mcp.json"),
+      JSON.stringify({
+        servers: {
+          shared: { type: "local", command: "node", args: ["server.js"], targets: ["claude"] },
+        },
+      }),
+    );
+
+    await runPresetInstall({
+      presets: [{ name: "preset", dir: presetDir }],
+      destBase: userHome,
+      userHome,
+      globalInstall: true,
+      platforms: ["claude"],
+      logger: silentLogger,
+    });
+
+    expect(existsSync(join(userHome, ".claude.json"))).toBe(true);
+    expect(existsSync(join(userHome, ".mcp.json"))).toBe(false);
+    expect(JSON.parse(read(join(userHome, ".claude.json")))).toEqual({
+      mcpServers: { shared: { command: "node", args: ["server.js"] } },
+    });
+  });
+
   it("rejects empty preset install requests", async () => {
     const root = createTempRoot();
     await expect(
