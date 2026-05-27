@@ -432,6 +432,7 @@ function renderInstallReview(state: TuiState) {
     { text: `Destination: ${plan.destBase}` },
     { text: `Platforms: ${formatPlatforms(state.platforms)}` },
     { text: `Presets: ${formatPresets(state)}` },
+    { text: `Command: ${formatInstallCommand(state)}`, fgColor: "color08" },
     { text: "" },
     selectableLine(state.cursor, 0, `[${state.backup ? "x" : " "}] Backup existing configs before install`),
     selectableLine(state.cursor, 1, `[${state.rebuild ? "x" : " "}] Use latest build output`),
@@ -447,6 +448,7 @@ function renderPresetInstallReview(state: TuiState) {
     { text: `Destination: ${plan.destBase}` },
     { text: `Platforms: ${formatPlatforms(state.platforms)}` },
     { text: `Presets: ${formatPresets(state)}` },
+    { text: `Command: ${formatPresetInstallCommand(state)}`, fgColor: "color08" },
     { text: "" },
     selectableLine(state.cursor, 0, `[${state.backup ? "x" : " "}] Backup existing configs before install`),
     selectableLine(state.cursor, 1, `[${state.presetInstallExtensions ? "x" : " "}] Run preset extensions`),
@@ -482,6 +484,36 @@ function selectableLine(cursor: number, index: number, text: string): UiLine {
 
 function formatPlatforms(platforms: readonly Platform[]): string {
   return platforms.length > 0 ? platforms.map((platform) => PLATFORM_LABELS[platform]).join(", ") : "none";
+}
+
+function formatInstallCommand(state: TuiState): string {
+  const plan = planSource(state);
+  const args = ["ulis", "install", "--source", plan.sourceDir, "--target", state.platforms.join(","), "--yes"];
+  if (state.destinationMode === "global") args.push("--global");
+  if (state.selectedPresetNames.length > 0) args.push("--preset", state.selectedPresetNames.join(","));
+  if (!state.rebuild) args.push("--no-rebuild");
+  if (state.backup) args.push("--backup");
+  return args.map(quoteCommandArg).join(" ");
+}
+
+function formatPresetInstallCommand(state: TuiState): string {
+  const args = [
+    "ulis",
+    "preset",
+    "install",
+    ...state.selectedPresetNames,
+    "--target",
+    state.platforms.join(","),
+    "--yes",
+  ];
+  if (state.destinationMode === "global") args.push("--global");
+  if (state.backup) args.push("--backup");
+  if (!state.presetInstallExtensions) args.push("--no-extensions");
+  return args.map(quoteCommandArg).join(" ");
+}
+
+function quoteCommandArg(value: string): string {
+  return /\s/u.test(value) ? `"${value.replaceAll('"', '\\"')}"` : value;
 }
 
 function planActionLine(state: TuiState, label: TuiPlanItem, index: number): UiLine {

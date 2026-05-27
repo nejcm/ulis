@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 import { ULIS_SOURCE_DIRNAME } from "../config.js";
 import { PLATFORMS, uniquePlatforms, type Platform } from "../platforms.js";
@@ -24,6 +24,7 @@ export type TuiAction = "validate" | "presetValidate" | "build" | "install" | "p
 export type TuiFlow = "project" | "global" | "custom" | "presetsOnly";
 export type SourceMode = "project" | "global" | "custom";
 export type DestinationMode = "project" | "global";
+export type TuiPreferenceScope = TuiFlow;
 export type TuiPlanItem =
   | "Preset layers"
   | "Preset sources"
@@ -47,6 +48,17 @@ export interface PlannedSource {
   readonly globalInstall: boolean;
 }
 
+export interface TuiFlowPreferences {
+  readonly destinationMode?: DestinationMode;
+  readonly customSource?: string;
+  readonly recentCustomSources?: readonly string[];
+  readonly platforms?: readonly Platform[];
+  readonly selectedPresetNames?: readonly string[];
+  readonly backup?: boolean;
+  readonly rebuild?: boolean;
+  readonly presetInstallExtensions?: boolean;
+}
+
 export interface TuiState {
   screen: TuiScreen;
   cursor: number;
@@ -63,6 +75,7 @@ export interface TuiState {
   backup: boolean;
   rebuild: boolean;
   presetInstallExtensions: boolean;
+  flowPreferences: Partial<Record<TuiPreferenceScope, TuiFlowPreferences>>;
   logs: string[];
   notice: string;
   resultTitle: string;
@@ -133,6 +146,7 @@ export function createInitialState(availablePresets: readonly PresetListEntry[] 
     backup: true,
     rebuild: true,
     presetInstallExtensions: true,
+    flowPreferences: {},
     logs: [],
     notice: "",
     resultTitle: "",
@@ -227,6 +241,14 @@ export function rememberCustomSource(recent: readonly string[], value: string): 
   return [normalized, ...recent.filter((entry) => entry !== normalized)].slice(0, 3);
 }
 
+export function normalizeCustomSourceInput(value: string, cwd: string = process.cwd()): string {
+  const source = resolve(cwd, value.trim());
+  if (basename(source) === ULIS_SOURCE_DIRNAME) return source;
+
+  const childSource = join(source, ULIS_SOURCE_DIRNAME);
+  return existsSync(childSource) ? childSource : source;
+}
+
 export function openCustomSourceInput(state: TuiState): void {
   state.textInput = state.customSource;
   state.recentCustomSources = rememberCustomSource(state.recentCustomSources, state.customSource);
@@ -248,6 +270,57 @@ export function visiblePresetChoices(state: TuiState): readonly PresetListEntry[
 
 export function planItems(state: TuiState): readonly TuiPlanItem[] {
   return state.flow === "presetsOnly" ? PRESET_ONLY_PLAN_ITEMS : DASHBOARD_ITEMS;
+}
+
+export function flowPreferencesFromState(state: TuiState): TuiFlowPreferences {
+  return {
+    destinationMode: state.destinationMode,
+    customSource: state.customSource,
+    recentCustomSources: [...state.recentCustomSources],
+    platforms: [...state.platforms],
+    selectedPresetNames: [...state.selectedPresetNames],
+    backup: state.backup,
+    rebuild: state.rebuild,
+    presetInstallExtensions: state.presetInstallExtensions,
+  };
+}
+
+export function storeCurrentFlowPreferences(state: TuiState): void {
+  state.flowPreferences = {
+    ...state.flowPreferences,
+    [state.flow]: flowPreferencesFromState(state),
+  };
+}
+
+export function applyFlowPreferences(state: TuiState, flow: TuiFlow = state.flow): void {
+  const preferences = state.flowPreferences[flow];
+  if (!preferences) return;
+
+  if ((flow === "custom" || flow === "presetsOnly") && preferences.destinationMode) {
+    state.destinationMode = preferences.destinationMode;
+  }
+
+  if (preferences.recentCustomSources) {
+    state.recentCustomSources = [...preferences.recentCustomSources];
+  }
+
+  if (flow === "custom" && preferences.customSource) {
+    state.customSource = preferences.customSource;
+    state.recentCustomSources = rememberCustomSource(state.recentCustomSources, preferences.customSource);
+  }
+
+  if (preferences.platforms) state.platforms = uniquePlatforms(preferences.platforms);
+  if (preferences.selectedPresetNames) {
+    const availablePresetNames = new Set(state.availablePresets.map((preset) => preset.name));
+    state.selectedPresetNames = [...new Set(preferences.selectedPresetNames)].filter((name) =>
+      availablePresetNames.has(name),
+    );
+  }
+  if (typeof preferences.backup === "boolean") state.backup = preferences.backup;
+  if (typeof preferences.rebuild === "boolean") state.rebuild = preferences.rebuild;
+  if (typeof preferences.presetInstallExtensions === "boolean") {
+    state.presetInstallExtensions = preferences.presetInstallExtensions;
+  }
 }
 
 export interface CustomSourceTextInputKeyResult {
@@ -442,6 +515,7 @@ function handlePlanKey(state: TuiState, key: string): TuiEffect {
 }
 
 function applyFlowDefaults(state: TuiState, flow: TuiFlow): void {
+  storeCurrentFlowPreferences(state);
   state.flow = flow;
   if (flow === "project") {
     state.sourceMode = "project";
@@ -456,6 +530,7 @@ function applyFlowDefaults(state: TuiState, flow: TuiFlow): void {
     state.sourceMode = "project";
     state.destinationMode = "project";
   }
+  applyFlowPreferences(state, flow);
 }
 
 function handleSourceKey(state: TuiState, key: string): TuiEffect {
@@ -523,11 +598,12 @@ export function applyCustomSourceTextInputChange(state: TuiState, value: string)
 }
 
 function commitCustomSourceIfValid(state: TuiState): boolean {
-  const value = state.textInput.trim();
-  if (!value) {
+  const rawValue = state.textInput.trim();
+  if (!rawValue) {
     state.notice = "Enter a custom source path first.";
     return false;
   }
+  const value = normalizeCustomSourceInput(rawValue);
   state.customSource = value;
   state.recentCustomSources = rememberCustomSource(state.recentCustomSources, value);
   state.sourceMode = "custom";

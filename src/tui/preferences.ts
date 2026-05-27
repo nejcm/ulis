@@ -3,9 +3,20 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { PLATFORMS, uniquePlatforms, type Platform } from "../platforms.js";
-import { rememberCustomSource, type DestinationMode, type SourceMode, type TuiState } from "./state.js";
+import {
+  applyFlowPreferences,
+  rememberCustomSource,
+  storeCurrentFlowPreferences,
+  type DestinationMode,
+  type SourceMode,
+  type TuiFlow,
+  type TuiFlowPreferences,
+  type TuiState,
+} from "./state.js";
 
 export interface TuiPreferences {
+  readonly version?: number;
+  readonly scopes?: Partial<Record<TuiFlow, TuiFlowPreferences>>;
   readonly sourceMode?: SourceMode;
   readonly destinationMode?: DestinationMode;
   readonly customSource?: string;
@@ -14,58 +25,82 @@ export interface TuiPreferences {
   readonly selectedPresetNames?: readonly string[];
   readonly backup?: boolean;
   readonly rebuild?: boolean;
+  readonly presetInstallExtensions?: boolean;
 }
 
 const TUI_PREFERENCES_FILE = ".ulis-tui.json";
+type MutableFlowPreferences = {
+  -readonly [Key in keyof TuiFlowPreferences]?: TuiFlowPreferences[Key];
+};
 
 export function getTuiPreferencesPath(userHome: string = homedir()): string {
   return join(userHome, TUI_PREFERENCES_FILE);
 }
 
 export function snapshotTuiPreferences(state: TuiState): TuiPreferences {
+  storeCurrentFlowPreferences(state);
   return {
-    sourceMode: state.sourceMode,
-    destinationMode: state.destinationMode,
-    customSource: state.customSource,
-    recentCustomSources: [...state.recentCustomSources],
-    platforms: [...state.platforms],
-    selectedPresetNames: [...state.selectedPresetNames],
-    backup: state.backup,
-    rebuild: state.rebuild,
+    version: 2,
+    scopes: { ...state.flowPreferences },
   };
 }
 
 export function applyTuiPreferences(state: TuiState, preferences: TuiPreferences): void {
-  if (isSourceMode(preferences.sourceMode)) state.sourceMode = preferences.sourceMode;
-  if (isDestinationMode(preferences.destinationMode)) state.destinationMode = preferences.destinationMode;
+  state.flowPreferences = parsePreferenceScopes(preferences.scopes);
 
+  const legacyPreferences = legacyFlowPreferences(state, preferences);
+  if (legacyPreferences) {
+    const legacyScope = isSourceMode(preferences.sourceMode) ? preferences.sourceMode : "project";
+    state.flowPreferences = {
+      ...state.flowPreferences,
+      [legacyScope]: {
+        ...legacyPreferences,
+        ...state.flowPreferences[legacyScope],
+      },
+    };
+  }
+
+  applyFlowPreferences(state, state.flow);
+}
+
+function legacyFlowPreferences(state: TuiState, preferences: TuiPreferences): TuiFlowPreferences | undefined {
+  const next: MutableFlowPreferences = {};
   if (typeof preferences.customSource === "string") {
-    state.customSource = preferences.customSource.trim();
+    next.customSource = preferences.customSource.trim();
   }
 
   if (Array.isArray(preferences.recentCustomSources)) {
-    state.recentCustomSources = [...new Set(preferences.recentCustomSources)]
+    next.recentCustomSources = [...new Set(preferences.recentCustomSources)]
       .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
       .map((entry) => entry.trim())
       .slice(0, 3);
   }
 
-  state.recentCustomSources = rememberCustomSource(state.recentCustomSources, state.customSource);
+  if (next.customSource)
+    next.recentCustomSources = rememberCustomSource(next.recentCustomSources ?? [], next.customSource);
 
   if (Array.isArray(preferences.platforms)) {
     const platforms = uniquePlatforms(preferences.platforms.filter(isPlatform));
-    state.platforms = platforms;
+    next.platforms = platforms;
   }
 
   if (Array.isArray(preferences.selectedPresetNames)) {
     const availablePresetNames = new Set(state.availablePresets.map((preset) => preset.name));
-    state.selectedPresetNames = [...new Set(preferences.selectedPresetNames)]
-      .filter((name): name is string => typeof name === "string" && availablePresetNames.has(name))
-      .sort();
+    next.selectedPresetNames = [...new Set(preferences.selectedPresetNames)].filter(
+      (name): name is string => typeof name === "string" && availablePresetNames.has(name),
+    );
   }
 
-  if (typeof preferences.backup === "boolean") state.backup = preferences.backup;
-  if (typeof preferences.rebuild === "boolean") state.rebuild = preferences.rebuild;
+  if (typeof preferences.destinationMode === "string" && isDestinationMode(preferences.destinationMode)) {
+    next.destinationMode = preferences.destinationMode;
+  }
+  if (typeof preferences.backup === "boolean") next.backup = preferences.backup;
+  if (typeof preferences.rebuild === "boolean") next.rebuild = preferences.rebuild;
+  if (typeof preferences.presetInstallExtensions === "boolean") {
+    next.presetInstallExtensions = preferences.presetInstallExtensions;
+  }
+
+  return Object.keys(next).length > 0 ? next : undefined;
 }
 
 export function loadTuiPreferences(state: TuiState, filePath: string = getTuiPreferencesPath()): string | undefined {
@@ -97,6 +132,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value != null && !Array.isArray(value);
 }
 
+function isTuiFlow(value: unknown): value is TuiFlow {
+  return value === "project" || value === "global" || value === "custom" || value === "presetsOnly";
+}
+
 function isSourceMode(value: unknown): value is SourceMode {
   return value === "project" || value === "global" || value === "custom";
 }
@@ -107,6 +146,43 @@ function isDestinationMode(value: unknown): value is DestinationMode {
 
 function isPlatform(value: unknown): value is Platform {
   return typeof value === "string" && PLATFORMS.includes(value as Platform);
+}
+
+function parsePreferenceScopes(value: unknown): Partial<Record<TuiFlow, TuiFlowPreferences>> {
+  if (!isRecord(value)) return {};
+
+  const scopes: Partial<Record<TuiFlow, TuiFlowPreferences>> = {};
+  for (const [scope, rawPreferences] of Object.entries(value)) {
+    if (!isTuiFlow(scope) || !isRecord(rawPreferences)) continue;
+    scopes[scope] = sanitizeFlowPreferences(rawPreferences);
+  }
+  return scopes;
+}
+
+function sanitizeFlowPreferences(raw: Record<string, unknown>): TuiFlowPreferences {
+  const next: MutableFlowPreferences = {};
+
+  if (isDestinationMode(raw.destinationMode)) next.destinationMode = raw.destinationMode;
+  if (typeof raw.customSource === "string" && raw.customSource.trim()) next.customSource = raw.customSource.trim();
+  if (Array.isArray(raw.recentCustomSources)) {
+    next.recentCustomSources = [...new Set(raw.recentCustomSources)]
+      .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+      .map((entry) => entry.trim())
+      .slice(0, 3);
+  }
+  if (Array.isArray(raw.platforms)) next.platforms = uniquePlatforms(raw.platforms.filter(isPlatform));
+  if (Array.isArray(raw.selectedPresetNames)) {
+    next.selectedPresetNames = [...new Set(raw.selectedPresetNames)].filter(
+      (name): name is string => typeof name === "string",
+    );
+  }
+  if (typeof raw.backup === "boolean") next.backup = raw.backup;
+  if (typeof raw.rebuild === "boolean") next.rebuild = raw.rebuild;
+  if (typeof raw.presetInstallExtensions === "boolean") {
+    next.presetInstallExtensions = raw.presetInstallExtensions;
+  }
+
+  return next;
 }
 
 function formatError(error: unknown): string {

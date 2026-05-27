@@ -450,32 +450,37 @@ describe("tui state", () => {
   });
 
   it("customSource enter with valid path saves and returns to plan", () => {
+    const root = createTempRoot();
+    mkdirSync(join(root, ".ulis"));
     const state = createInitialState();
     state.screen = "customSource";
-    state.textInput = "/some/custom/path";
+    state.textInput = root;
 
     const result = handleCustomSourceTextInputKey(state, "enter");
 
     expect(result.preventDefault).toBe(true);
     expect(state.screen as string).toBe("plan");
-    expect(state.customSource).toBe("/some/custom/path");
-    expect(state.recentCustomSources).toEqual(["/some/custom/path"]);
+    expect(state.customSource).toBe(join(root, ".ulis"));
+    expect(state.recentCustomSources).toEqual([join(root, ".ulis")]);
     expect(state.sourceMode as string).toBe("custom");
     expect(state.destinationMode as string).toBe("project");
   });
 
   it("customSource enter on a recent path selects and saves it", () => {
+    const root = createTempRoot();
+    const recentA = join(root, "recent-a", ".ulis");
+    const recentB = join(root, "recent-b", ".ulis");
     const state = createInitialState();
     state.screen = "customSource";
     state.textInput = "";
-    state.recentCustomSources = ["/recent/a", "/recent/b"];
+    state.recentCustomSources = [recentA, recentB];
     state.cursor = 2;
 
     handleTuiKey(state, "enter");
 
     expect(state.screen as string).toBe("plan");
-    expect(state.customSource).toBe("/recent/b");
-    expect(state.recentCustomSources).toEqual(["/recent/b", "/recent/a"]);
+    expect(state.customSource).toBe(recentB);
+    expect(state.recentCustomSources).toEqual([recentB, recentA]);
   });
 
   it("opening custom source keeps the saved custom source in recent inputs", () => {

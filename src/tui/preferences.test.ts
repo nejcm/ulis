@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { applyTuiPreferences, getTuiPreferencesPath, loadTuiPreferences, saveTuiPreferences } from "./preferences.js";
-import { createInitialState } from "./state.js";
+import { createInitialState, handleTuiKey } from "./state.js";
 
 const tmpRoots: string[] = [];
 
@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 describe("tui preferences", () => {
-  it("loads saved platforms and presets into state", () => {
+  it("loads legacy preferences into their flow scope without overriding the start screen", () => {
     const root = createTempRoot();
     const filePath = join(root, "prefs.json");
     writeFileSync(
@@ -42,6 +42,12 @@ describe("tui preferences", () => {
     const error = loadTuiPreferences(state, filePath);
 
     expect(error).toBeUndefined();
+    expect(state.sourceMode).toBe("project");
+    expect(state.destinationMode).toBe("project");
+
+    state.cursor = 2;
+    handleTuiKey(state, "enter");
+
     expect(state.sourceMode).toBe("custom");
     expect(state.destinationMode).toBe("global");
     expect(state.customSource).toBe("/workspace/.ulis");
@@ -80,6 +86,7 @@ describe("tui preferences", () => {
     const root = createTempRoot();
     const filePath = join(root, "prefs.json");
     const state = createInitialState([{ name: "team", displayName: "Team", description: "", source: "user", dir: "" }]);
+    state.flow = "custom";
     state.sourceMode = "custom";
     state.destinationMode = "global";
     state.customSource = "/tmp/project/.ulis";
@@ -93,14 +100,19 @@ describe("tui preferences", () => {
 
     expect(error).toBeUndefined();
     expect(JSON.parse(readFileSync(filePath, "utf-8"))).toEqual({
-      sourceMode: "custom",
-      destinationMode: "global",
-      customSource: "/tmp/project/.ulis",
-      recentCustomSources: ["/tmp/project/.ulis", "/tmp/team/.ulis"],
-      platforms: ["claude", "codex"],
-      selectedPresetNames: ["team"],
-      backup: false,
-      rebuild: false,
+      version: 2,
+      scopes: {
+        custom: {
+          destinationMode: "global",
+          customSource: "/tmp/project/.ulis",
+          recentCustomSources: ["/tmp/project/.ulis", "/tmp/team/.ulis"],
+          platforms: ["claude", "codex"],
+          selectedPresetNames: ["team"],
+          backup: false,
+          rebuild: false,
+          presetInstallExtensions: true,
+        },
+      },
     });
   });
 

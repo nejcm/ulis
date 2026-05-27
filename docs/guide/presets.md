@@ -73,9 +73,9 @@ ulis preset install backend react-web --global --backup
 
 ## TUI
 
-In `ulis tui`, open **Presets** to toggle which bundles apply to **validate**, **build**, and **install**. The same merge rules apply as on the CLI.
+In `ulis tui`, normal project/global/custom-source workflows call these **Preset layers**. Toggle them in the plan to apply them to **validate**, **build**, and **install**. The same merge rules apply as on the CLI.
 
-The same screen also has **Install selected presets**. That action installs only the selected presets, does not require the current source to exist, and shows a review screen for destination, platforms, backups, and preset extensions before writing files.
+The **Install presets only** workflow calls them **Preset sources**. That flow installs only the selected presets, does not require the current source to exist, and shows a review screen for destination, platforms, backups, and preset extensions before writing files.
 
 ## Further reading
 
