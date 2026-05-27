@@ -81,7 +81,8 @@ describe("tui state", () => {
     process.chdir(root);
     try {
       const state = createInitialState();
-      state.cursor = 4;
+      state.screen = "plan";
+      state.cursor = 6;
 
       expect(handleTuiKey(state, "enter")).toEqual({ type: "start", action: "validate" });
     } finally {
@@ -96,10 +97,11 @@ describe("tui state", () => {
     process.chdir(root);
     try {
       const state = createInitialState();
-      state.cursor = 6;
+      state.screen = "plan";
+      state.cursor = 8;
 
       expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
-      expect(state.screen).toBe("installReview");
+      expect(state.screen as string).toBe("installReview");
     } finally {
       process.chdir(originalCwd);
     }
@@ -111,10 +113,11 @@ describe("tui state", () => {
     process.chdir(root);
     try {
       const state = createInitialState();
-      state.cursor = 5;
+      state.screen = "plan";
+      state.cursor = 7;
 
       expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
-      expect(state.screen).toBe("missingSource");
+      expect(state.screen as string).toBe("missingSource");
       expect(state.pendingAction).toBe("build");
     } finally {
       process.chdir(originalCwd);
@@ -188,7 +191,7 @@ describe("tui state", () => {
     expect(PLATFORMS.length).toBeGreaterThan(0);
   });
 
-  it("missingSource custom mode cursor=1 navigates to dashboard", () => {
+  it("missingSource custom mode cursor=1 navigates to plan", () => {
     const state = createInitialState();
     state.screen = "missingSource";
     state.sourceMode = "custom";
@@ -196,7 +199,7 @@ describe("tui state", () => {
 
     handleTuiKey(state, "enter");
 
-    expect(state.screen as string).toBe("dashboard");
+    expect(state.screen as string).toBe("plan");
     expect(state.cursor).toBe(0);
   });
 
@@ -212,7 +215,7 @@ describe("tui state", () => {
     expect(state.cursor).toBe(0);
   });
 
-  it("missingSource non-custom cursor=2 navigates to dashboard", () => {
+  it("missingSource non-custom cursor=2 navigates to plan", () => {
     const state = createInitialState();
     state.screen = "missingSource";
     state.sourceMode = "project";
@@ -220,7 +223,7 @@ describe("tui state", () => {
 
     handleTuiKey(state, "enter");
 
-    expect(state.screen as string).toBe("dashboard");
+    expect(state.screen as string).toBe("plan");
   });
 
   it("missingSource non-custom cursor=1 navigates to source selection", () => {
@@ -274,15 +277,15 @@ describe("tui state", () => {
     expect(handleTuiKey(state, "enter")).toEqual({ type: "start", action: "install" });
   });
 
-  it("installReview back navigates to dashboard", () => {
+  it("installReview back navigates to plan", () => {
     const state = createInitialState();
     state.screen = "installReview";
     state.cursor = 3;
 
     handleTuiKey(state, "enter");
 
-    expect(state.screen as string).toBe("dashboard");
-    expect(state.cursor).toBe(6);
+    expect(state.screen as string).toBe("plan");
+    expect(state.cursor).toBe(8);
   });
 
   it("presetInstallReview toggles extension installs with space", () => {
@@ -401,7 +404,7 @@ describe("tui state", () => {
     expect(state.notice).toBeTruthy();
   });
 
-  it("customSource enter with valid path saves and returns to dashboard", () => {
+  it("customSource enter with valid path saves and returns to plan", () => {
     const state = createInitialState();
     state.screen = "customSource";
     state.textInput = "/some/custom/path";
@@ -409,7 +412,7 @@ describe("tui state", () => {
     const result = handleCustomSourceTextInputKey(state, "enter");
 
     expect(result.preventDefault).toBe(true);
-    expect(state.screen as string).toBe("dashboard");
+    expect(state.screen as string).toBe("plan");
     expect(state.customSource).toBe("/some/custom/path");
     expect(state.recentCustomSources).toEqual(["/some/custom/path"]);
     expect(state.sourceMode as string).toBe("custom");
@@ -425,7 +428,7 @@ describe("tui state", () => {
 
     handleTuiKey(state, "enter");
 
-    expect(state.screen as string).toBe("dashboard");
+    expect(state.screen as string).toBe("plan");
     expect(state.customSource).toBe("/recent/b");
     expect(state.recentCustomSources).toEqual(["/recent/b", "/recent/a"]);
   });
@@ -460,9 +463,10 @@ describe("tui state", () => {
     expect(rememberCustomSource(["/a", "/b", "/c"], "/b")).toEqual(["/b", "/a", "/c"]);
   });
 
-  it("dashboard destination toggles with space key", () => {
+  it("plan destination toggles with space key", () => {
     const state = createInitialState();
-    state.cursor = 1;
+    state.screen = "plan";
+    state.cursor = 3;
     const originalNow = Date.now;
     let now = 4_000;
     Date.now = () => now;
@@ -480,18 +484,20 @@ describe("tui state", () => {
     }
   });
 
-  it("dashboard destination toggles with named space key", () => {
+  it("plan destination toggles with named space key", () => {
     const state = createInitialState();
-    state.cursor = 1;
+    state.screen = "plan";
+    state.cursor = 3;
 
     handleTuiKey(state, "space");
 
     expect(state.destinationMode).toBe("global");
   });
 
-  it("dashboard destination toggles with x key", () => {
+  it("plan destination toggles with x key", () => {
     const state = createInitialState();
-    state.cursor = 1;
+    state.screen = "plan";
+    state.cursor = 3;
 
     handleTuiKey(state, "x");
 
@@ -530,7 +536,7 @@ describe("tui state", () => {
       { name: "team", displayName: "Team", description: "", source: "user", dir: "/p" },
     ]);
     state.screen = "presets";
-    state.cursor = 2; // Back to dashboard
+    state.cursor = 2; // Back to plan
     const originalNow = Date.now;
     let now = 1_000;
     Date.now = () => now;
@@ -542,13 +548,14 @@ describe("tui state", () => {
       Date.now = originalNow;
     }
 
-    expect(state.screen as string).toBe("dashboard");
+    expect(state.screen as string).toBe("plan");
     expect(state.cursor).toBe(0);
   });
 
   it("deduplicates rapid toggle key events", () => {
     const state = createInitialState();
-    state.cursor = 1;
+    state.screen = "plan";
+    state.cursor = 3;
     const originalNow = Date.now;
     let now = 2_000;
     Date.now = () => now;
@@ -596,7 +603,7 @@ describe("tui state", () => {
 
     handleTuiKey(state, "delete");
 
-    expect(state.screen as string).toBe("dashboard");
+    expect(state.screen as string).toBe("plan");
     expect(state.cursor).toBe(0);
   });
 
@@ -685,48 +692,48 @@ describe("tui state", () => {
     expect(state.cursor).toBe(1);
   });
 
-  it("backspace on source screen returns to dashboard", () => {
+  it("backspace on source screen returns to plan", () => {
     const state = createInitialState();
     state.screen = "source";
     state.cursor = 2;
 
     handleTuiKey(state, "backspace");
 
-    expect(state.screen as string).toBe("dashboard");
+    expect(state.screen as string).toBe("plan");
     expect(state.cursor).toBe(0);
   });
 
-  it("backspace on presets screen returns to dashboard", () => {
+  it("backspace on presets screen returns to plan", () => {
     const state = createInitialState();
     state.screen = "presets";
     state.cursor = 1;
 
     handleTuiKey(state, "backspace");
 
-    expect(state.screen as string).toBe("dashboard");
+    expect(state.screen as string).toBe("plan");
     expect(state.cursor).toBe(0);
   });
 
-  it("backspace on platforms screen returns to dashboard", () => {
+  it("backspace on platforms screen returns to plan", () => {
     const state = createInitialState();
     state.screen = "platforms";
     state.cursor = 3;
 
     handleTuiKey(state, "backspace");
 
-    expect(state.screen as string).toBe("dashboard");
+    expect(state.screen as string).toBe("plan");
     expect(state.cursor).toBe(0);
   });
 
-  it("backspace on installReview returns to dashboard install action", () => {
+  it("backspace on installReview returns to plan install action", () => {
     const state = createInitialState();
     state.screen = "installReview";
     state.cursor = 0;
 
     handleTuiKey(state, "backspace");
 
-    expect(state.screen as string).toBe("dashboard");
-    expect(state.cursor).toBe(6);
+    expect(state.screen as string).toBe("plan");
+    expect(state.cursor).toBe(8);
   });
 
   it("pendingAction is cleared when navigating away from result screen", () => {
@@ -736,7 +743,7 @@ describe("tui state", () => {
 
     handleTuiKey(state, "enter");
 
-    expect(state.screen as string).toBe("dashboard");
+    expect(state.screen as string).toBe("plan");
     expect(state.pendingAction).toBeUndefined();
   });
 });

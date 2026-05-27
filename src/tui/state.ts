@@ -8,7 +8,8 @@ import type { PresetListEntry } from "../presets.js";
 import type { ResolvedPreset } from "../utils/resolve-presets.js";
 
 export type TuiScreen =
-  | "dashboard"
+  | "flow"
+  | "plan"
   | "source"
   | "customSource"
   | "presets"
@@ -20,6 +21,7 @@ export type TuiScreen =
   | "result";
 
 export type TuiAction = "validate" | "build" | "install" | "presetInstall" | "init";
+export type TuiFlow = "project" | "global" | "custom" | "presetsOnly";
 export type SourceMode = "project" | "global" | "custom";
 export type DestinationMode = "project" | "global";
 
@@ -36,6 +38,7 @@ export interface TuiState {
   screen: TuiScreen;
   cursor: number;
   runningSpinnerFrame: number;
+  flow: TuiFlow;
   sourceMode: SourceMode;
   destinationMode: DestinationMode;
   customSource: string;
@@ -68,22 +71,33 @@ const KEY_DUPLICATE_WINDOW_MS = 35;
 let lastKeyEvent: { readonly id: string; readonly at: number } | undefined;
 
 export const DASHBOARD_ITEMS = [
-  "Source",
-  "Destination",
-  "Presets",
+  "Preset layers",
+  "Base source",
   "Platforms",
+  "Install destination",
+  "Backup",
+  "Use latest build output",
   "Validate",
-  "Build",
+  "Build only",
   "Install",
+  "Back to start",
+] as const;
+
+export const FLOW_ITEMS = [
+  "Update this project",
+  "Update global configs",
+  "Use custom source",
+  "Install presets only",
   "Quit",
 ] as const;
 
 export function createInitialState(availablePresets: readonly PresetListEntry[] = []): TuiState {
   lastKeyEvent = undefined;
   return {
-    screen: "dashboard",
+    screen: "flow",
     cursor: 0,
     runningSpinnerFrame: 0,
+    flow: "project",
     sourceMode: "project",
     destinationMode: "project",
     customSource: "",
@@ -143,6 +157,20 @@ export function formatDestinationMode(mode: DestinationMode): string {
 export function formatPresets(state: TuiState): string {
   const presets = selectedPresets(state).map((preset) => preset.name);
   return presets.length > 0 ? presets.join(", ") : "none";
+}
+
+export function formatFlow(flow: TuiFlow): string {
+  if (flow === "project") return "Update this project";
+  if (flow === "global") return "Update global configs";
+  if (flow === "custom") return "Use custom source";
+  return "Install presets only";
+}
+
+export function isEditedPlan(state: TuiState): boolean {
+  if (state.flow === "project") return state.sourceMode !== "project" || state.destinationMode !== "project";
+  if (state.flow === "global") return state.sourceMode !== "global" || state.destinationMode !== "global";
+  if (state.flow === "custom") return state.sourceMode !== "custom";
+  return state.sourceMode !== "project";
 }
 
 export function togglePlatformSelection(selected: readonly Platform[], platform: Platform): Platform[] {
@@ -216,8 +244,10 @@ export function handleTuiKey(state: TuiState, key: string): TuiEffect {
   }
 
   switch (state.screen) {
-    case "dashboard":
-      return handleDashboardKey(state, key);
+    case "flow":
+      return handleFlowKey(state, key);
+    case "plan":
+      return handlePlanKey(state, key);
     case "source":
       return handleSourceKey(state, key);
     case "customSource":
@@ -239,20 +269,21 @@ export function handleTuiKey(state: TuiState, key: string): TuiEffect {
 
 function navigateBack(state: TuiState): TuiEffect {
   if (
+    state.screen === "plan" ||
     state.screen === "source" ||
     state.screen === "presets" ||
     state.screen === "platforms" ||
     state.screen === "missingSource"
   ) {
-    state.screen = "dashboard";
+    state.screen = state.screen === "plan" ? "flow" : "plan";
     state.cursor = 0;
     state.notice = "";
     return { type: "none" };
   }
 
   if (state.screen === "installReview") {
-    state.screen = "dashboard";
-    state.cursor = 6;
+    state.screen = "plan";
+    state.cursor = 8;
     state.notice = "";
     return { type: "none" };
   }
@@ -265,7 +296,7 @@ function navigateBack(state: TuiState): TuiEffect {
   }
 
   if (state.screen === "result") {
-    state.screen = "dashboard";
+    state.screen = "plan";
     state.cursor = 0;
     state.notice = "";
     state.pendingAction = undefined;
@@ -275,11 +306,49 @@ function navigateBack(state: TuiState): TuiEffect {
   return { type: "none" };
 }
 
-function handleDashboardKey(state: TuiState, key: string): TuiEffect {
+function handleFlowKey(state: TuiState, key: string): TuiEffect {
+  moveCursor(state, key, FLOW_ITEMS.length - 1);
+  if (!isConfirmKey(key)) return { type: "none" };
+
+  state.notice = "";
+  if (state.cursor === 0) {
+    applyFlowDefaults(state, "project");
+    state.screen = "plan";
+    state.cursor = 0;
+  } else if (state.cursor === 1) {
+    applyFlowDefaults(state, "global");
+    state.screen = "plan";
+    state.cursor = 0;
+  } else if (state.cursor === 2) {
+    applyFlowDefaults(state, "custom");
+    openCustomSourceInput(state);
+  } else if (state.cursor === 3) {
+    applyFlowDefaults(state, "presetsOnly");
+    state.screen = "presets";
+    state.cursor = 0;
+  } else {
+    return { type: "exit", code: 0 };
+  }
+
+  return { type: "none" };
+}
+
+function handlePlanKey(state: TuiState, key: string): TuiEffect {
   moveCursor(state, key, DASHBOARD_ITEMS.length - 1);
 
-  // Destination (index 1) is a real checkbox — accept toggle keys (x, space) as well as Enter
-  if (state.cursor === 1 && isToggleKey(key)) {
+  if (state.cursor === 4 && isToggleKey(key)) {
+    state.backup = !state.backup;
+    state.notice = "";
+    return { type: "none" };
+  }
+
+  if (state.cursor === 5 && isToggleKey(key)) {
+    state.rebuild = !state.rebuild;
+    state.notice = "";
+    return { type: "none" };
+  }
+
+  if (state.cursor === 3 && isToggleKey(key)) {
     state.destinationMode = state.destinationMode === "global" ? "project" : "global";
     state.notice = "";
     return { type: "none" };
@@ -290,30 +359,55 @@ function handleDashboardKey(state: TuiState, key: string): TuiEffect {
   state.notice = "";
   switch (state.cursor) {
     case 0:
-      state.screen = "source";
-      state.cursor = 0;
-      break;
-    case 1:
-      state.destinationMode = state.destinationMode === "global" ? "project" : "global";
-      break;
-    case 2:
       state.screen = "presets";
       state.cursor = 0;
       break;
-    case 3:
+    case 1:
+      state.screen = "source";
+      state.cursor = 0;
+      break;
+    case 2:
       state.screen = "platforms";
       state.cursor = 0;
       break;
+    case 3:
+      state.destinationMode = state.destinationMode === "global" ? "project" : "global";
+      break;
     case 4:
-      return startOrMissingSource(state, "validate");
+      state.backup = !state.backup;
+      break;
     case 5:
-      return startOrMissingSource(state, "build");
+      state.rebuild = !state.rebuild;
+      break;
     case 6:
-      return startOrMissingSource(state, "install");
+      return startOrMissingSource(state, "validate");
     case 7:
-      return { type: "exit", code: 0 };
+      return startOrMissingSource(state, "build");
+    case 8:
+      return startOrMissingSource(state, "install");
+    case 9:
+      state.screen = "flow";
+      state.cursor = 0;
+      break;
   }
   return { type: "none" };
+}
+
+function applyFlowDefaults(state: TuiState, flow: TuiFlow): void {
+  state.flow = flow;
+  if (flow === "project") {
+    state.sourceMode = "project";
+    state.destinationMode = "project";
+  } else if (flow === "global") {
+    state.sourceMode = "global";
+    state.destinationMode = "global";
+  } else if (flow === "custom") {
+    state.sourceMode = "custom";
+    state.destinationMode = "project";
+  } else {
+    state.sourceMode = "project";
+    state.destinationMode = "project";
+  }
 }
 
 function handleSourceKey(state: TuiState, key: string): TuiEffect {
@@ -323,15 +417,15 @@ function handleSourceKey(state: TuiState, key: string): TuiEffect {
   if (state.cursor === 0) {
     state.sourceMode = "project";
     state.destinationMode = "project";
-    state.screen = "dashboard";
+    state.screen = "plan";
   } else if (state.cursor === 1) {
     state.sourceMode = "global";
     state.destinationMode = "global";
-    state.screen = "dashboard";
+    state.screen = "plan";
   } else if (state.cursor === 2) {
     openCustomSourceInput(state);
   } else {
-    state.screen = "dashboard";
+    state.screen = "plan";
   }
   if (state.screen !== "customSource") {
     state.cursor = 0;
@@ -390,7 +484,8 @@ function commitCustomSourceIfValid(state: TuiState): boolean {
   state.recentCustomSources = rememberCustomSource(state.recentCustomSources, value);
   state.sourceMode = "custom";
   state.destinationMode = "project";
-  state.screen = "dashboard";
+  state.flow = "custom";
+  state.screen = "plan";
   state.cursor = 0;
   state.notice = "";
   return true;
@@ -446,7 +541,7 @@ function handlePresetsKey(state: TuiState, key: string): TuiEffect {
     state.cursor = 0;
     state.notice = "";
   } else if (state.cursor === backIndex) {
-    state.screen = "dashboard";
+    state.screen = "plan";
     state.cursor = 0;
     state.notice = "";
   }
@@ -464,7 +559,7 @@ function handlePlatformsKey(state: TuiState, key: string): TuiEffect {
     const platform = PLATFORMS[state.cursor - 1];
     if (platform) state.platforms = togglePlatformSelection(state.platforms, platform);
   } else {
-    state.screen = "dashboard";
+    state.screen = "plan";
     state.cursor = 0;
   }
   return { type: "none" };
@@ -486,7 +581,7 @@ function handleMissingSourceKey(state: TuiState, key: string): TuiEffect {
     state.screen = "source";
     state.cursor = 0;
   } else {
-    state.screen = "dashboard";
+    state.screen = "plan";
     state.cursor = 0;
   }
   return { type: "none" };
@@ -503,8 +598,8 @@ function handleInstallReviewKey(state: TuiState, key: string): TuiEffect {
   } else if (state.cursor === 2) {
     return { type: "start", action: "install" };
   } else {
-    state.screen = "dashboard";
-    state.cursor = 6;
+    state.screen = "plan";
+    state.cursor = 8;
   }
   return { type: "none" };
 }
@@ -532,7 +627,7 @@ function handlePresetInstallReviewKey(state: TuiState, key: string): TuiEffect {
 
 function handleResultKey(state: TuiState, key: string): TuiEffect {
   if (isConfirmKey(key)) {
-    state.screen = "dashboard";
+    state.screen = "plan";
     state.cursor = 0;
     state.notice = "";
     state.pendingAction = undefined;
