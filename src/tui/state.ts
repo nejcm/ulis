@@ -20,10 +20,23 @@ export type TuiScreen =
   | "running"
   | "result";
 
-export type TuiAction = "validate" | "build" | "install" | "presetInstall" | "init";
+export type TuiAction = "validate" | "presetValidate" | "build" | "install" | "presetInstall" | "init";
 export type TuiFlow = "project" | "global" | "custom" | "presetsOnly";
 export type SourceMode = "project" | "global" | "custom";
 export type DestinationMode = "project" | "global";
+export type TuiPlanItem =
+  | "Preset layers"
+  | "Preset sources"
+  | "Base source"
+  | "Platforms"
+  | "Install destination"
+  | "Backup"
+  | "Use latest build output"
+  | "Run preset extensions"
+  | "Validate"
+  | "Build only"
+  | "Install"
+  | "Back to start";
 
 export interface PlannedSource {
   readonly sourceDir: string;
@@ -70,7 +83,7 @@ type NavigationDirection = "up" | "down";
 const KEY_DUPLICATE_WINDOW_MS = 35;
 let lastKeyEvent: { readonly id: string; readonly at: number } | undefined;
 
-export const DASHBOARD_ITEMS = [
+export const DASHBOARD_ITEMS: readonly TuiPlanItem[] = [
   "Preset layers",
   "Base source",
   "Platforms",
@@ -79,6 +92,17 @@ export const DASHBOARD_ITEMS = [
   "Use latest build output",
   "Validate",
   "Build only",
+  "Install",
+  "Back to start",
+] as const;
+
+const PRESET_ONLY_PLAN_ITEMS: readonly TuiPlanItem[] = [
+  "Preset sources",
+  "Platforms",
+  "Install destination",
+  "Backup",
+  "Run preset extensions",
+  "Validate",
   "Install",
   "Back to start",
 ] as const;
@@ -138,10 +162,11 @@ export function planSource(state: TuiState, cwd: string = process.cwd(), userHom
 }
 
 export function selectedPresets(state: TuiState): readonly ResolvedPreset[] {
-  const selected = new Set(state.selectedPresetNames);
-  return state.availablePresets
-    .filter((preset) => selected.has(preset.name))
-    .map((preset) => ({ name: preset.name, dir: preset.dir }));
+  const available = new Map(state.availablePresets.map((preset) => [preset.name, preset]));
+  return state.selectedPresetNames.flatMap((name) => {
+    const preset = available.get(name);
+    return preset ? [{ name: preset.name, dir: preset.dir }] : [];
+  });
 }
 
 export function formatSourceMode(mode: SourceMode, customSource?: string): string {
@@ -211,9 +236,18 @@ export function openCustomSourceInput(state: TuiState): void {
 }
 
 export function togglePresetSelection(selected: readonly string[], presetName: string): string[] {
-  return selected.includes(presetName)
-    ? selected.filter((name) => name !== presetName)
-    : [...selected, presetName].sort();
+  return selected.includes(presetName) ? selected.filter((name) => name !== presetName) : [...selected, presetName];
+}
+
+export function visiblePresetChoices(state: TuiState): readonly PresetListEntry[] {
+  return [
+    ...state.availablePresets.filter((preset) => preset.source === "user"),
+    ...state.availablePresets.filter((preset) => preset.source === "bundled"),
+  ];
+}
+
+export function planItems(state: TuiState): readonly TuiPlanItem[] {
+  return state.flow === "presetsOnly" ? PRESET_ONLY_PLAN_ITEMS : DASHBOARD_ITEMS;
 }
 
 export interface CustomSourceTextInputKeyResult {
@@ -289,8 +323,8 @@ function navigateBack(state: TuiState): TuiEffect {
   }
 
   if (state.screen === "presetInstallReview") {
-    state.screen = "presets";
-    state.cursor = state.availablePresets.length;
+    state.screen = "plan";
+    state.cursor = state.flow === "presetsOnly" ? 6 : 8;
     state.notice = "";
     return { type: "none" };
   }
@@ -334,21 +368,29 @@ function handleFlowKey(state: TuiState, key: string): TuiEffect {
 }
 
 function handlePlanKey(state: TuiState, key: string): TuiEffect {
-  moveCursor(state, key, DASHBOARD_ITEMS.length - 1);
+  const items = planItems(state);
+  moveCursor(state, key, items.length - 1);
+  const item = items[state.cursor];
 
-  if (state.cursor === 4 && isToggleKey(key)) {
+  if (item === "Backup" && isToggleKey(key)) {
     state.backup = !state.backup;
     state.notice = "";
     return { type: "none" };
   }
 
-  if (state.cursor === 5 && isToggleKey(key)) {
+  if (item === "Use latest build output" && isToggleKey(key)) {
     state.rebuild = !state.rebuild;
     state.notice = "";
     return { type: "none" };
   }
 
-  if (state.cursor === 3 && isToggleKey(key)) {
+  if (item === "Run preset extensions" && isToggleKey(key)) {
+    state.presetInstallExtensions = !state.presetInstallExtensions;
+    state.notice = "";
+    return { type: "none" };
+  }
+
+  if (item === "Install destination" && isToggleKey(key)) {
     state.destinationMode = state.destinationMode === "global" ? "project" : "global";
     state.notice = "";
     return { type: "none" };
@@ -357,35 +399,41 @@ function handlePlanKey(state: TuiState, key: string): TuiEffect {
   if (!isConfirmKey(key)) return { type: "none" };
 
   state.notice = "";
-  switch (state.cursor) {
-    case 0:
+  switch (item) {
+    case "Preset layers":
+    case "Preset sources":
       state.screen = "presets";
       state.cursor = 0;
       break;
-    case 1:
+    case "Base source":
       state.screen = "source";
       state.cursor = 0;
       break;
-    case 2:
+    case "Platforms":
       state.screen = "platforms";
       state.cursor = 0;
       break;
-    case 3:
+    case "Install destination":
       state.destinationMode = state.destinationMode === "global" ? "project" : "global";
       break;
-    case 4:
+    case "Backup":
       state.backup = !state.backup;
       break;
-    case 5:
+    case "Use latest build output":
       state.rebuild = !state.rebuild;
       break;
-    case 6:
+    case "Run preset extensions":
+      state.presetInstallExtensions = !state.presetInstallExtensions;
+      break;
+    case "Validate":
+      if (state.flow === "presetsOnly") return startPresetOnlyAction(state, "presetValidate");
       return startOrMissingSource(state, "validate");
-    case 7:
+    case "Build only":
       return startOrMissingSource(state, "build");
-    case 8:
+    case "Install":
+      if (state.flow === "presetsOnly") return openPresetInstallReview(state);
       return startOrMissingSource(state, "install");
-    case 9:
+    case "Back to start":
       state.screen = "flow";
       state.cursor = 0;
       break;
@@ -522,26 +570,21 @@ function handleCustomSourceListKey(state: TuiState, key: string): TuiEffect {
 }
 
 function handlePresetsKey(state: TuiState, key: string): TuiEffect {
-  const installIndex = state.availablePresets.length;
-  const backIndex = installIndex + 1;
+  const presets = visiblePresetChoices(state);
+  const continueIndex = presets.length;
+  const backIndex = state.flow === "presetsOnly" ? continueIndex + 1 : continueIndex;
   const lastIndex = backIndex;
   moveCursor(state, key, lastIndex);
   if (!isConfirmKey(key) && !isToggleKey(key)) return { type: "none" };
 
-  if (state.cursor < state.availablePresets.length) {
-    const preset = state.availablePresets[state.cursor];
+  if (state.cursor < presets.length) {
+    const preset = presets[state.cursor];
     if (preset) state.selectedPresetNames = togglePresetSelection(state.selectedPresetNames, preset.name);
     state.notice = "";
-  } else if (state.cursor === installIndex) {
-    if (state.selectedPresetNames.length === 0) {
-      state.notice = "Select at least one preset first.";
-      return { type: "none" };
-    }
-    state.screen = "presetInstallReview";
-    state.cursor = 0;
-    state.notice = "";
+  } else if (state.cursor === continueIndex && state.flow === "presetsOnly") {
+    return continuePresetOnlyFlow(state);
   } else if (state.cursor === backIndex) {
-    state.screen = "plan";
+    state.screen = state.flow === "presetsOnly" ? "flow" : "plan";
     state.cursor = 0;
     state.notice = "";
   }
@@ -619,8 +662,8 @@ function handlePresetInstallReviewKey(state: TuiState, key: string): TuiEffect {
     }
     return { type: "start", action: "presetInstall" };
   } else {
-    state.screen = "presets";
-    state.cursor = state.availablePresets.length;
+    state.screen = "plan";
+    state.cursor = state.flow === "presetsOnly" ? 6 : 8;
   }
   return { type: "none" };
 }
@@ -635,7 +678,49 @@ function handleResultKey(state: TuiState, key: string): TuiEffect {
   return { type: "none" };
 }
 
-function startOrMissingSource(state: TuiState, action: Exclude<TuiAction, "init">): TuiEffect {
+function startPresetOnlyAction(state: TuiState, action: "presetValidate"): TuiEffect {
+  if (state.selectedPresetNames.length === 0) {
+    state.notice = "Select at least one preset first.";
+    return { type: "none" };
+  }
+
+  if (state.platforms.length === 0) {
+    state.notice = "Select at least one platform first.";
+    return { type: "none" };
+  }
+
+  return { type: "start", action };
+}
+
+function openPresetInstallReview(state: TuiState): TuiEffect {
+  if (state.selectedPresetNames.length === 0) {
+    state.notice = "Select at least one preset first.";
+    return { type: "none" };
+  }
+
+  if (state.platforms.length === 0) {
+    state.notice = "Select at least one platform first.";
+    return { type: "none" };
+  }
+
+  state.screen = "presetInstallReview";
+  state.cursor = 0;
+  return { type: "none" };
+}
+
+function continuePresetOnlyFlow(state: TuiState): TuiEffect {
+  if (state.selectedPresetNames.length === 0) {
+    state.notice = "Select at least one preset first.";
+    return { type: "none" };
+  }
+
+  state.screen = "plan";
+  state.cursor = 0;
+  state.notice = "";
+  return { type: "none" };
+}
+
+function startOrMissingSource(state: TuiState, action: Exclude<TuiAction, "init" | "presetValidate">): TuiEffect {
   if (state.platforms.length === 0) {
     state.notice = "Select at least one platform first.";
     return { type: "none" };

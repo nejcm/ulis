@@ -10,10 +10,12 @@ import {
   createInitialState,
   handleCustomSourceTextInputKey,
   handleTuiKey,
+  planItems,
   planSource,
   rememberCustomSource,
   selectedPresets,
   togglePresetSelection,
+  visiblePresetChoices,
   type TuiState,
 } from "./state.js";
 
@@ -134,7 +136,7 @@ describe("tui state", () => {
     expect(selectedPresets(state)).toEqual([{ name: "team", dir: "/presets/team" }]);
   });
 
-  it("resolves selected presets in displayed list order", () => {
+  it("resolves selected presets in selected order", () => {
     const state: TuiState = createInitialState([
       { name: "b", displayName: "B", description: "", source: "user", dir: "/presets/b" },
       { name: "a", displayName: "A", description: "", source: "user", dir: "/presets/a" },
@@ -143,15 +145,16 @@ describe("tui state", () => {
     state.selectedPresetNames = ["a", "b"];
 
     expect(selectedPresets(state)).toEqual([
-      { name: "b", dir: "/presets/b" },
       { name: "a", dir: "/presets/a" },
+      { name: "b", dir: "/presets/b" },
     ]);
   });
 
-  it("presets screen blocks preset install with no selected presets", () => {
+  it("presets-only screen blocks continue with no selected presets", () => {
     const state = createInitialState([
       { name: "team", displayName: "Team", description: "", source: "user", dir: "/presets/team" },
     ]);
+    state.flow = "presetsOnly";
     state.screen = "presets";
     state.cursor = 1;
 
@@ -160,7 +163,7 @@ describe("tui state", () => {
     expect(state.notice).toContain("preset");
   });
 
-  it("presets screen opens preset install review without requiring a source", () => {
+  it("presets-only screen continues to plan without requiring a source", () => {
     const root = createTempRoot();
     const originalCwd = process.cwd();
     process.chdir(root);
@@ -169,15 +172,57 @@ describe("tui state", () => {
         { name: "team", displayName: "Team", description: "", source: "user", dir: "/presets/team" },
       ]);
       state.screen = "presets";
+      state.flow = "presetsOnly";
       state.selectedPresetNames = ["team"];
       state.cursor = 1;
 
       expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
-      expect(state.screen as string).toBe("presetInstallReview");
+      expect(state.screen as string).toBe("plan");
       expect(state.cursor).toBe(0);
     } finally {
       process.chdir(originalCwd);
     }
+  });
+
+  it("preset-only plan exposes validate and install without build-only", () => {
+    const state = createInitialState([
+      { name: "team", displayName: "Team", description: "", source: "user", dir: "/presets/team" },
+    ]);
+    state.flow = "presetsOnly";
+    state.screen = "plan";
+    state.selectedPresetNames = ["team"];
+
+    expect(planItems(state)).not.toContain("Build only");
+
+    const originalNow = Date.now;
+    let now = 5_000;
+    Date.now = () => now;
+
+    try {
+      state.cursor = 5;
+      expect(handleTuiKey(state, "enter")).toEqual({ type: "start", action: "presetValidate" });
+
+      now += 45;
+      state.cursor = 6;
+      expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
+      expect(state.screen as string).toBe("presetInstallReview");
+    } finally {
+      Date.now = originalNow;
+    }
+  });
+
+  it("preset picker groups user presets before bundled presets", () => {
+    const state = createInitialState([
+      { name: "react-web", displayName: "React", description: "", source: "bundled", dir: "/bundled/react-web" },
+      { name: "team", displayName: "Team", description: "", source: "user", dir: "/user/team" },
+    ]);
+    state.screen = "presets";
+
+    expect(visiblePresetChoices(state).map((preset) => preset.name)).toEqual(["team", "react-web"]);
+
+    handleTuiKey(state, "enter");
+
+    expect(state.selectedPresetNames).toEqual(["team"]);
   });
 
   it("platform screen can toggle all platforms off", () => {
@@ -317,7 +362,7 @@ describe("tui state", () => {
     expect(state.notice).toContain("platform");
   });
 
-  it("presetInstallReview back navigates to presets", () => {
+  it("presetInstallReview back navigates to plan", () => {
     const state = createInitialState([
       { name: "team", displayName: "Team", description: "", source: "user", dir: "/presets/team" },
     ]);
@@ -326,8 +371,8 @@ describe("tui state", () => {
 
     handleTuiKey(state, "enter");
 
-    expect(state.screen as string).toBe("presets");
-    expect(state.cursor).toBe(1);
+    expect(state.screen as string).toBe("plan");
+    expect(state.cursor).toBe(8);
   });
 
   it("customSource path value syncs like TextInput onChange", () => {
@@ -536,7 +581,7 @@ describe("tui state", () => {
       { name: "team", displayName: "Team", description: "", source: "user", dir: "/p" },
     ]);
     state.screen = "presets";
-    state.cursor = 2; // Back to plan
+    state.cursor = 1; // Back to plan
     const originalNow = Date.now;
     let now = 1_000;
     Date.now = () => now;

@@ -185,8 +185,9 @@ function persistTuiPreferences(): string | undefined {
   return error;
 }
 
-function formatActionTitle(action: "validate" | "build" | "install" | "presetInstall"): string {
+function formatActionTitle(action: "validate" | "presetValidate" | "build" | "install" | "presetInstall"): string {
   if (action === "validate") return "Validate";
+  if (action === "presetValidate") return "Preset Validate";
   if (action === "build") return "Build";
   if (action === "presetInstall") return "Preset Install";
   return "Install";

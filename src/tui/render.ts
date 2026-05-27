@@ -2,7 +2,6 @@ import { HStack, Text, TextInput, VStack, type Color, type Node } from "@cel-tui
 
 import { PLATFORM_DESCRIPTIONS, PLATFORM_LABELS, PLATFORMS, type Platform } from "../platforms.js";
 import {
-  DASHBOARD_ITEMS,
   FLOW_ITEMS,
   formatDestinationMode,
   formatFlow,
@@ -10,7 +9,10 @@ import {
   formatSourceMode,
   isEditedPlan,
   planSource,
+  planItems,
+  visiblePresetChoices,
   type TuiState,
+  type TuiPlanItem,
 } from "./state.js";
 
 interface UiLine {
@@ -112,18 +114,26 @@ function renderFlowSelection(state: TuiState) {
 
 function renderPlan(state: TuiState) {
   const plan = planSource(state);
-  const rows: UiLine[] = DASHBOARD_ITEMS.flatMap((label, index) => {
+  const items = planItems(state);
+  const rows: UiLine[] = items.flatMap((label, index) => {
     const row = planActionLine(state, label, index);
-    return index === 2 || index === 5 ? [row, { text: "" }] : [row];
+    const shouldBreak =
+      label === "Platforms" || label === "Use latest build output" || label === "Run preset extensions";
+    return shouldBreak ? [row, { text: "" }] : [row];
   });
+  const presetLabel = state.flow === "presetsOnly" ? "Preset sources" : "Preset layers";
+  const baseSourceLine =
+    state.flow === "presetsOnly"
+      ? "Base source: none (preset-only install)"
+      : `Base source: ${formatSourceMode(state.sourceMode, state.customSource)} -> ${plan.sourceDir}`;
 
   return renderCard(
     isEditedPlan(state) ? "Edited Plan" : formatFlow(state.flow),
     "Review and adjust the plan before choosing an action.",
     [
       { text: "Input", fgColor: "color06", bold: true },
-      { text: `Preset layers: ${formatPresets(state)}` },
-      { text: `Base source: ${formatSourceMode(state.sourceMode, state.customSource)} -> ${plan.sourceDir}` },
+      { text: `${presetLabel}: ${formatPresets(state)}` },
+      { text: baseSourceLine },
       { text: "" },
       { text: "Output", fgColor: "color06", bold: true },
       { text: `Platforms: ${formatPlatforms(state.platforms)}` },
@@ -145,13 +155,14 @@ function renderPlan(state: TuiState) {
   );
 }
 
-function planLabel(state: TuiState, label: (typeof DASHBOARD_ITEMS)[number]): string {
+function planLabel(state: TuiState, label: TuiPlanItem): string {
   if (label === "Base source") return formatSourceMode(state.sourceMode, state.customSource);
   if (label === "Install destination") return formatDestinationMode(state.destinationMode);
-  if (label === "Preset layers") return `${state.selectedPresetNames.length} selected`;
+  if (label === "Preset layers" || label === "Preset sources") return `${state.selectedPresetNames.length} selected`;
   if (label === "Platforms") return `${state.platforms.length} selected`;
   if (label === "Backup") return state.backup ? "on" : "off";
   if (label === "Use latest build output") return state.rebuild ? "on" : "off";
+  if (label === "Run preset extensions") return state.presetInstallExtensions ? "on" : "off";
   return label;
 }
 
@@ -303,37 +314,55 @@ function renderCardShell(title: string, subtitle: string, children: readonly Nod
 
 function renderPresets(state: TuiState) {
   const lines: UiLine[] = [];
-  if (state.availablePresets.length === 0) {
+  const presets = visiblePresetChoices(state);
+  if (presets.length === 0) {
     lines.push({
       text: "No user-global or bundled presets found.",
       fgColor: "color03",
     });
   } else {
-    for (let index = 0; index < state.availablePresets.length; index++) {
-      const preset = state.availablePresets[index];
+    let previousSource: string | undefined;
+    for (let index = 0; index < presets.length; index++) {
+      const preset = presets[index];
       if (!preset) continue;
+      if (preset.source !== previousSource) {
+        previousSource = preset.source;
+        lines.push({
+          text: preset.source === "user" ? "User presets" : "Bundled presets",
+          fgColor: "color06",
+          bold: true,
+        });
+      }
       const checked = state.selectedPresetNames.includes(preset.name) ? "x" : " ";
       lines.push(selectableLine(state.cursor, index, `[${checked}] ${preset.name} (${preset.source})`));
       if (preset.description) lines.push({ text: preset.description, indent: 4, fgColor: "color08" });
     }
   }
 
-  const installIndex = state.availablePresets.length;
-  const backIndex = installIndex + 1;
+  const continueIndex = presets.length;
+  const backIndex = state.flow === "presetsOnly" ? continueIndex + 1 : continueIndex;
   lines.push({ text: "" });
-  lines.push(selectableLine(state.cursor, installIndex, "Install selected presets"));
-  lines.push(selectableLine(state.cursor, backIndex, "Back to plan"));
+  lines.push(
+    selectableLine(state.cursor, continueIndex, state.flow === "presetsOnly" ? "Continue to plan" : "Back to plan"),
+  );
+  if (state.flow === "presetsOnly") lines.push(selectableLine(state.cursor, backIndex, "Back to start"));
   lines.push({ text: "" });
   lines.push({
-    text: state.notice || "Selected presets are applied before the base source for Validate, Build, and Install.",
+    text:
+      state.notice ||
+      (state.flow === "presetsOnly"
+        ? "Selected presets are the whole input. No base source will be read."
+        : "Selected presets are applied before the base source for Validate, Build, and Install."),
     fgColor: state.notice ? "color03" : "color08",
   });
-  lines.push({
-    text: "Install selected presets deploys only those presets, without reading the current source.",
-    fgColor: "color08",
-  });
 
-  return renderCard("Select Presets", "Choose optional presets or install selected presets by themselves.", lines);
+  return renderCard(
+    state.flow === "presetsOnly" ? "Select Preset Sources" : "Select Preset Layers",
+    state.flow === "presetsOnly"
+      ? "Choose presets to install without reading a base source."
+      : "Choose optional presets to merge before the base source.",
+    lines,
+  );
 }
 
 function renderPlatforms(state: TuiState) {
@@ -455,7 +484,7 @@ function formatPlatforms(platforms: readonly Platform[]): string {
   return platforms.length > 0 ? platforms.map((platform) => PLATFORM_LABELS[platform]).join(", ") : "none";
 }
 
-function planActionLine(state: TuiState, label: (typeof DASHBOARD_ITEMS)[number], index: number): UiLine {
+function planActionLine(state: TuiState, label: TuiPlanItem, index: number): UiLine {
   const selected = state.cursor === index;
   const value = planLabel(state, label);
   const hasValue = value !== label;

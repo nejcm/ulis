@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 
-import { analyzeProject, type Logger } from "../build.js";
+import { analyzePresets, analyzeProject, type Logger } from "../build.js";
 import { initCmd } from "../commands/init.js";
 import { formatDiagnostic } from "../diagnostics.js";
 import { loadExtensions } from "../parsers/extensions.js";
@@ -29,8 +29,18 @@ export async function runTuiAction(
   const planned = planSource(state);
   const presets = selectedPresets(state);
 
-  if (action === "validate") {
-    logger.header("ULIS Validate");
+  if (action === "validate" || action === "presetValidate") {
+    logger.header(action === "presetValidate" ? "ULIS Preset Validate" : "ULIS Validate");
+    if (action === "presetValidate") {
+      const analysis = analyzePresets({ presets, logger });
+      logger.success(
+        `Validated ${analysis.project.agents.length} agents, ${analysis.project.skills.length} skills, ${
+          Object.keys(analysis.project.mcp.servers).length
+        } MCP servers`,
+      );
+      return;
+    }
+
     logger.info(`Source: ${planned.sourceDir}`);
     if (presets.length > 0) logger.info(`Presets: ${presets.map((preset) => preset.name).join(", ")}`);
     const analysis = analyzeProject({ sourceDir: planned.sourceDir, presets, logger });

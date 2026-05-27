@@ -6,7 +6,7 @@ import { createInitialState } from "./state.js";
 const actionsModule = (await import(`./actions.ts?real=${Date.now()}`)) as {
   runTuiAction: (
     state: ReturnType<typeof createInitialState>,
-    action: "validate" | "build" | "install" | "presetInstall",
+    action: "validate" | "presetValidate" | "build" | "install" | "presetInstall",
     logger: ReturnType<typeof createLogger>,
     options?: { signal?: AbortSignal },
   ) => Promise<void>;
@@ -180,7 +180,7 @@ describe("tui actions child process flow", () => {
     const args = spawnCalls[0]!.args;
     expect(args).toContain("preset");
     expect(args).toContain("install");
-    expect(args.indexOf("b")).toBeLessThan(args.indexOf("a"));
+    expect(args.indexOf("a")).toBeLessThan(args.indexOf("b"));
     expect(args).toContain("--target");
     expect(args).toContain("codex");
     expect(args).toContain("--yes");
