@@ -32,7 +32,7 @@ export async function installOpencode(context: InstallContext): Promise<void> {
   backupDirectory(targetDir, context);
   const preservedConfigs = capturePlatformPreservedNativeConfigs("opencode", context);
 
-  copyPlatformContents(sourceDir, targetDir, context.logger, new Set(), OPENCODE_AGENT_SKILL_DIRS);
+  copyPlatformContents(sourceDir, targetDir, context.logger, new Set(), OPENCODE_AGENT_SKILL_DIRS, true);
   writePlatformPreservedNativeConfigs("opencode", preservedConfigs, context);
   logSuccess(context, `OpenCode -> ${targetDir}`);
 }

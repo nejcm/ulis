@@ -50,6 +50,7 @@ export function copyPlatformContents(
   logger?: Logger,
   skipNames: ReadonlySet<string> = new Set(),
   namedDirectories: Readonly<Record<string, NamedDirectoryCopyRule>> = {},
+  pruneExtraNames = false,
 ): void {
   ensureDir(targetDir);
   if (!existsSync(sourceDir)) {
@@ -57,6 +58,10 @@ export function copyPlatformContents(
   }
 
   const entries = readDirectoryEntries(sourceDir);
+  if (pruneExtraNames) {
+    pruneExtraTargetEntries(targetDir, entries, skipNames, namedDirectories);
+  }
+
   for (const entry of entries) {
     if (skipNames.has(entry)) {
       continue;
@@ -74,6 +79,22 @@ export function copyPlatformContents(
     removePath(targetPath);
     copyPath(sourcePath, targetPath);
     logger?.success(entry);
+  }
+}
+
+function pruneExtraTargetEntries(
+  targetDir: string,
+  sourceEntries: readonly string[],
+  skipNames: ReadonlySet<string>,
+  namedDirectories: Readonly<Record<string, NamedDirectoryCopyRule>>,
+): void {
+  const sourceNames = new Set(sourceEntries);
+  for (const targetEntry of readDirectoryEntries(targetDir)) {
+    if (sourceNames.has(targetEntry) || skipNames.has(targetEntry) || namedDirectories[targetEntry]) {
+      continue;
+    }
+
+    removePath(join(targetDir, targetEntry));
   }
 }
 

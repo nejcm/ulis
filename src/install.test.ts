@@ -857,8 +857,10 @@ describe("runInstall", () => {
     mkdirSync(userHome, { recursive: true });
 
     write(join(outputDir, "opencode", "agents", "specialized", "worker.md"), "Generated worker.\n");
+    write(join(outputDir, "opencode", "agents", "core", "reviewer.md"), "Generated reviewer.\n");
     write(join(projectDir, ".opencode", "agents", "core", "worker.md"), "Old core worker.\n");
     write(join(projectDir, ".opencode", "agents", "core", "local.md"), "Local core agent.\n");
+    write(join(projectDir, ".opencode", "agents", "specialized", "reviewer.md"), "Old specialized reviewer.\n");
     write(join(projectDir, ".opencode", "agents", "specialized", "local.md"), "Local specialized agent.\n");
 
     await runInstall({
@@ -872,9 +874,44 @@ describe("runInstall", () => {
     });
 
     expect(existsSync(join(projectDir, ".opencode", "agents", "core", "worker.md"))).toBe(false);
+    expect(read(join(projectDir, ".opencode", "agents", "core", "reviewer.md"))).toBe("Generated reviewer.\n");
     expect(read(join(projectDir, ".opencode", "agents", "core", "local.md"))).toBe("Local core agent.\n");
     expect(read(join(projectDir, ".opencode", "agents", "specialized", "worker.md"))).toBe("Generated worker.\n");
+    expect(existsSync(join(projectDir, ".opencode", "agents", "specialized", "reviewer.md"))).toBe(false);
     expect(read(join(projectDir, ".opencode", "agents", "specialized", "local.md"))).toBe("Local specialized agent.\n");
+  });
+
+  it("prunes stale OpenCode non-agent and non-skill entries while preserving unmanaged agents and skills", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+
+    write(join(outputDir, "opencode", "AGENTS.md"), "Generated instructions.\n");
+    write(join(projectDir, ".opencode", "commands", "old.md"), "Old command.\n");
+    write(join(projectDir, ".opencode", "docs", "old.md"), "Old docs.\n");
+    write(join(projectDir, ".opencode", "agents", "specialized", "local.md"), "Local agent.\n");
+    write(join(projectDir, ".opencode", "skills", "local", "SKILL.md"), "Local skill.\n");
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["opencode"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(read(join(projectDir, ".opencode", "AGENTS.md"))).toBe("Generated instructions.\n");
+    expect(existsSync(join(projectDir, ".opencode", "commands", "old.md"))).toBe(false);
+    expect(existsSync(join(projectDir, ".opencode", "docs", "old.md"))).toBe(false);
+    expect(read(join(projectDir, ".opencode", "agents", "specialized", "local.md"))).toBe("Local agent.\n");
+    expect(read(join(projectDir, ".opencode", "skills", "local", "SKILL.md"))).toBe("Local skill.\n");
   });
 
   it("writes Claude MCP servers to <project>/.mcp.json on a project install", async () => {
