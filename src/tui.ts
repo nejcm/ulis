@@ -1,10 +1,10 @@
 import { ProcessTerminal, VStack, cel } from "@cel-tui/core";
 
 import type { Logger } from "./build.js";
-import { listPresets } from "./presets.js";
 import { initializeMissingSource, runTuiAction } from "./tui/actions.js";
 import { readClipboardText } from "./tui/clipboard.js";
 import { loadTuiPreferences, saveTuiPreferences, snapshotTuiPreferences } from "./tui/preferences.js";
+import { listTuiPresets } from "./tui/presets.js";
 import { renderScreen, type CustomSourceHandlers } from "./tui/render.js";
 import {
   appendTextInput,
@@ -16,11 +16,11 @@ import {
 } from "./tui/state.js";
 
 const state: TuiState = createInitialState();
-let lastSavedPreferences = JSON.stringify(snapshotTuiPreferences(state));
+let lastSavedPreferences = "";
 let currentRunAbortController: AbortController | undefined;
 
 function main(): void {
-  state.availablePresets = listPresets();
+  state.availablePresets = listTuiPresets();
   const loadError = loadTuiPreferences(state);
   if (loadError) state.notice = loadError;
   lastSavedPreferences = JSON.stringify(snapshotTuiPreferences(state));
@@ -185,8 +185,9 @@ function persistTuiPreferences(): string | undefined {
   return error;
 }
 
-function formatActionTitle(action: "validate" | "build" | "install" | "presetInstall"): string {
+function formatActionTitle(action: "validate" | "presetValidate" | "build" | "install" | "presetInstall"): string {
   if (action === "validate") return "Validate";
+  if (action === "presetValidate") return "Preset Validate";
   if (action === "build") return "Build";
   if (action === "presetInstall") return "Preset Install";
   return "Install";

@@ -1,68 +1,55 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { createTempRoot, writeTextFile } from "../test-utils/fs.js";
 import { loadExtensions, mergeExtensionsConfigs } from "./extensions.js";
 
 describe("loadExtensions", () => {
   it("returns empty config when extensions.yaml is empty", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ulis-extensions-"));
-    try {
-      writeFileSync(join(dir, "extensions.yaml"), "# intentionally empty\n");
-      expect(loadExtensions(dir)).toEqual({});
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    const dir = createTempRoot("ulis-extensions-");
+    writeTextFile(join(dir, "extensions.yaml"), "# intentionally empty\n");
+
+    expect(loadExtensions(dir)).toEqual({});
   });
 
   it("returns empty config when extensions.yaml is missing", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ulis-extensions-"));
-    try {
-      expect(loadExtensions(dir)).toEqual({});
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    const dir = createTempRoot("ulis-extensions-");
+
+    expect(loadExtensions(dir)).toEqual({});
   });
 
   it("parses a populated extensions.yaml", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ulis-extensions-"));
-    try {
-      writeFileSync(
-        join(dir, "extensions.yaml"),
-        [
-          "codex:",
-          "  extensions:",
-          "    - key: supermemory",
-          "      name: codex-supermemory@latest",
-          "      args: [install]",
-          '"*":',
-          "  extensions: []",
-          "",
-        ].join("\n"),
-      );
-      expect(loadExtensions(dir)).toEqual({
-        codex: {
-          extensions: [{ key: "supermemory", name: "codex-supermemory@latest", args: ["install"] }],
-        },
-        "*": { extensions: [] },
-      });
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    const dir = createTempRoot("ulis-extensions-");
+    writeTextFile(
+      join(dir, "extensions.yaml"),
+      [
+        "codex:",
+        "  extensions:",
+        "    - key: supermemory",
+        "      name: codex-supermemory@latest",
+        "      args: [install]",
+        '"*":',
+        "  extensions: []",
+        "",
+      ].join("\n"),
+    );
+
+    expect(loadExtensions(dir)).toEqual({
+      codex: {
+        extensions: [{ key: "supermemory", name: "codex-supermemory@latest", args: ["install"] }],
+      },
+      "*": { extensions: [] },
+    });
   });
 
   it("rejects entries with empty name", () => {
-    const dir = mkdtempSync(join(tmpdir(), "ulis-extensions-"));
-    try {
-      writeFileSync(
-        join(dir, "extensions.yaml"),
-        ["codex:", "  extensions:", "    - name: ''", "      args: [install]", ""].join("\n"),
-      );
-      expect(() => loadExtensions(dir)).toThrow(/extensions/);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    const dir = createTempRoot("ulis-extensions-");
+    writeTextFile(
+      join(dir, "extensions.yaml"),
+      ["codex:", "  extensions:", "    - name: ''", "      args: [install]", ""].join("\n"),
+    );
+
+    expect(() => loadExtensions(dir)).toThrow(/extensions/);
   });
 });
 

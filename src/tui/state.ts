@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 import { ULIS_SOURCE_DIRNAME } from "../config.js";
 import { PLATFORMS, uniquePlatforms, type Platform } from "../platforms.js";
@@ -8,7 +8,8 @@ import type { PresetListEntry } from "../presets.js";
 import type { ResolvedPreset } from "../utils/resolve-presets.js";
 
 export type TuiScreen =
-  | "dashboard"
+  | "flow"
+  | "plan"
   | "source"
   | "customSource"
   | "presets"
@@ -19,9 +20,25 @@ export type TuiScreen =
   | "running"
   | "result";
 
-export type TuiAction = "validate" | "build" | "install" | "presetInstall" | "init";
+export type TuiAction = "validate" | "presetValidate" | "build" | "install" | "presetInstall" | "init";
+export type TuiFlow = "project" | "global" | "custom" | "presetsOnly";
 export type SourceMode = "project" | "global" | "custom";
 export type DestinationMode = "project" | "global";
+export type PresetSourceMode = "auto" | "project" | "global" | "bundled";
+export type TuiPreferenceScope = TuiFlow;
+export type TuiPlanItem =
+  | "Preset layers"
+  | "Preset sources"
+  | "Base source"
+  | "Platforms"
+  | "Install destination"
+  | "Backup"
+  | "Use latest build output"
+  | "Run preset extensions"
+  | "Validate"
+  | "Build only"
+  | "Install"
+  | "Back to start";
 
 export interface PlannedSource {
   readonly sourceDir: string;
@@ -32,10 +49,23 @@ export interface PlannedSource {
   readonly globalInstall: boolean;
 }
 
+export interface TuiFlowPreferences {
+  readonly destinationMode?: DestinationMode;
+  readonly customSource?: string;
+  readonly recentCustomSources?: readonly string[];
+  readonly platforms?: readonly Platform[];
+  readonly selectedPresetNames?: readonly string[];
+  readonly presetSourceMode?: PresetSourceMode;
+  readonly backup?: boolean;
+  readonly rebuild?: boolean;
+  readonly presetInstallExtensions?: boolean;
+}
+
 export interface TuiState {
   screen: TuiScreen;
   cursor: number;
   runningSpinnerFrame: number;
+  flow: TuiFlow;
   sourceMode: SourceMode;
   destinationMode: DestinationMode;
   customSource: string;
@@ -44,15 +74,21 @@ export interface TuiState {
   platforms: Platform[];
   availablePresets: readonly PresetListEntry[];
   selectedPresetNames: string[];
+  presetSourceMode: PresetSourceMode;
   backup: boolean;
   rebuild: boolean;
   presetInstallExtensions: boolean;
+  flowPreferences: Partial<Record<TuiPreferenceScope, TuiFlowPreferences>>;
   logs: string[];
   notice: string;
   resultTitle: string;
   resultMessage: string;
   pendingAction?: Exclude<TuiAction, "init">;
 }
+
+type MutableFlowPreferences = {
+  -readonly [Key in keyof TuiFlowPreferences]?: TuiFlowPreferences[Key];
+};
 
 export type TuiEffect =
   | { readonly type: "none" }
@@ -67,23 +103,45 @@ type NavigationDirection = "up" | "down";
 const KEY_DUPLICATE_WINDOW_MS = 35;
 let lastKeyEvent: { readonly id: string; readonly at: number } | undefined;
 
-export const DASHBOARD_ITEMS = [
-  "Source",
-  "Destination",
-  "Presets",
+export const DASHBOARD_ITEMS: readonly TuiPlanItem[] = [
+  "Preset layers",
+  "Base source",
   "Platforms",
+  "Install destination",
+  "Backup",
+  "Use latest build output",
   "Validate",
-  "Build",
+  "Build only",
   "Install",
+  "Back to start",
+] as const;
+
+const PRESET_ONLY_PLAN_ITEMS: readonly TuiPlanItem[] = [
+  "Preset sources",
+  "Platforms",
+  "Install destination",
+  "Backup",
+  "Run preset extensions",
+  "Validate",
+  "Install",
+  "Back to start",
+] as const;
+
+export const FLOW_ITEMS = [
+  "Update this project",
+  "Update global configs",
+  "Use custom source",
+  "Install presets only",
   "Quit",
 ] as const;
 
 export function createInitialState(availablePresets: readonly PresetListEntry[] = []): TuiState {
   lastKeyEvent = undefined;
   return {
-    screen: "dashboard",
+    screen: "flow",
     cursor: 0,
     runningSpinnerFrame: 0,
+    flow: "project",
     sourceMode: "project",
     destinationMode: "project",
     customSource: "",
@@ -92,9 +150,11 @@ export function createInitialState(availablePresets: readonly PresetListEntry[] 
     platforms: [...PLATFORMS],
     availablePresets,
     selectedPresetNames: [],
+    presetSourceMode: "auto",
     backup: true,
     rebuild: true,
     presetInstallExtensions: true,
+    flowPreferences: {},
     logs: [],
     notice: "",
     resultTitle: "",
@@ -124,10 +184,15 @@ export function planSource(state: TuiState, cwd: string = process.cwd(), userHom
 }
 
 export function selectedPresets(state: TuiState): readonly ResolvedPreset[] {
-  const selected = new Set(state.selectedPresetNames);
-  return state.availablePresets
-    .filter((preset) => selected.has(preset.name))
-    .map((preset) => ({ name: preset.name, dir: preset.dir }));
+  const available = new Map<string, PresetListEntry>();
+  for (const preset of visiblePresetChoices(state)) {
+    available.set(presetSelectionKey(state, preset), preset);
+    if (!showsPresetSourcePicker(state)) available.set(preset.name, preset);
+  }
+  return state.selectedPresetNames.flatMap((selection) => {
+    const preset = available.get(selection);
+    return preset ? [{ name: preset.name, dir: preset.dir }] : [];
+  });
 }
 
 export function formatSourceMode(mode: SourceMode, customSource?: string): string {
@@ -143,6 +208,27 @@ export function formatDestinationMode(mode: DestinationMode): string {
 export function formatPresets(state: TuiState): string {
   const presets = selectedPresets(state).map((preset) => preset.name);
   return presets.length > 0 ? presets.join(", ") : "none";
+}
+
+export function formatPresetSourceMode(mode: PresetSourceMode): string {
+  if (mode === "project") return "Project ./.ulis/presets";
+  if (mode === "global") return "Global ~/.ulis/presets";
+  if (mode === "bundled") return "Bundled presets";
+  return "Auto project -> global -> bundled";
+}
+
+export function formatFlow(flow: TuiFlow): string {
+  if (flow === "project") return "Update this project";
+  if (flow === "global") return "Update global configs";
+  if (flow === "custom") return "Use custom source";
+  return "Install presets only";
+}
+
+export function isEditedPlan(state: TuiState): boolean {
+  if (state.flow === "project") return state.sourceMode !== "project" || state.destinationMode !== "project";
+  if (state.flow === "global") return state.sourceMode !== "global" || state.destinationMode !== "global";
+  if (state.flow === "custom") return state.sourceMode !== "custom";
+  return state.sourceMode !== "project";
 }
 
 export function togglePlatformSelection(selected: readonly Platform[], platform: Platform): Platform[] {
@@ -174,6 +260,14 @@ export function rememberCustomSource(recent: readonly string[], value: string): 
   return [normalized, ...recent.filter((entry) => entry !== normalized)].slice(0, 3);
 }
 
+export function normalizeCustomSourceInput(value: string, cwd: string = process.cwd()): string {
+  const source = resolve(cwd, value.trim());
+  if (basename(source) === ULIS_SOURCE_DIRNAME) return source;
+
+  const childSource = join(source, ULIS_SOURCE_DIRNAME);
+  return existsSync(childSource) ? childSource : source;
+}
+
 export function openCustomSourceInput(state: TuiState): void {
   state.textInput = state.customSource;
   state.recentCustomSources = rememberCustomSource(state.recentCustomSources, state.customSource);
@@ -183,9 +277,134 @@ export function openCustomSourceInput(state: TuiState): void {
 }
 
 export function togglePresetSelection(selected: readonly string[], presetName: string): string[] {
-  return selected.includes(presetName)
-    ? selected.filter((name) => name !== presetName)
-    : [...selected, presetName].sort();
+  return selected.includes(presetName) ? selected.filter((name) => name !== presetName) : [...selected, presetName];
+}
+
+export function visiblePresetChoices(state: TuiState): readonly PresetListEntry[] {
+  if (!showsPresetSourcePicker(state)) {
+    return dedupePresetChoices(
+      state.availablePresets.filter(
+        (preset) => presetSourceMatchesMode(preset.source, "global") || preset.source === "bundled",
+      ),
+    );
+  }
+
+  const mode = state.presetSourceMode;
+  const filtered =
+    mode === "auto"
+      ? state.availablePresets.filter(
+          (preset) => preset.source === "project" || presetSourceMatchesMode(preset.source, "global"),
+        )
+      : state.availablePresets.filter((preset) => presetSourceMatchesMode(preset.source, mode));
+  return dedupePresetChoices(filtered);
+}
+
+export function showsPresetSourcePicker(state: TuiState): boolean {
+  return state.flow === "presetsOnly";
+}
+
+export function presetSelectionKey(state: TuiState, preset: PresetListEntry): string {
+  return showsPresetSourcePicker(state) ? presetSourceKey(preset) : preset.name;
+}
+
+function presetSourceKey(preset: PresetListEntry): string {
+  return `${preset.source}:${preset.name}`;
+}
+
+function dedupePresetChoices(presets: readonly PresetListEntry[]): readonly PresetListEntry[] {
+  const byName = new Map<string, PresetListEntry>();
+  for (const preset of presets.slice().sort(comparePresetChoices)) {
+    if (!byName.has(preset.name)) byName.set(preset.name, preset);
+  }
+  return [...byName.values()];
+}
+
+function presetSourceMatchesMode(source: PresetListEntry["source"], mode: Exclude<PresetSourceMode, "auto">): boolean {
+  if (mode === "global") return source === "global" || source === "user";
+  return source === mode;
+}
+
+function comparePresetChoices(a: PresetListEntry, b: PresetListEntry): number {
+  const bySource = presetSourceRank(a.source) - presetSourceRank(b.source);
+  return bySource === 0 ? a.name.localeCompare(b.name) : bySource;
+}
+
+function presetSourceRank(source: PresetListEntry["source"]): number {
+  if (source === "project") return 0;
+  if (source === "global" || source === "user") return 1;
+  return 2;
+}
+
+function nextPresetSourceMode(mode: PresetSourceMode): PresetSourceMode {
+  if (mode === "auto") return "project";
+  if (mode === "project") return "global";
+  if (mode === "global") return "bundled";
+  return "auto";
+}
+
+export function planItems(state: TuiState): readonly TuiPlanItem[] {
+  return state.flow === "presetsOnly" ? PRESET_ONLY_PLAN_ITEMS : DASHBOARD_ITEMS;
+}
+
+export function flowPreferencesFromState(state: TuiState): TuiFlowPreferences {
+  const preferences: MutableFlowPreferences = {
+    destinationMode: state.destinationMode,
+    recentCustomSources: [...state.recentCustomSources],
+    platforms: [...state.platforms],
+    selectedPresetNames: [...state.selectedPresetNames],
+    presetSourceMode: state.presetSourceMode,
+    backup: state.backup,
+    rebuild: state.rebuild,
+    presetInstallExtensions: state.presetInstallExtensions,
+  };
+
+  if (state.flow === "custom" && state.customSource) preferences.customSource = state.customSource;
+
+  return preferences;
+}
+
+export function storeCurrentFlowPreferences(state: TuiState): void {
+  state.flowPreferences = {
+    ...state.flowPreferences,
+    [state.flow]: flowPreferencesFromState(state),
+  };
+}
+
+export function applyFlowPreferences(state: TuiState, flow: TuiFlow = state.flow): void {
+  const preferences = state.flowPreferences[flow];
+  if (!preferences) return;
+
+  if ((flow === "custom" || flow === "presetsOnly") && preferences.destinationMode) {
+    state.destinationMode = preferences.destinationMode;
+  }
+
+  if (preferences.recentCustomSources) {
+    state.recentCustomSources = [...preferences.recentCustomSources];
+  }
+
+  if (flow === "custom" && preferences.customSource) {
+    state.customSource = preferences.customSource;
+    state.recentCustomSources = rememberCustomSource(state.recentCustomSources, preferences.customSource);
+  }
+
+  if (preferences.platforms) {
+    const platforms = uniquePlatforms(preferences.platforms);
+    state.platforms = platforms.length > 0 ? platforms : [...PLATFORMS];
+  }
+  if (preferences.selectedPresetNames) {
+    const availablePresetNames = new Set(
+      state.availablePresets.flatMap((preset) => [preset.name, presetSourceKey(preset)]),
+    );
+    state.selectedPresetNames = [...new Set(preferences.selectedPresetNames)].filter((name) =>
+      availablePresetNames.has(name),
+    );
+  }
+  if (preferences.presetSourceMode) state.presetSourceMode = preferences.presetSourceMode;
+  if (typeof preferences.backup === "boolean") state.backup = preferences.backup;
+  if (typeof preferences.rebuild === "boolean") state.rebuild = preferences.rebuild;
+  if (typeof preferences.presetInstallExtensions === "boolean") {
+    state.presetInstallExtensions = preferences.presetInstallExtensions;
+  }
 }
 
 export interface CustomSourceTextInputKeyResult {
@@ -216,8 +435,10 @@ export function handleTuiKey(state: TuiState, key: string): TuiEffect {
   }
 
   switch (state.screen) {
-    case "dashboard":
-      return handleDashboardKey(state, key);
+    case "flow":
+      return handleFlowKey(state, key);
+    case "plan":
+      return handlePlanKey(state, key);
     case "source":
       return handleSourceKey(state, key);
     case "customSource":
@@ -239,33 +460,34 @@ export function handleTuiKey(state: TuiState, key: string): TuiEffect {
 
 function navigateBack(state: TuiState): TuiEffect {
   if (
+    state.screen === "plan" ||
     state.screen === "source" ||
     state.screen === "presets" ||
     state.screen === "platforms" ||
     state.screen === "missingSource"
   ) {
-    state.screen = "dashboard";
+    state.screen = state.screen === "plan" ? "flow" : "plan";
     state.cursor = 0;
     state.notice = "";
     return { type: "none" };
   }
 
   if (state.screen === "installReview") {
-    state.screen = "dashboard";
-    state.cursor = 6;
+    state.screen = "plan";
+    state.cursor = planItemCursor(state, "Install");
     state.notice = "";
     return { type: "none" };
   }
 
   if (state.screen === "presetInstallReview") {
-    state.screen = "presets";
-    state.cursor = state.availablePresets.length;
+    state.screen = "plan";
+    state.cursor = planItemCursor(state, "Install");
     state.notice = "";
     return { type: "none" };
   }
 
   if (state.screen === "result") {
-    state.screen = "dashboard";
+    state.screen = "plan";
     state.cursor = 0;
     state.notice = "";
     state.pendingAction = undefined;
@@ -275,11 +497,57 @@ function navigateBack(state: TuiState): TuiEffect {
   return { type: "none" };
 }
 
-function handleDashboardKey(state: TuiState, key: string): TuiEffect {
-  moveCursor(state, key, DASHBOARD_ITEMS.length - 1);
+function handleFlowKey(state: TuiState, key: string): TuiEffect {
+  moveCursor(state, key, FLOW_ITEMS.length - 1);
+  if (!isConfirmKey(key)) return { type: "none" };
 
-  // Destination (index 1) is a real checkbox — accept toggle keys (x, space) as well as Enter
-  if (state.cursor === 1 && isToggleKey(key)) {
+  state.notice = "";
+  if (state.cursor === 0) {
+    applyFlowDefaults(state, "project");
+    state.screen = "plan";
+    state.cursor = 0;
+  } else if (state.cursor === 1) {
+    applyFlowDefaults(state, "global");
+    state.screen = "plan";
+    state.cursor = 0;
+  } else if (state.cursor === 2) {
+    applyFlowDefaults(state, "custom");
+    openCustomSourceInput(state);
+  } else if (state.cursor === 3) {
+    applyFlowDefaults(state, "presetsOnly");
+    state.screen = "presets";
+    state.cursor = 0;
+  } else {
+    return { type: "exit", code: 0 };
+  }
+
+  return { type: "none" };
+}
+
+function handlePlanKey(state: TuiState, key: string): TuiEffect {
+  const items = planItems(state);
+  moveCursor(state, key, items.length - 1);
+  const item = items[state.cursor];
+
+  if (item === "Backup" && isToggleKey(key)) {
+    state.backup = !state.backup;
+    state.notice = "";
+    return { type: "none" };
+  }
+
+  if (item === "Use latest build output" && isToggleKey(key)) {
+    state.rebuild = !state.rebuild;
+    state.notice = "";
+    return { type: "none" };
+  }
+
+  if (item === "Run preset extensions" && isToggleKey(key)) {
+    state.presetInstallExtensions = !state.presetInstallExtensions;
+    state.notice = "";
+    return { type: "none" };
+  }
+
+  if (item === "Install destination" && isToggleKey(key)) {
     state.destinationMode = state.destinationMode === "global" ? "project" : "global";
     state.notice = "";
     return { type: "none" };
@@ -288,32 +556,65 @@ function handleDashboardKey(state: TuiState, key: string): TuiEffect {
   if (!isConfirmKey(key)) return { type: "none" };
 
   state.notice = "";
-  switch (state.cursor) {
-    case 0:
-      state.screen = "source";
-      state.cursor = 0;
-      break;
-    case 1:
-      state.destinationMode = state.destinationMode === "global" ? "project" : "global";
-      break;
-    case 2:
+  switch (item) {
+    case "Preset layers":
+    case "Preset sources":
       state.screen = "presets";
       state.cursor = 0;
       break;
-    case 3:
+    case "Base source":
+      state.screen = "source";
+      state.cursor = 0;
+      break;
+    case "Platforms":
       state.screen = "platforms";
       state.cursor = 0;
       break;
-    case 4:
+    case "Install destination":
+      state.destinationMode = state.destinationMode === "global" ? "project" : "global";
+      break;
+    case "Backup":
+      state.backup = !state.backup;
+      break;
+    case "Use latest build output":
+      state.rebuild = !state.rebuild;
+      break;
+    case "Run preset extensions":
+      state.presetInstallExtensions = !state.presetInstallExtensions;
+      break;
+    case "Validate":
+      if (state.flow === "presetsOnly") return startPresetOnlyAction(state, "presetValidate");
       return startOrMissingSource(state, "validate");
-    case 5:
+    case "Build only":
       return startOrMissingSource(state, "build");
-    case 6:
+    case "Install":
+      if (state.flow === "presetsOnly") return openPresetInstallReview(state);
       return startOrMissingSource(state, "install");
-    case 7:
-      return { type: "exit", code: 0 };
+    case "Back to start":
+      state.screen = "flow";
+      state.cursor = 0;
+      break;
   }
   return { type: "none" };
+}
+
+function applyFlowDefaults(state: TuiState, flow: TuiFlow): void {
+  storeCurrentFlowPreferences(state);
+  state.flow = flow;
+  if (flow === "project") {
+    state.sourceMode = "project";
+    state.destinationMode = "project";
+  } else if (flow === "global") {
+    state.sourceMode = "global";
+    state.destinationMode = "global";
+  } else if (flow === "custom") {
+    state.sourceMode = "custom";
+    state.destinationMode = "project";
+  } else {
+    state.sourceMode = "project";
+    state.destinationMode = "project";
+  }
+  applyFlowPreferences(state, flow);
 }
 
 function handleSourceKey(state: TuiState, key: string): TuiEffect {
@@ -323,15 +624,15 @@ function handleSourceKey(state: TuiState, key: string): TuiEffect {
   if (state.cursor === 0) {
     state.sourceMode = "project";
     state.destinationMode = "project";
-    state.screen = "dashboard";
+    state.screen = "plan";
   } else if (state.cursor === 1) {
     state.sourceMode = "global";
     state.destinationMode = "global";
-    state.screen = "dashboard";
+    state.screen = "plan";
   } else if (state.cursor === 2) {
     openCustomSourceInput(state);
   } else {
-    state.screen = "dashboard";
+    state.screen = "plan";
   }
   if (state.screen !== "customSource") {
     state.cursor = 0;
@@ -381,16 +682,18 @@ export function applyCustomSourceTextInputChange(state: TuiState, value: string)
 }
 
 function commitCustomSourceIfValid(state: TuiState): boolean {
-  const value = state.textInput.trim();
-  if (!value) {
+  const rawValue = state.textInput.trim();
+  if (!rawValue) {
     state.notice = "Enter a custom source path first.";
     return false;
   }
+  const value = normalizeCustomSourceInput(rawValue);
   state.customSource = value;
   state.recentCustomSources = rememberCustomSource(state.recentCustomSources, value);
   state.sourceMode = "custom";
   state.destinationMode = "project";
-  state.screen = "dashboard";
+  state.flow = "custom";
+  state.screen = "plan";
   state.cursor = 0;
   state.notice = "";
   return true;
@@ -427,26 +730,26 @@ function handleCustomSourceListKey(state: TuiState, key: string): TuiEffect {
 }
 
 function handlePresetsKey(state: TuiState, key: string): TuiEffect {
-  const installIndex = state.availablePresets.length;
-  const backIndex = installIndex + 1;
+  const presets = visiblePresetChoices(state);
+  const sourceRows = showsPresetSourcePicker(state) ? 1 : 0;
+  const continueIndex = presets.length + sourceRows;
+  const backIndex = state.flow === "presetsOnly" ? continueIndex + 1 : continueIndex;
   const lastIndex = backIndex;
   moveCursor(state, key, lastIndex);
   if (!isConfirmKey(key) && !isToggleKey(key)) return { type: "none" };
 
-  if (state.cursor < state.availablePresets.length) {
-    const preset = state.availablePresets[state.cursor];
-    if (preset) state.selectedPresetNames = togglePresetSelection(state.selectedPresetNames, preset.name);
+  if (sourceRows === 1 && state.cursor === 0) {
+    state.presetSourceMode = nextPresetSourceMode(state.presetSourceMode);
     state.notice = "";
-  } else if (state.cursor === installIndex) {
-    if (state.selectedPresetNames.length === 0) {
-      state.notice = "Select at least one preset first.";
-      return { type: "none" };
-    }
-    state.screen = "presetInstallReview";
-    state.cursor = 0;
+  } else if (state.cursor >= sourceRows && state.cursor < presets.length + sourceRows) {
+    const preset = presets[state.cursor - sourceRows];
+    if (preset)
+      state.selectedPresetNames = togglePresetSelection(state.selectedPresetNames, presetSelectionKey(state, preset));
     state.notice = "";
+  } else if (state.cursor === continueIndex && state.flow === "presetsOnly") {
+    return continuePresetOnlyFlow(state);
   } else if (state.cursor === backIndex) {
-    state.screen = "dashboard";
+    state.screen = state.flow === "presetsOnly" ? "flow" : "plan";
     state.cursor = 0;
     state.notice = "";
   }
@@ -464,7 +767,7 @@ function handlePlatformsKey(state: TuiState, key: string): TuiEffect {
     const platform = PLATFORMS[state.cursor - 1];
     if (platform) state.platforms = togglePlatformSelection(state.platforms, platform);
   } else {
-    state.screen = "dashboard";
+    state.screen = "plan";
     state.cursor = 0;
   }
   return { type: "none" };
@@ -486,7 +789,7 @@ function handleMissingSourceKey(state: TuiState, key: string): TuiEffect {
     state.screen = "source";
     state.cursor = 0;
   } else {
-    state.screen = "dashboard";
+    state.screen = "plan";
     state.cursor = 0;
   }
   return { type: "none" };
@@ -503,8 +806,8 @@ function handleInstallReviewKey(state: TuiState, key: string): TuiEffect {
   } else if (state.cursor === 2) {
     return { type: "start", action: "install" };
   } else {
-    state.screen = "dashboard";
-    state.cursor = 6;
+    state.screen = "plan";
+    state.cursor = planItemCursor(state, "Install");
   }
   return { type: "none" };
 }
@@ -524,15 +827,20 @@ function handlePresetInstallReviewKey(state: TuiState, key: string): TuiEffect {
     }
     return { type: "start", action: "presetInstall" };
   } else {
-    state.screen = "presets";
-    state.cursor = state.availablePresets.length;
+    state.screen = "plan";
+    state.cursor = planItemCursor(state, "Install");
   }
   return { type: "none" };
 }
 
+function planItemCursor(state: TuiState, item: TuiPlanItem): number {
+  const index = planItems(state).indexOf(item);
+  return index === -1 ? 0 : index;
+}
+
 function handleResultKey(state: TuiState, key: string): TuiEffect {
   if (isConfirmKey(key)) {
-    state.screen = "dashboard";
+    state.screen = "plan";
     state.cursor = 0;
     state.notice = "";
     state.pendingAction = undefined;
@@ -540,7 +848,49 @@ function handleResultKey(state: TuiState, key: string): TuiEffect {
   return { type: "none" };
 }
 
-function startOrMissingSource(state: TuiState, action: Exclude<TuiAction, "init">): TuiEffect {
+function startPresetOnlyAction(state: TuiState, action: "presetValidate"): TuiEffect {
+  if (selectedPresets(state).length === 0) {
+    state.notice = "Select at least one preset first.";
+    return { type: "none" };
+  }
+
+  if (state.platforms.length === 0) {
+    state.notice = "Select at least one platform first.";
+    return { type: "none" };
+  }
+
+  return { type: "start", action };
+}
+
+function openPresetInstallReview(state: TuiState): TuiEffect {
+  if (selectedPresets(state).length === 0) {
+    state.notice = "Select at least one preset first.";
+    return { type: "none" };
+  }
+
+  if (state.platforms.length === 0) {
+    state.notice = "Select at least one platform first.";
+    return { type: "none" };
+  }
+
+  state.screen = "presetInstallReview";
+  state.cursor = 0;
+  return { type: "none" };
+}
+
+function continuePresetOnlyFlow(state: TuiState): TuiEffect {
+  if (selectedPresets(state).length === 0) {
+    state.notice = "Select at least one preset first.";
+    return { type: "none" };
+  }
+
+  state.screen = "plan";
+  state.cursor = 0;
+  state.notice = "";
+  return { type: "none" };
+}
+
+function startOrMissingSource(state: TuiState, action: Exclude<TuiAction, "init" | "presetValidate">): TuiEffect {
   if (state.platforms.length === 0) {
     state.notice = "Select at least one platform first.";
     return { type: "none" };

@@ -106,13 +106,13 @@ Install preserves unmanaged destination agents and skills unless generated outpu
 
 ## `ulis tui`
 
-Launch the interactive terminal dashboard. Use it to choose a source, select presets and platforms, validate without writing files, build generated outputs, install with an explicit destination review, or install selected presets by themselves.
+Launch the interactive terminal dashboard. Use it to start from a workflow, review the generated plan, select presets and platforms, validate without writing files, build generated outputs, or install with an explicit destination review.
 
 ```bash
 ulis tui
 ```
 
-The TUI supports project `.ulis/`, global `~/.ulis/`, and custom source paths. Install destinations are explicit: project-local configs or home-level configs. If a project or global source is missing, the TUI can initialize it before continuing. Installs require a review screen where `backup` and `rebuild` can be toggled before execution. The Presets screen also has **Install selected presets**, which installs only the selected presets without reading the current source.
+The TUI starts with workflow choices: update this project, update global configs, use a custom source, or install presets only. Each choice pre-fills an editable plan; before running, you can still change source, destination, preset layers or sources, platforms, backups, latest-build behavior, and preset extension installs. If a project or global source is missing, the TUI can initialize it before continuing. Installs require a review screen with the equivalent CLI command before files are written.
 
 Keyboard controls:
 
