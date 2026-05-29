@@ -1,29 +1,14 @@
-import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, expect, it } from "bun:test";
 import { join } from "node:path";
 
 import { z } from "zod";
 
+import { createTempRoot, writeTextFile } from "../test-utils/fs.js";
 import { loadRequiredConfigFile, loadValidatedConfigFile } from "./config-loader.js";
 
-const tmpRoots: string[] = [];
-
-function createTempRoot(): string {
-  const root = mkdtempSync(join(tmpdir(), "ulis-config-loader-"));
-  tmpRoots.push(root);
-  return root;
-}
-
 function writeConfig(root: string, filename: string, contents: string): void {
-  writeFileSync(join(root, filename), contents);
+  writeTextFile(join(root, filename), contents);
 }
-
-afterEach(() => {
-  for (const root of tmpRoots.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
 
 describe("loadValidatedConfigFile", () => {
   const Schema = z.object({
@@ -32,7 +17,7 @@ describe("loadValidatedConfigFile", () => {
   });
 
   it("prefers .yaml over .yml and .json", () => {
-    const root = createTempRoot();
+    const root = createTempRoot("ulis-config-loader-");
     writeConfig(root, "config.json", JSON.stringify({ name: "json" }));
     writeConfig(root, "config.yml", "name: yml\n");
     writeConfig(root, "config.yaml", "name: yaml\n");
@@ -43,7 +28,7 @@ describe("loadValidatedConfigFile", () => {
   });
 
   it("falls back from .yaml to .yml before .json", () => {
-    const root = createTempRoot();
+    const root = createTempRoot("ulis-config-loader-");
     writeConfig(root, "config.json", JSON.stringify({ name: "json" }));
     writeConfig(root, "config.yml", "name: yml\n");
 
@@ -53,7 +38,7 @@ describe("loadValidatedConfigFile", () => {
   });
 
   it("returns a validated default value for optional missing files", () => {
-    const root = createTempRoot();
+    const root = createTempRoot("ulis-config-loader-");
 
     expect(
       loadValidatedConfigFile({
@@ -66,7 +51,7 @@ describe("loadValidatedConfigFile", () => {
   });
 
   it("throws the existing required-file style error for required missing files", () => {
-    const root = createTempRoot();
+    const root = createTempRoot("ulis-config-loader-");
 
     expect(() => loadRequiredConfigFile(root, "missing")).toThrow(
       `Required config file not found: missing.{yaml,yml,json} in ${root}`,
@@ -77,7 +62,7 @@ describe("loadValidatedConfigFile", () => {
   });
 
   it("includes the file path in YAML parse errors", () => {
-    const root = createTempRoot();
+    const root = createTempRoot("ulis-config-loader-");
     const filePath = join(root, "config.yaml");
     writeConfig(root, "config.yaml", "name: [\n");
 
@@ -87,7 +72,7 @@ describe("loadValidatedConfigFile", () => {
   });
 
   it("includes the file path in JSON parse errors", () => {
-    const root = createTempRoot();
+    const root = createTempRoot("ulis-config-loader-");
     const filePath = join(root, "config.json");
     writeConfig(root, "config.json", "{");
 
@@ -97,7 +82,7 @@ describe("loadValidatedConfigFile", () => {
   });
 
   it("surfaces Zod validation failures from the validated helper with file path", () => {
-    const root = createTempRoot();
+    const root = createTempRoot("ulis-config-loader-");
     const filePath = join(root, "config.yaml");
     writeConfig(root, "config.yaml", "count: 1\n");
 

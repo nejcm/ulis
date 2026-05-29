@@ -1,19 +1,11 @@
-import { afterEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { describe, expect, it } from "bun:test";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 
+import { createTempRoot, readTextFile, writeTextFile } from "../test-utils/fs.js";
 import { readMergeableConfig } from "../utils/config-merger.js";
 import type { GenerationResult } from "./types.js";
 import { writeResult } from "./writer.js";
-
-const tmpRoots: string[] = [];
-
-function createTempRoot(): string {
-  const root = mkdtempSync(join(tmpdir(), "ulis-writer-"));
-  tmpRoots.push(root);
-  return root;
-}
 
 function resultWithArtifact(path: string): GenerationResult {
   return {
@@ -23,23 +15,16 @@ function resultWithArtifact(path: string): GenerationResult {
 }
 
 function read(path: string): string {
-  return readFileSync(path, "utf-8");
+  return readTextFile(path);
 }
 
 function write(path: string, content: string): void {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, content, "utf-8");
+  writeTextFile(path, content);
 }
-
-afterEach(() => {
-  for (const root of tmpRoots.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
 
 describe("writeResult", () => {
   it("writes file artifacts under the output directory", () => {
-    const outDir = createTempRoot();
+    const outDir = createTempRoot("ulis-writer-");
 
     writeResult(resultWithArtifact(join("nested", "artifact.txt")), outDir, "claude");
 
@@ -47,21 +32,21 @@ describe("writeResult", () => {
   });
 
   it("rejects artifact paths that escape the output directory", () => {
-    const outDir = createTempRoot();
+    const outDir = createTempRoot("ulis-writer-");
     expect(() => writeResult(resultWithArtifact("../escaped.txt"), outDir, "claude")).toThrow(
       "outside output directory",
     );
   });
 
   it("rejects absolute artifact paths", () => {
-    const outDir = createTempRoot();
+    const outDir = createTempRoot("ulis-writer-");
     expect(() => writeResult(resultWithArtifact("C:\\temp\\escaped.txt"), outDir, "claude")).toThrow(
       "absolute artifact path",
     );
   });
 
   it("copies skill directories into the default skills destination", () => {
-    const root = createTempRoot();
+    const root = createTempRoot("ulis-writer-");
     const outDir = join(root, "out");
     const skillDir = join(root, "source-skill");
     write(
@@ -92,7 +77,7 @@ describe("writeResult", () => {
   });
 
   it("copies skill directories into a custom skills destination", () => {
-    const root = createTempRoot();
+    const root = createTempRoot("ulis-writer-");
     const outDir = join(root, "out");
     const skillDir = join(root, "source-skill");
     write(join(skillDir, "SKILL.md"), "Skill body.");
@@ -115,7 +100,7 @@ describe("writeResult", () => {
   });
 
   it("copies existing copyDirs and skips missing ones", () => {
-    const root = createTempRoot();
+    const root = createTempRoot("ulis-writer-");
     const outDir = join(root, "out");
     const docsDir = join(root, "docs");
     write(join(docsDir, "guide.md"), "Guide");
@@ -142,7 +127,7 @@ describe("writeResult", () => {
   });
 
   it("merges raw directories after artifacts with raw replacing same-path values", () => {
-    const root = createTempRoot();
+    const root = createTempRoot("ulis-writer-");
     const outDir = join(root, "out");
     const rawDir = join(root, "raw");
     write(
@@ -177,7 +162,7 @@ describe("writeResult", () => {
   });
 
   it("merges raw TOML with replacement semantics", () => {
-    const root = createTempRoot();
+    const root = createTempRoot("ulis-writer-");
     const outDir = join(root, "out");
     const rawDir = join(root, "raw");
     write(
@@ -219,7 +204,7 @@ describe("writeResult", () => {
   });
 
   it("appends after raw merges and then writes aliases", () => {
-    const root = createTempRoot();
+    const root = createTempRoot("ulis-writer-");
     const outDir = join(root, "out");
     const rawDir = join(root, "raw");
     write(join(rawDir, "AGENTS.md"), "Raw instructions.\n");
@@ -243,7 +228,7 @@ describe("writeResult", () => {
   });
 
   it("creates appendAfterRaw files before alias creation", () => {
-    const outDir = createTempRoot();
+    const outDir = createTempRoot("ulis-writer-");
 
     writeResult(
       {

@@ -1,8 +1,7 @@
-import { describe, it, expect } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { describe, expect, it } from "bun:test";
 import { join, resolve } from "node:path";
 
+import { createTempRoot, writeTextFile } from "../test-utils/fs.js";
 import { parseAgents } from "./agent.js";
 
 const fixturesDir = resolve(join(import.meta.dirname, "../../tests/fixtures/agents"));
@@ -51,52 +50,42 @@ describe("parseAgents", () => {
   });
 
   it("uses explicit frontmatter name over the filename", () => {
-    const root = mkdtempSync(join(tmpdir(), "ulis-agent-"));
-    try {
-      const agentsDir = join(root, "agents");
-      mkdirSync(agentsDir);
-      writeFileSync(
-        join(agentsDir, "local-file.md"),
-        [
-          "---",
-          "name: refactoring-specialist",
-          "description: Refactor safely",
-          "tools: Read, Write, Edit, Bash, Glob, Grep",
-          "model: sonnet",
-          "---",
-          "You are a refactoring specialist.",
-        ].join("\n"),
-      );
+    const root = createTempRoot("ulis-agent-");
+    const agentsDir = join(root, "agents");
+    writeTextFile(
+      join(agentsDir, "local-file.md"),
+      [
+        "---",
+        "name: refactoring-specialist",
+        "description: Refactor safely",
+        "tools: Read, Write, Edit, Bash, Glob, Grep",
+        "model: sonnet",
+        "---",
+        "You are a refactoring specialist.",
+      ].join("\n"),
+    );
 
-      const [agent] = parseAgents(agentsDir);
+    const [agent] = parseAgents(agentsDir);
 
-      expect(agent.name).toBe("refactoring-specialist");
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    expect(agent.name).toBe("refactoring-specialist");
   });
 
   it("rejects unsafe explicit frontmatter names", () => {
-    const root = mkdtempSync(join(tmpdir(), "ulis-agent-"));
-    try {
-      const agentsDir = join(root, "agents");
-      mkdirSync(agentsDir);
-      writeFileSync(
-        join(agentsDir, "local-file.md"),
-        [
-          "---",
-          "name: ../config",
-          "description: Refactor safely",
-          "tools: Read, Write, Edit, Bash, Glob, Grep",
-          "model: sonnet",
-          "---",
-          "You are a refactoring specialist.",
-        ].join("\n"),
-      );
+    const root = createTempRoot("ulis-agent-");
+    const agentsDir = join(root, "agents");
+    writeTextFile(
+      join(agentsDir, "local-file.md"),
+      [
+        "---",
+        "name: ../config",
+        "description: Refactor safely",
+        "tools: Read, Write, Edit, Bash, Glob, Grep",
+        "model: sonnet",
+        "---",
+        "You are a refactoring specialist.",
+      ].join("\n"),
+    );
 
-      expect(() => parseAgents(agentsDir)).toThrow("name");
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
+    expect(() => parseAgents(agentsDir)).toThrow("name");
   });
 });

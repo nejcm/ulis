@@ -1,9 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { PLATFORM_DIRS, isSamePath, platformConfigDir, resolvePlatformDirSegment } from "./platforms.js";
+import { createTempRoot } from "./test-utils/fs.js";
 
 describe("platform paths", () => {
   it("treats equivalent resolved paths as equal", () => {
@@ -12,19 +11,19 @@ describe("platform paths", () => {
   });
 
   it("selects home directory config layout when destination is home", () => {
-    const userHome = mkdtempSync(join(tmpdir(), "ulis-platform-home-"));
+    const userHome = createTempRoot("ulis-platform-home-");
     expect(platformConfigDir("claude", userHome, userHome)).toBe(join(userHome, ".claude"));
   });
 
   it("selects project config layout when destination is not home", () => {
-    const userHome = mkdtempSync(join(tmpdir(), "ulis-platform-user-"));
-    const workspace = mkdtempSync(join(tmpdir(), "ulis-platform-ws-"));
+    const userHome = createTempRoot("ulis-platform-user-");
+    const workspace = createTempRoot("ulis-platform-ws-");
     expect(platformConfigDir("forgecode", workspace, userHome)).toBe(join(workspace, ".forge"));
   });
 
   it("uses OpenCode home segment per OS and .opencode for project installs", () => {
-    const userHome = mkdtempSync(join(tmpdir(), "ulis-platform-ochome-"));
-    const workspace = mkdtempSync(join(tmpdir(), "ulis-platform-ocws-"));
+    const userHome = createTempRoot("ulis-platform-ochome-");
+    const workspace = createTempRoot("ulis-platform-ocws-");
     const homeSegment = resolvePlatformDirSegment(PLATFORM_DIRS.opencode.home);
     expect(platformConfigDir("opencode", userHome, userHome)).toBe(join(userHome, homeSegment));
     expect(platformConfigDir("opencode", workspace, userHome)).toBe(join(workspace, ".opencode"));
@@ -44,5 +43,13 @@ describe("resolvePlatformDirSegment", () => {
   it("falls back to default when the current platform has no entry", () => {
     const other = process.platform === "win32" ? "linux" : "win32";
     expect(resolvePlatformDirSegment({ [other]: ".other", default: ".fallback" })).toBe(".fallback");
+  });
+
+  it("throws when no current-platform or default entry exists", () => {
+    const other = process.platform === "win32" ? "linux" : "win32";
+
+    expect(() => resolvePlatformDirSegment({ [other]: ".other" })).toThrow(
+      `PLATFORM_DIRS: no path for platform "${process.platform}" and no default`,
+    );
   });
 });
