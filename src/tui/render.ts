@@ -21,6 +21,7 @@ import {
 interface UiLine {
   readonly text: string;
   readonly value?: string;
+  readonly inlineValue?: string;
   readonly fgColor?: Color;
   readonly bold?: boolean;
   readonly indent?: number;
@@ -126,25 +127,23 @@ function renderPlan(state: TuiState) {
     return shouldBreak ? [row, { text: "" }] : [row];
   });
   const presetLabel = state.flow === "presetsOnly" ? "Preset sources" : "Preset layers";
-  const baseSourceLine =
-    state.flow === "presetsOnly"
-      ? "Base source: none (preset-only install)"
-      : `Base source: ${formatSourceMode(state.sourceMode, state.customSource)} -> ${plan.sourceDir}`;
   const overviewLines: UiLine[] = [
     { text: "Input", fgColor: "color06", bold: true },
     ...(showsPresetSourcePicker(state)
-      ? [{ text: `${presetLabel} location: ${formatPresetSourceMode(state.presetSourceMode)}` }]
+      ? [{ text: `${presetLabel} location: `, inlineValue: formatPresetSourceMode(state.presetSourceMode) }]
       : []),
-    { text: `${presetLabel}: ${formatPresets(state)}` },
-    { text: baseSourceLine },
+    { text: `${presetLabel}: `, inlineValue: formatPresets(state) },
+    state.flow === "presetsOnly"
+      ? { text: "Base source: ", inlineValue: "none (preset-only install)" }
+      : { text: "Base source: ", inlineValue: `${formatSourceMode(state.sourceMode, state.customSource)} -> ${plan.sourceDir}` },
     { text: "" },
     { text: "Output", fgColor: "color06", bold: true },
-    { text: `Platforms: ${formatPlatforms(state.platforms)}` },
-    { text: `Install destination: ${formatDestinationMode(state.destinationMode)} -> ${plan.destBase}` },
+    { text: "Platforms: ", inlineValue: formatPlatforms(state.platforms) },
+    { text: "Install destination: ", inlineValue: `${formatDestinationMode(state.destinationMode)} -> ${plan.destBase}` },
     { text: "" },
     { text: "Install options", fgColor: "color06", bold: true },
-    { text: `Backup: ${state.backup ? "on" : "off"}` },
-    { text: `Use latest build output: ${state.rebuild ? "on" : "off"}` },
+    { text: "Backup: ", inlineValue: state.backup ? "on" : "off" },
+    { text: "Use latest build output: ", inlineValue: state.rebuild ? "on" : "off" },
   ];
 
   return renderCardShell(
@@ -242,6 +241,21 @@ function renderCustomSource(state: TuiState, handlers?: CustomSourceHandlers) {
 }
 
 function renderUiLine(line: UiLine): Node {
+  if (line.inlineValue != null) {
+    return HStack(
+      {
+        width: "100%",
+        fgColor: line.fgColor,
+        padding: { x: 1 + (line.indent ?? 0) },
+        alignItems: "start",
+        justifyContent: "start",
+      },
+      [
+        Text(line.text, { bold: line.bold, wrap: "word" }),
+        Text(line.inlineValue, { bold: true, wrap: "word" }),
+      ],
+    );
+  }
   return line.value == null
     ? VStack(
         {
@@ -458,17 +472,14 @@ function renderMissingSource(state: TuiState) {
 function renderInstallReview(state: TuiState) {
   const plan = planSource(state);
   return renderCard("Review Install", "Confirm install settings before anything is written.", [
-    { text: `Source: ${plan.sourceDir}` },
-    { text: `Destination: ${plan.destBase}` },
-    { text: `Platforms: ${formatPlatforms(state.platforms)}` },
-    { text: `Presets: ${formatPresets(state)}` },
+    { text: "Source: ", inlineValue: plan.sourceDir },
+    { text: "Destination: ", inlineValue: plan.destBase },
+    { text: "Platforms: ", inlineValue: formatPlatforms(state.platforms) },
+    { text: "Presets: ", inlineValue: formatPresets(state) },
     { text: `Command: ${formatInstallCommand(state)}`, fgColor: "color08" },
     { text: "" },
-    selectableLine(state.cursor, 0, `[${state.backup ? "x" : " "}] Backup existing configs before install`),
-    selectableLine(state.cursor, 1, `[${state.rebuild ? "x" : " "}] Use latest build output`),
-    { text: "" },
-    selectableLine(state.cursor, 2, "Start install"),
-    selectableLine(state.cursor, 3, "Back to plan"),
+    selectableLine(state.cursor, 0, "Start install"),
+    selectableLine(state.cursor, 1, "Back to plan"),
   ]);
 }
 

@@ -347,32 +347,10 @@ describe("tui state", () => {
     expect(handleTuiKey(state, "enter")).toEqual({ type: "initSource" });
   });
 
-  it("installReview toggles backup with enter", () => {
-    const state = createInitialState();
-    state.screen = "installReview";
-    state.cursor = 0;
-    state.backup = true;
-
-    handleTuiKey(state, "enter");
-
-    expect(state.backup).toBe(false);
-  });
-
-  it("installReview toggles rebuild with space", () => {
-    const state = createInitialState();
-    state.screen = "installReview";
-    state.cursor = 1;
-    state.rebuild = true;
-
-    handleTuiKey(state, " ");
-
-    expect(state.rebuild).toBe(false);
-  });
-
   it("installReview start returns start effect", () => {
     const state = createInitialState();
     state.screen = "installReview";
-    state.cursor = 2;
+    state.cursor = 0;
 
     expect(handleTuiKey(state, "enter")).toEqual({ type: "start", action: "install" });
   });
@@ -380,7 +358,7 @@ describe("tui state", () => {
   it("installReview back navigates to plan", () => {
     const state = createInitialState();
     state.screen = "installReview";
-    state.cursor = 3;
+    state.cursor = 1;
 
     handleTuiKey(state, "enter");
 
@@ -704,15 +682,12 @@ describe("tui state", () => {
     }
   });
 
-  it("accepts return alias as toggle in install review", () => {
+  it("accepts return alias as confirm in install review", () => {
     const state = createInitialState();
     state.screen = "installReview";
     state.cursor = 0;
-    state.backup = true;
 
-    handleTuiKey(state, "return");
-
-    expect(state.backup).toBe(false);
+    expect(handleTuiKey(state, "return")).toEqual({ type: "start", action: "install" });
   });
 
   it("delete key navigates back outside custom source", () => {

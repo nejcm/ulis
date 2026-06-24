@@ -25,6 +25,7 @@ When you need tool-specific configuration behavior:
 | **Codex**       | https://developers.openai.com/codex      |
 | **OpenCode**    | https://opencode.ai/docs                 |
 | **Cursor**      | https://cursor.com/docs                  |
+| **Forge Code**  | https://forgecode.dev/docs/              |
 
 ## Source layout
 

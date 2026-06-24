@@ -796,14 +796,10 @@ function handleMissingSourceKey(state: TuiState, key: string): TuiEffect {
 }
 
 function handleInstallReviewKey(state: TuiState, key: string): TuiEffect {
-  moveCursor(state, key, 3);
+  moveCursor(state, key, 1);
   if (!isConfirmKey(key) && !isToggleKey(key)) return { type: "none" };
 
   if (state.cursor === 0) {
-    state.backup = !state.backup;
-  } else if (state.cursor === 1) {
-    state.rebuild = !state.rebuild;
-  } else if (state.cursor === 2) {
     return { type: "start", action: "install" };
   } else {
     state.screen = "plan";

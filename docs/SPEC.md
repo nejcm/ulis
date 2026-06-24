@@ -137,6 +137,8 @@ You are a focused implementation agent. Read specs carefully before writing code
 
 A composable, invocable capability. Defined as a directory `.ulis/skills/{name}/SKILL.md`. Both the prompt and associated files (scripts, templates) live in the same directory.
 
+> Skills reference: https://agentskills.io/home
+
 ```yaml
 # .ulis/skills/code-quality/SKILL.md
 ---
