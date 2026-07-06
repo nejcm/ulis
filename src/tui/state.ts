@@ -648,7 +648,7 @@ export function handleCustomSourceTextInputKey(state: TuiState, key: string): Cu
     return { effect: { type: "none" }, preventDefault: false };
   }
 
-  const direction = getNavigationDirection(key);
+  const direction = getArrowNavigationDirection(key);
   if (direction) {
     moveCursor(state, key, state.recentCustomSources.length);
     state.notice = "";
@@ -664,10 +664,6 @@ export function handleCustomSourceTextInputKey(state: TuiState, key: string): Cu
   if (isConfirmKey(key)) {
     commitCustomSourceIfValid(state);
     return { effect: { type: "none" }, preventDefault: true };
-  }
-
-  if (isPasteKey(key)) {
-    return { effect: { type: "pasteClipboard" }, preventDefault: true };
   }
 
   return { effect: { type: "none" }, preventDefault: false };
@@ -946,6 +942,12 @@ function isDownKey(key: string): boolean {
 function getNavigationDirection(key: string): NavigationDirection | undefined {
   if (isUpKey(key)) return "up";
   if (isDownKey(key)) return "down";
+  return undefined;
+}
+
+function getArrowNavigationDirection(key: string): NavigationDirection | undefined {
+  if (isAnyKey(key, "up", "arrowup")) return "up";
+  if (isAnyKey(key, "down", "arrowdown")) return "down";
   return undefined;
 }
 
