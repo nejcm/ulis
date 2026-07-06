@@ -61,8 +61,7 @@ Or install it through your ULIS source tree:
   skills:
     - name: "@nejcm/ulis"
       args:
-        - --skill
-        - ulis
+        - --skill ulis
 ```
 
 That entry belongs in `.ulis/skills.yaml`, then `ulis install` will forward it to the `skills` CLI for supported targets.

@@ -601,6 +601,50 @@ describe("runInstall", () => {
     expect(skillsCommands[0]!.args).not.toContain("cursor");
   });
 
+  it("splits each skill argument line into command arguments", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "codex", "AGENTS.md"), "Codex instructions.\n");
+    write(
+      join(sourceDir, "skills.yaml"),
+      ["codex:", "  skills:", "    - name: test/repo", '      args: ["--skill selected", "--other value"]', ""].join(
+        "\n",
+      ),
+    );
+
+    const commands: Array<{ command: string; args: readonly string[] }> = [];
+    __test.setRuntimeDependencies({
+      async runAsyncCommand(command, args) {
+        commands.push({ command, args });
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["codex"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    const command = commands.find((call) => call.args.includes("test/repo"));
+    expect(command?.args).toContain("--skill");
+    expect(command?.args).toContain("selected");
+    expect(command?.args).toContain("--other");
+    expect(command?.args).toContain("value");
+    expect(command?.args).not.toContain("--skill selected");
+    expect(command?.args).not.toContain("--other value");
+  });
+
   it("runs external skill installs with bounded concurrency", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");

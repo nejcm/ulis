@@ -291,22 +291,19 @@ cursor:
     - name: https://github.com/mattpocock/skills/tree/main/skills/productivity/write-a-skill
     - name: "@nejcm/ulis"
       args:
-        - --skill
-        - ulis
+        - --skill ulis
 
 claude:
   skills:
     - name: anthropics/skills
       args:
-        - --skill
-        - mcp-builder
+        - --skill mcp-builder
 
 cursor:
   skills:
     - name: github:acme/internal-skills
       args:
-        - --skill
-        - repo-review
+        - --skill repo-review
 ```
 
 `@nejcm/ulis` publishes its own `ulis` usage skill from the package `skills/` directory, so it can be installed the same way as any other external skill source.

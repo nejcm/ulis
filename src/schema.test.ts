@@ -1,3 +1,4 @@
+// oxlint-disable no-unsafe-optional-chaining
 import { describe, expect, it } from "bun:test";
 
 import {
@@ -428,12 +429,12 @@ describe("SkillsConfigSchema", () => {
       "*": {
         skills: [
           { name: "mattpocock/skills/productivity/grill-me" },
-          { name: "https://skills.sh/vercel-labs/skills", args: ["--skill", "find-skills"] },
+          { name: "https://skills.sh/vercel-labs/skills", args: ["--skill find-skills"] },
         ],
       },
     });
     expect(result["*"]?.skills).toHaveLength(2);
-    expect(result["*"]?.skills[1].args).toEqual(["--skill", "find-skills"]);
+    expect(result["*"]?.skills[1].args).toEqual(["--skill find-skills"]);
   });
 
   it("parses per-platform skill sections", () => {
