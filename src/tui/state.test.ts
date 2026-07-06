@@ -452,23 +452,23 @@ describe("tui state", () => {
     expect(state.textInput).toBe("C:\\Work\\Personal\\ulis\\.ulis");
   });
 
-  it("customSource TextInput ctrl+v requests clipboard paste", () => {
+  it("customSource TextInput leaves ctrl+v to the terminal", () => {
     const state = createInitialState();
     state.screen = "customSource";
 
     expect(handleCustomSourceTextInputKey(state, "\u0016")).toEqual({
-      effect: { type: "pasteClipboard" },
-      preventDefault: true,
+      effect: { type: "none" },
+      preventDefault: false,
     });
   });
 
-  it("customSource TextInput cmd+v requests clipboard paste", () => {
+  it("customSource TextInput leaves cmd+v to the terminal", () => {
     const state = createInitialState();
     state.screen = "customSource";
 
     expect(handleCustomSourceTextInputKey(state, "cmd+v")).toEqual({
-      effect: { type: "pasteClipboard" },
-      preventDefault: true,
+      effect: { type: "none" },
+      preventDefault: false,
     });
   });
 
@@ -553,6 +553,20 @@ describe("tui state", () => {
 
     expect(result.preventDefault).toBe(true);
     expect(state.cursor).toBe(1);
+  });
+
+  it("customSource allows printable shortcut keys in the path", () => {
+    const state = createInitialState();
+    state.screen = "customSource";
+    state.recentCustomSources = ["/recent/a"];
+
+    for (const key of ["j", "k", "x", "q", " ", "space"]) {
+      expect(handleCustomSourceTextInputKey(state, key)).toEqual({
+        effect: { type: "none" },
+        preventDefault: false,
+      });
+    }
+    expect(state.cursor).toBe(0);
   });
 
   it("rememberCustomSource keeps the three most recent unique values", () => {
