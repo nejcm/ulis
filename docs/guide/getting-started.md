@@ -37,8 +37,7 @@ Or declare it in `.ulis/skills.yaml` so `ulis install` manages it:
   skills:
     - name: "@nejcm/ulis"
       args:
-        - --skill
-        - ulis
+        - --skill ulis
 ```
 
 ## Project mode quick start

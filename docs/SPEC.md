@@ -211,12 +211,12 @@ Declarative installs are split into two files:
   skills:
     - name: mattpocock/skills/productivity/grill-me
     - name: vercel-labs/agent-skills
-      args: ["--skill", "find-skills"]
+      args: ["--skill find-skills"]
 
 claude:
   skills:
     - name: anthropics/skills
-      args: ["--skill", "mcp-builder"]
+      args: ["--skill mcp-builder"]
 
 opencode:
   skills:

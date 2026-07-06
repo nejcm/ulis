@@ -10,9 +10,9 @@
 #   skills:
 #     - name: mattpocock/skills/productivity/grill-me
 #     - name: anthropics/skills
-#       args: ["--skill", "pdf"]
+#       args: ["--skill pdf"]
 #
 # claude:
 #   skills:
 #     - name: anthropics/skills
-#       args: ["--skill", "mcp-builder"]
+#       args: ["--skill mcp-builder"]

@@ -5,7 +5,10 @@ import { emptyYamlAsEmptyObject } from "../utils/yaml.js";
 export const GlobalSkillSchema = z.object({
   key: z.string().optional(),
   name: z.string(),
-  args: z.array(z.string()).optional(),
+  args: z
+    .array(z.string())
+    .describe("Command-line fragments; each item may contain an option and its value.")
+    .optional(),
 });
 
 const PER_PLATFORM_SKILLS_SCHEMA = z.object({

@@ -79,8 +79,7 @@ interface AsyncCommandResult {
 }
 
 type SkillInstallLog =
-  | { readonly level: "success"; readonly message: string }
-  | { readonly level: "warn"; readonly message: string };
+  { readonly level: "success"; readonly message: string } | { readonly level: "warn"; readonly message: string };
 
 type RunAsyncCommand = (
   command: string,
@@ -393,6 +392,10 @@ const SKILL_PLATFORM_AGENT_NAMES: Partial<Record<Platform, string>> = {
 
 const SKILL_INSTALL_CONCURRENCY = 4;
 
+function normalizeSkillArgs(args: readonly string[] = []): string[] {
+  return args.flatMap((arg) => arg.trim().split(/\s+/));
+}
+
 async function installSkills(
   skills: readonly { key?: string; name: string; args?: readonly string[] }[],
   platform: Platform | "*",
@@ -425,7 +428,7 @@ async function installSkills(
         ...agentFlags,
         ...(globalInstall ? ["-g"] : ["--project"]),
         "--yes",
-        ...(skill.args ?? []),
+        ...normalizeSkillArgs(skill.args),
       ];
       logInfo(logger, `Installing ${platform} skill: ${skill.key ?? skill.name}`);
       const result = await runSkillCommand("npx", npxArgs, {
@@ -553,6 +556,7 @@ function formatCommandFailure(result: { stdout?: unknown; stderr?: unknown; stat
   const stdout = typeof result.stdout === "string" ? result.stdout : "";
   const stderr = typeof result.stderr === "string" ? result.stderr : "";
   const combined = `${stdout}\n${stderr}`
+    // oxlint-disable-next-line no-control-regex
     .replace(/\u001b\[[0-9;]*m/gu, "")
     .split("\n")
     .map((line) => line.trim())

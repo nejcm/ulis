@@ -17,6 +17,5 @@ You can also reference the package from `.ulis/skills.yaml`:
   skills:
     - name: "@nejcm/ulis"
       args:
-        - --skill
-        - ulis
+        - --skill ulis
 ```
