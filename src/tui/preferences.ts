@@ -194,6 +194,9 @@ function sanitizeFlowPreferences(raw: Record<string, unknown>): TuiFlowPreferenc
   if (typeof raw.presetInstallExtensions === "boolean") {
     next.presetInstallExtensions = raw.presetInstallExtensions;
   }
+  if (typeof raw.skipExternalSkills === "boolean") {
+    next.skipExternalSkills = raw.skipExternalSkills;
+  }
 
   return next;
 }

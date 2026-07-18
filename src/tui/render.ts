@@ -135,15 +135,22 @@ function renderPlan(state: TuiState) {
     { text: `${presetLabel}: `, inlineValue: formatPresets(state) },
     state.flow === "presetsOnly"
       ? { text: "Base source: ", inlineValue: "none (preset-only install)" }
-      : { text: "Base source: ", inlineValue: `${formatSourceMode(state.sourceMode, state.customSource)} -> ${plan.sourceDir}` },
+      : {
+          text: "Base source: ",
+          inlineValue: `${formatSourceMode(state.sourceMode, state.customSource)} -> ${plan.sourceDir}`,
+        },
     { text: "" },
     { text: "Output", fgColor: "color06", bold: true },
     { text: "Platforms: ", inlineValue: formatPlatforms(state.platforms) },
-    { text: "Install destination: ", inlineValue: `${formatDestinationMode(state.destinationMode)} -> ${plan.destBase}` },
+    {
+      text: "Install destination: ",
+      inlineValue: `${formatDestinationMode(state.destinationMode)} -> ${plan.destBase}`,
+    },
     { text: "" },
     { text: "Install options", fgColor: "color06", bold: true },
     { text: "Backup: ", inlineValue: state.backup ? "on" : "off" },
     { text: "Use latest build output: ", inlineValue: state.rebuild ? "on" : "off" },
+    { text: "Skip external skills: ", inlineValue: state.skipExternalSkills ? "on" : "off" },
   ];
 
   return renderCardShell(
@@ -174,6 +181,7 @@ function planLabel(state: TuiState, label: TuiPlanItem): string {
   if (label === "Backup") return state.backup ? "on" : "off";
   if (label === "Use latest build output") return state.rebuild ? "on" : "off";
   if (label === "Run preset extensions") return state.presetInstallExtensions ? "on" : "off";
+  if (label === "Skip external skills") return state.skipExternalSkills ? "on" : "off";
   return label;
 }
 
@@ -250,10 +258,7 @@ function renderUiLine(line: UiLine): Node {
         alignItems: "start",
         justifyContent: "start",
       },
-      [
-        Text(line.text, { bold: line.bold, wrap: "word" }),
-        Text(line.inlineValue, { bold: true, wrap: "word" }),
-      ],
+      [Text(line.text, { bold: line.bold, wrap: "word" }), Text(line.inlineValue, { bold: true, wrap: "word" })],
     );
   }
   return line.value == null
@@ -533,8 +538,9 @@ function formatInstallCommand(state: TuiState): string {
   const args = ["ulis", "install", "--source", plan.sourceDir, "--target", state.platforms.join(","), "--yes"];
   if (state.destinationMode === "global") args.push("--global");
   if (state.selectedPresetNames.length > 0) args.push("--preset", state.selectedPresetNames.join(","));
-  if (!state.rebuild) args.push("--no-rebuild");
+  if (!state.rebuild) args.push("--skip-rebuild");
   if (state.backup) args.push("--backup");
+  if (state.skipExternalSkills) args.push("--skip-external-skills");
   return args.map(quoteCommandArg).join(" ");
 }
 

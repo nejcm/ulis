@@ -172,17 +172,18 @@ In CI or other non-interactive runs, add `--yes` so a missing preset name fails 
 
 ### Common flags
 
-| Flag                  | Applies to         | Description                                                                  |
-| --------------------- | ------------------ | ---------------------------------------------------------------------------- |
-| `-g`, `--global`      | all                | Operate on `~/.ulis/` and home-level install targets (`~/.claude/`…)         |
-| `--source <path>`     | `build`, `install` | Override the source directory; with `--global`, installs still target home   |
-| `--target <platform>` | `build`, `install` | Comma-separated list: `claude`, `codex`, `cursor`, `opencode`, `forgecode`   |
-| `--preset <names>`    | `build`, `install` | Apply preset(s) from `~/.ulis/presets/` or bundled presets (comma-separated) |
-| `-y`, `--yes`         | `install`          | Skip confirmation prompts                                                    |
-| `--no-rebuild`        | `install`          | Skip the build step and deploy existing `generated/`                         |
-| `--backup`            | `install`          | Back up existing platform dirs (`<dir>.backup.YYYYMMDD_HHMMSS`)              |
-| `--runner <name>`     | `install`          | Package runner for `extensions.yaml` (`npx` or `bunx`)                       |
-| `--no-extensions`     | `install`          | Skip running entries from `extensions.yaml`                                  |
+| Flag                     | Applies to         | Description                                                                  |
+| ------------------------ | ------------------ | ---------------------------------------------------------------------------- |
+| `-g`, `--global`         | all                | Operate on `~/.ulis/` and home-level install targets (`~/.claude/`…)         |
+| `--source <path>`        | `build`, `install` | Override the source directory; with `--global`, installs still target home   |
+| `--target <platforms>`   | `build`, `install` | Comma-separated list: `claude`, `codex`, `cursor`, `opencode`, `forgecode`   |
+| `--preset <names>`       | `build`, `install` | Apply preset(s) from `~/.ulis/presets/` or bundled presets (comma-separated) |
+| `-y`, `--yes`            | `install`          | Skip confirmation prompts                                                    |
+| `--skip-rebuild`         | `install`          | Skip the build step and deploy existing `generated/`                         |
+| `--backup`               | `install`          | Back up existing platform dirs (`<dir>.backup.YYYYMMDD_HHMMSS`)              |
+| `--runner <npx\|bunx>`   | `install`          | Package runner for `extensions.yaml` (`npx` or `bunx`)                       |
+| `--skip-extensions`      | `install`          | Skip running entries from `extensions.yaml`                                  |
+| `--skip-external-skills` | `install`          | Skip installing external skills declared in `skills.yaml`                    |
 
 ### Presets (quick reference)
 
@@ -265,7 +266,7 @@ claude:
 2. `runner: npx | bunx` in `config.yaml`
 3. Auto-detect: `bunx` if available on PATH, otherwise `npx`
 
-A single failing extension logs a warning and the install continues. Skip the phase entirely with `--no-extensions`. Extensions are always re-run on each install (no caching in this version — see [SPEC.md](docs/SPEC.md) for the future caching plan).
+A single failing extension logs a warning and the install continues. Skip the phase entirely with `--skip-extensions`. Extensions are always re-run on each install (no caching in this version — see [SPEC.md](docs/SPEC.md) for the future caching plan).
 
 ---
 

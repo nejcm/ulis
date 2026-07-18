@@ -41,7 +41,7 @@ Help with `ulis` usage, not general coding.
 2. Give the narrowest command that matches that goal.
 3. State important side effects:
    - `build` writes only to `<source>/generated/<platform>/`
-   - `install` rebuilds unless `--no-rebuild` is used
+   - `install` rebuilds unless `--skip-rebuild` is used
    - project mode writes into the current project; global mode writes into the home directory
 4. If the user is unsure which files to edit, point them to `.ulis/agents/`, `.ulis/skills/`, `mcp.yaml`, `skills.yaml`, `permissions.yaml`, and `raw/`.
 

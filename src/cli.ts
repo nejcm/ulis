@@ -44,26 +44,28 @@ async function main(): Promise<void> {
 
   cli
     .command("install", "Build configs from the ulis source tree and install them")
-    .option("-g, --global", "Read ~/.ulis/ and install to ~/.claude/, ~/.codex/, ~/forge/, etc.")
+    .option("-g, --global", "Read ~/.ulis/ and install to ~/.claude/, ~/.codex/, ~/.forge/, etc.")
     .option("-y, --yes", "Skip confirmation prompts (useful for CI)")
     .option("--source <path>", "Override the ulis source directory")
-    .option("--target <platform>", "Only build/install the given platform(s) (comma-separated)")
-    .option("--no-rebuild", "Skip the build step and install existing generated output")
+    .option("--target <platforms>", "Only build/install the given platform(s) (comma-separated)")
+    .option("--skip-rebuild", "Skip the build step and install existing generated output")
     .option("--backup", "Back up existing platform dirs before overwriting")
     .option("--preset <names>", "Apply user-global or bundled preset(s) (comma-separated)")
-    .option("--runner <name>", "Package runner used for extension installs (npx | bunx)")
-    .option("--no-extensions", "Skip running entries from extensions.yaml")
+    .option("--runner <npx|bunx>", "Package runner used for extension installs (npx | bunx)")
+    .option("--skip-extensions", "Skip running entries from extensions.yaml")
+    .option("--skip-external-skills", "Skip installing external skills from skills.yaml")
     .action((options) =>
       installCmd({
         global: Boolean(options.global),
         yes: Boolean(options.yes),
         source: options.source,
         target: options.target,
-        rebuild: options.rebuild !== false,
+        rebuild: !options.skipRebuild,
         backup: Boolean(options.backup),
         preset: options.preset,
         runner: parseRunner(options.runner),
-        extensions: options.extensions !== false,
+        extensions: !options.skipExtensions,
+        skipExternalSkills: Boolean(options.skipExternalSkills),
       }),
     );
 
@@ -71,7 +73,7 @@ async function main(): Promise<void> {
     .command("build", "Build configs into <source>/generated/ without installing")
     .option("-g, --global", "Build from ~/.ulis/")
     .option("--source <path>", "Override the ulis source directory")
-    .option("--target <platform>", "Only build the given platform(s) (comma-separated)")
+    .option("--target <platforms>", "Only build the given platform(s) (comma-separated)")
     .option("--preset <names>", "Apply user-global or bundled preset(s) (comma-separated)")
     .action((options) =>
       buildCmd({
@@ -85,12 +87,13 @@ async function main(): Promise<void> {
   cli
     .command("preset [...args]", "Manage presets (actions: list, install)")
     .option("-l, --list", "List user-global and bundled presets")
-    .option("-g, --global", "Install presets to ~/.claude/, ~/.codex/, ~/forge/, etc.")
+    .option("-g, --global", "Install presets to ~/.claude/, ~/.codex/, ~/.forge/, etc.")
     .option("-y, --yes", "Skip preset install confirmation prompts (useful for CI)")
-    .option("--target <platform>", "Only install the given platform(s) for preset install (comma-separated)")
+    .option("--target <platforms>", "Only install the given platform(s) for preset install (comma-separated)")
     .option("--backup", "Back up existing platform dirs before preset install")
-    .option("--runner <name>", "Package runner used for preset extension installs (npx | bunx)")
-    .option("--no-extensions", "Skip running entries from preset extensions.yaml")
+    .option("--runner <npx|bunx>", "Package runner used for preset extension installs (npx | bunx)")
+    .option("--skip-extensions", "Skip running entries from preset extensions.yaml")
+    .option("--skip-external-skills", "Skip installing external skills from preset skills.yaml")
     .action((args: string[] | undefined, options) => {
       const [action, ...names] = args ?? [];
       if (options.list || action == null || action === "list") return presetListCmd();
@@ -101,7 +104,8 @@ async function main(): Promise<void> {
           target: options.target,
           backup: Boolean(options.backup),
           runner: parseRunner(options.runner),
-          extensions: options.extensions !== false,
+          extensions: !options.skipExtensions,
+          skipExternalSkills: Boolean(options.skipExternalSkills),
         });
       }
       throw new Error(`Unknown preset action: "${action}". Available: list, install`);

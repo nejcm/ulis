@@ -72,21 +72,22 @@ Run `build` and then deploy the generated configs onto the target platform direc
 
 ```bash
 ulis install [-g | --global] [--source <path>] [--target <platforms>]
-             [-y | --yes] [--no-rebuild] [--backup] [--preset <names>]
-             [--runner <npx|bunx>] [--no-extensions]
+             [-y | --yes] [--skip-rebuild] [--backup] [--preset <names>]
+             [--runner <npx|bunx>] [--skip-extensions] [--skip-external-skills]
 ```
 
-| Flag                   | Effect                                                                                                                                                     |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-g`, `--global`       | Read `~/.ulis/` and write to `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.config/opencode/` (Windows: `%USERPROFILE%\.config\opencode\`), and `~/.forge/`. |
-| `--source <path>`      | Override source (still writes to CWD or home depending on `--global`).                                                                                     |
-| `--target <platforms>` | Only build/install the listed platforms.                                                                                                                   |
-| `-y`, `--yes`          | Skip the "about to overwrite" confirmation prompt.                                                                                                         |
-| `--no-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`.                                                                                   |
-| `--backup`             | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.                                                                          |
-| `--preset <names>`     | Same resolution as `ulis build --preset` (user-global directory, then bundled).                                                                            |
-| `--runner <name>`      | Package runner used for `extensions.yaml` entries. `npx` or `bunx`. Overrides `runner` in `config.yaml`. Default: auto-detect (`bunx` if present).         |
-| `--no-extensions`      | Skip running entries from `extensions.yaml`. Useful in CI where network installs are not desired.                                                          |
+| Flag                     | Effect                                                                                                                                                     |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-g`, `--global`         | Read `~/.ulis/` and write to `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.config/opencode/` (Windows: `%USERPROFILE%\.config\opencode\`), and `~/.forge/`. |
+| `--source <path>`        | Override source (still writes to CWD or home depending on `--global`).                                                                                     |
+| `--target <platforms>`   | Only build/install the listed platforms.                                                                                                                   |
+| `-y`, `--yes`            | Skip the "about to overwrite" confirmation prompt.                                                                                                         |
+| `--skip-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`.                                                                                   |
+| `--backup`               | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.                                                                          |
+| `--preset <names>`       | Same resolution as `ulis build --preset` (user-global directory, then bundled).                                                                            |
+| `--runner <npx\|bunx>`   | Package runner used for `extensions.yaml` entries. `npx` or `bunx`. Overrides `runner` in `config.yaml`. Default: auto-detect (`bunx` if present).         |
+| `--skip-extensions`      | Skip running entries from `extensions.yaml`. Useful in CI where network installs are not desired.                                                          |
+| `--skip-external-skills` | Skip installing external skills declared in `skills.yaml`. Useful in CI where network installs are not desired.                                            |
 
 **Preset resolution:** Each name maps to a directory. ULIS checks `~/.ulis/presets/<name>/` first; if that folder is missing, it uses the matching bundled preset next to the CLI (`dist/presets/` when installed). A preset in your home tree with the same folder name **shadows** the bundled one. Multiple `--preset` values merge **left to right**, then the base source (from `--source`, `./.ulis/`, or `~/.ulis/`) is applied last — **the base wins on conflicts**. Interactive runs prompt to continue when a name is missing; with `--yes`, missing presets fail immediately.
 
@@ -133,21 +134,22 @@ ulis preset [--list]
 ulis preset list
 ulis preset install <names...> [-g | --global] [--target <platforms>]
                     [-y | --yes] [--backup] [--runner <npx|bunx>]
-                    [--no-extensions]
+                    [--skip-extensions] [--skip-external-skills]
 ```
 
 `-l` / `--list` is accepted. The default action is `list`. Each line shows the directory name (what you pass to `--preset`), a `user` or `bundled` label, optional `name` / `description` from `preset.yaml`, and the display title when it differs from the folder name.
 
 `ulis preset install <names...>` installs selected presets **without** merging a project or global source. Names may be comma-separated (`a,b`) or repeated (`a b`) and are merged in the order given. Generated output is temporary and is removed after install.
 
-| Flag                   | Effect                                                                                       |
-| ---------------------- | -------------------------------------------------------------------------------------------- |
-| `-g`, `--global`       | Install to home-level platform config directories instead of the current project.            |
-| `--target <platforms>` | Only install the listed platforms.                                                           |
-| `-y`, `--yes`          | Skip overwrite confirmation prompts and fail fast for missing presets.                       |
-| `--backup`             | Copy existing platform dirs/configs before writing.                                          |
-| `--runner <name>`      | Package runner for preset `extensions.yaml` entries. `npx` or `bunx`; default: auto-detect.  |
-| `--no-extensions`      | Skip preset `extensions.yaml` entries. Preset `skills.yaml` entries still run when declared. |
+| Flag                     | Effect                                                                                       |
+| ------------------------ | -------------------------------------------------------------------------------------------- |
+| `-g`, `--global`         | Install to home-level platform config directories instead of the current project.            |
+| `--target <platforms>`   | Only install the listed platforms.                                                           |
+| `-y`, `--yes`            | Skip overwrite confirmation prompts and fail fast for missing presets.                       |
+| `--backup`               | Copy existing platform dirs/configs before writing.                                          |
+| `--runner <npx\|bunx>`   | Package runner for preset `extensions.yaml` entries. `npx` or `bunx`; default: auto-detect.  |
+| `--skip-extensions`      | Skip preset `extensions.yaml` entries. Preset `skills.yaml` entries still run when declared. |
+| `--skip-external-skills` | Skip installing external skills from preset `skills.yaml` entries.                           |
 
 ---
 
@@ -187,7 +189,7 @@ ulis build --source ./example
 Reinstall from an existing build without regenerating:
 
 ```bash
-ulis install --no-rebuild --yes
+ulis install --skip-rebuild --yes
 ```
 
 Build with reusable presets:

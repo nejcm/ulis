@@ -26,6 +26,7 @@ export interface PresetInstallCmdOptions {
   readonly backup?: boolean;
   readonly runner?: "npx" | "bunx";
   readonly extensions?: boolean;
+  readonly skipExternalSkills?: boolean;
   readonly presetsRoot?: string;
   readonly bundledPresetsRoot?: string;
   readonly userHome?: string;
@@ -90,6 +91,7 @@ export async function presetInstallCmd(
     presets,
     runner: options.runner,
     installExtensions: options.extensions ?? true,
+    installSkills: !options.skipExternalSkills,
     userHome,
   });
 }

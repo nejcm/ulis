@@ -35,6 +35,7 @@ export type TuiPlanItem =
   | "Backup"
   | "Use latest build output"
   | "Run preset extensions"
+  | "Skip external skills"
   | "Validate"
   | "Build only"
   | "Install"
@@ -59,6 +60,7 @@ export interface TuiFlowPreferences {
   readonly backup?: boolean;
   readonly rebuild?: boolean;
   readonly presetInstallExtensions?: boolean;
+  readonly skipExternalSkills?: boolean;
 }
 
 export interface TuiState {
@@ -78,6 +80,7 @@ export interface TuiState {
   backup: boolean;
   rebuild: boolean;
   presetInstallExtensions: boolean;
+  skipExternalSkills: boolean;
   flowPreferences: Partial<Record<TuiPreferenceScope, TuiFlowPreferences>>;
   logs: string[];
   notice: string;
@@ -110,6 +113,7 @@ export const DASHBOARD_ITEMS: readonly TuiPlanItem[] = [
   "Install destination",
   "Backup",
   "Use latest build output",
+  "Skip external skills",
   "Validate",
   "Build only",
   "Install",
@@ -122,6 +126,7 @@ const PRESET_ONLY_PLAN_ITEMS: readonly TuiPlanItem[] = [
   "Install destination",
   "Backup",
   "Run preset extensions",
+  "Skip external skills",
   "Validate",
   "Install",
   "Back to start",
@@ -154,6 +159,7 @@ export function createInitialState(availablePresets: readonly PresetListEntry[] 
     backup: true,
     rebuild: true,
     presetInstallExtensions: true,
+    skipExternalSkills: false,
     flowPreferences: {},
     logs: [],
     notice: "",
@@ -356,6 +362,7 @@ export function flowPreferencesFromState(state: TuiState): TuiFlowPreferences {
     backup: state.backup,
     rebuild: state.rebuild,
     presetInstallExtensions: state.presetInstallExtensions,
+    skipExternalSkills: state.skipExternalSkills,
   };
 
   if (state.flow === "custom" && state.customSource) preferences.customSource = state.customSource;
@@ -404,6 +411,9 @@ export function applyFlowPreferences(state: TuiState, flow: TuiFlow = state.flow
   if (typeof preferences.rebuild === "boolean") state.rebuild = preferences.rebuild;
   if (typeof preferences.presetInstallExtensions === "boolean") {
     state.presetInstallExtensions = preferences.presetInstallExtensions;
+  }
+  if (typeof preferences.skipExternalSkills === "boolean") {
+    state.skipExternalSkills = preferences.skipExternalSkills;
   }
 }
 
@@ -547,6 +557,12 @@ function handlePlanKey(state: TuiState, key: string): TuiEffect {
     return { type: "none" };
   }
 
+  if (item === "Skip external skills" && isToggleKey(key)) {
+    state.skipExternalSkills = !state.skipExternalSkills;
+    state.notice = "";
+    return { type: "none" };
+  }
+
   if (item === "Install destination" && isToggleKey(key)) {
     state.destinationMode = state.destinationMode === "global" ? "project" : "global";
     state.notice = "";
@@ -581,6 +597,9 @@ function handlePlanKey(state: TuiState, key: string): TuiEffect {
       break;
     case "Run preset extensions":
       state.presetInstallExtensions = !state.presetInstallExtensions;
+      break;
+    case "Skip external skills":
+      state.skipExternalSkills = !state.skipExternalSkills;
       break;
     case "Validate":
       if (state.flow === "presetsOnly") return startPresetOnlyAction(state, "presetValidate");
