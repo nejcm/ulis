@@ -45,6 +45,8 @@ export interface InstallOptions {
   readonly runner?: InstallRunner;
   /** When false, skip running extensions installers (`extensions.yaml`). */
   readonly installExtensions?: boolean;
+  /** When false, skip installing external skills (`skills.yaml`). */
+  readonly installSkills?: boolean;
 }
 
 export interface PresetInstallOptions {
@@ -62,6 +64,8 @@ export interface PresetInstallOptions {
   readonly runner?: InstallRunner;
   /** When false, skip running extensions installers (`extensions.yaml`). */
   readonly installExtensions?: boolean;
+  /** When false, skip installing external skills (`skills.yaml`). */
+  readonly installSkills?: boolean;
   readonly signal?: AbortSignal;
 }
 
@@ -79,7 +83,8 @@ interface AsyncCommandResult {
 }
 
 type SkillInstallLog =
-  { readonly level: "success"; readonly message: string } | { readonly level: "warn"; readonly message: string };
+  | { readonly level: "success"; readonly message: string }
+  | { readonly level: "warn"; readonly message: string };
 
 type RunAsyncCommand = (
   command: string,
@@ -103,6 +108,7 @@ interface GeneratedInstallOptions {
   readonly extensionsConfig: ExtensionsConfig;
   readonly runner: InstallRunner;
   readonly installExtensionsEnabled: boolean;
+  readonly installSkillsEnabled: boolean;
   readonly logger: Logger;
   readonly signal?: AbortSignal;
 }
@@ -204,6 +210,7 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
   ]);
 
   const installExtensionsEnabled = options.installExtensions ?? true;
+  const installSkillsEnabled = options.installSkills ?? true;
   const ulisConfig = loadValidatedConfigFile({
     dir: sourceDir,
     baseName: "config",
@@ -223,6 +230,7 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
     extensionsConfig,
     runner,
     installExtensionsEnabled,
+    installSkillsEnabled,
     logger,
   });
 
@@ -246,6 +254,7 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
   const globalInstall = options.globalInstall ?? isSamePath(destBase, userHome);
   const backup = options.backup ?? false;
   const installExtensionsEnabled = options.installExtensions ?? true;
+  const installSkillsEnabled = options.installSkills ?? true;
   const runner = resolveRunner({ cliFlag: options.runner });
   const tempRoot = mkdtempSync(join(tmpdir(), "ulis-preset-install-"));
   const outputDir = join(tempRoot, ULIS_GENERATED_DIRNAME);
@@ -289,6 +298,7 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
       extensionsConfig,
       runner,
       installExtensionsEnabled,
+      installSkillsEnabled,
       logger,
       signal: options.signal,
     });
@@ -337,34 +347,36 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
     }
   }
 
-  for (const platform of options.platforms) {
-    throwIfAborted(options.signal);
-    const platformSkills = options.skillsConfig[platform]?.skills ?? [];
-    if (platformSkills.length > 0) {
+  if (options.installSkillsEnabled) {
+    for (const platform of options.platforms) {
+      throwIfAborted(options.signal);
+      const platformSkills = options.skillsConfig[platform]?.skills ?? [];
+      if (platformSkills.length > 0) {
+        await installSkills(
+          platformSkills,
+          platform,
+          options.destBase,
+          options.globalInstall,
+          options.logger,
+          [],
+          options.signal,
+        );
+      }
+    }
+
+    const allSkills = options.skillsConfig["*"]?.skills ?? [];
+    if (allSkills.length > 0) {
+      logHeader(options.logger, "Installing External Skills");
       await installSkills(
-        platformSkills,
-        platform,
+        allSkills,
+        "*",
         options.destBase,
         options.globalInstall,
         options.logger,
-        [],
+        options.platforms,
         options.signal,
       );
     }
-  }
-
-  const allSkills = options.skillsConfig["*"]?.skills ?? [];
-  if (allSkills.length > 0) {
-    logHeader(options.logger, "Installing External Skills");
-    await installSkills(
-      allSkills,
-      "*",
-      options.destBase,
-      options.globalInstall,
-      options.logger,
-      options.platforms,
-      options.signal,
-    );
   }
 
   if (!options.installExtensionsEnabled) return;

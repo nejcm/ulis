@@ -78,6 +78,7 @@ export async function runTuiAction(
       logger,
       presets,
       installExtensions: state.presetInstallExtensions,
+      installSkills: !state.skipExternalSkills,
       signal: options.signal,
     });
     return;
@@ -120,8 +121,9 @@ async function runActionInChildProcess(
   if (action === "install") {
     args.push("--yes");
     if (planSource(state).globalInstall) args.push("--global");
-    if (!state.rebuild) args.push("--no-rebuild");
+    if (!state.rebuild) args.push("--skip-rebuild");
     if (state.backup) args.push("--backup");
+    if (state.skipExternalSkills) args.push("--skip-external-skills");
   }
 
   await new Promise<void>((resolve, reject) => {

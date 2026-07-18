@@ -163,6 +163,7 @@ describe("tui preferences", () => {
           backup: false,
           rebuild: false,
           presetInstallExtensions: true,
+          skipExternalSkills: false,
         },
       },
     });

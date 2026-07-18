@@ -165,7 +165,7 @@ describe("tui actions child process flow", () => {
     expect(args).toContain("codex");
     expect(args).toContain("--yes");
     expect(args).toContain("--global");
-    expect(args).toContain("--no-rebuild");
+    expect(args).toContain("--skip-rebuild");
     expect(args).toContain("--backup");
   });
 

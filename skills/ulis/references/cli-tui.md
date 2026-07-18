@@ -14,7 +14,7 @@ Use this reference when the user needs concrete `ulis` commands or behavior deta
   - Does not install into platform config directories.
 - `ulis install`
   - Runs `build` first, then deploys generated files into platform directories.
-- `ulis install --no-rebuild`
+- `ulis install --skip-rebuild`
   - Reuses existing generated output.
 - `ulis preset list`
   - Lists user and bundled presets.
@@ -57,7 +57,7 @@ There is no walk-up search.
 - Install global config with backups:
   - `ulis install --global --backup --yes`
 - Reuse a previous build:
-  - `ulis install --no-rebuild --yes`
+  - `ulis install --skip-rebuild --yes`
 - Layer presets:
   - `ulis build --preset react-web,backend`
 

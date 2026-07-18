@@ -559,6 +559,44 @@ describe("runInstall", () => {
     expect(skillsCommands[0]!.args).not.toContain("cursor");
   });
 
+  it("skips external skill installs when installSkills is false", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "codex", "AGENTS.md"), "Codex instructions.\n");
+    write(join(sourceDir, "skills.yaml"), ['"*":', "  skills:", "    - name: test/skill", ""].join("\n"));
+
+    const commands: Array<{ command: string; args: readonly string[] }> = [];
+    __test.setRuntimeDependencies({
+      runCommand(command, args) {
+        commands.push({ command, args });
+        return { status: 0, stdout: "", stderr: "" } as never;
+      },
+      async runAsyncCommand(command, args) {
+        commands.push({ command, args });
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["codex"],
+      rebuild: false,
+      installSkills: false,
+      logger: silentLogger,
+    });
+
+    expect(commands.filter((command) => command.command === "npx")).toHaveLength(0);
+  });
+
   it("scopes wildcard skill installs to selected global platforms", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");

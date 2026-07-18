@@ -15,6 +15,7 @@ export interface InstallCmdOptions extends BuildCmdOptions {
   readonly rebuild?: boolean;
   readonly runner?: "npx" | "bunx";
   readonly extensions?: boolean;
+  readonly skipExternalSkills?: boolean;
 }
 
 /**
@@ -51,6 +52,7 @@ export async function installCmd(options: InstallCmdOptions = {}): Promise<void>
     presets,
     runner: options.runner,
     installExtensions: options.extensions ?? true,
+    installSkills: !options.skipExternalSkills,
   });
 }
 

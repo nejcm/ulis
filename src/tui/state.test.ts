@@ -84,7 +84,7 @@ describe("tui state", () => {
     try {
       const state = createInitialState();
       state.screen = "plan";
-      state.cursor = 6;
+      state.cursor = 7;
 
       expect(handleTuiKey(state, "enter")).toEqual({ type: "start", action: "validate" });
     } finally {
@@ -100,7 +100,7 @@ describe("tui state", () => {
     try {
       const state = createInitialState();
       state.screen = "plan";
-      state.cursor = 8;
+      state.cursor = 9;
 
       expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
       expect(state.screen as string).toBe("installReview");
@@ -116,7 +116,7 @@ describe("tui state", () => {
     try {
       const state = createInitialState();
       state.screen = "plan";
-      state.cursor = 7;
+      state.cursor = 8;
 
       expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
       expect(state.screen as string).toBe("missingSource");
@@ -199,11 +199,11 @@ describe("tui state", () => {
     Date.now = () => now;
 
     try {
-      state.cursor = 5;
+      state.cursor = 6;
       expect(handleTuiKey(state, "enter")).toEqual({ type: "start", action: "presetValidate" });
 
       now += 45;
-      state.cursor = 6;
+      state.cursor = 7;
       expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
       expect(state.screen as string).toBe("presetInstallReview");
     } finally {
