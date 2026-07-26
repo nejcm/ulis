@@ -108,6 +108,7 @@ describe("preserved native config registry", () => {
           ["theme"],
         ],
         ownership: "file",
+        overlay: "json",
       },
       {
         label: ".claude.json / .mcp.json",
@@ -124,6 +125,7 @@ describe("preserved native config registry", () => {
         targetPath: join("root", "project", ".codex", "config.toml"),
         preservedPaths: [["projects"], ["hooks"], ["mcp_servers"], ["tui"], ["notice"], ["features"]],
         ownership: "file",
+        overlay: "toml",
       },
       {
         label: "mcp.json",
@@ -149,10 +151,9 @@ describe("preserved native config registry", () => {
     ]);
   });
 
-  it("switches Claude's .claude.json/.mcp.json entry to ownership: 'paths' for global installs", () => {
+  it("enables full overlay only for global .claude.json installs", () => {
     // When destBase === userHome (global install), the target is `~/.claude.json`
-    // — a file Claude Code owns. ULIS owns ONLY the `mcpServers` path; every
-    // other key (theme, projects, plugins, history) must survive across installs.
+    // and generated values overlay the complete existing object.
     const globalContext = {
       outputDir: join("root", ".ulis", "generated"),
       destBase: join("root", "home"),
@@ -167,6 +168,7 @@ describe("preserved native config registry", () => {
       targetPath: join("root", "home", ".claude.json"),
       preservedPaths: [["mcpServers"]],
       ownership: "paths",
+      overlay: "json",
     });
   });
 });

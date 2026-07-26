@@ -54,7 +54,7 @@ afterEach(() => {
 });
 
 describe("runInstall", () => {
-  it("preserves allowlisted Codex config sections for project installs", async () => {
+  it("overlays generated Codex values while preserving unmanaged config for project installs", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -127,6 +127,7 @@ describe("runInstall", () => {
     });
 
     expect(readMergeableConfig(join(projectDir, ".codex", "config.toml"))).toEqual({
+      model: "old",
       approval_policy: "never",
       notice: "generated",
       hooks: { pre: ["raw"] },
@@ -144,7 +145,7 @@ describe("runInstall", () => {
     });
   });
 
-  it("preserves allowlisted Codex config sections for global installs", async () => {
+  it("overlays generated Codex values while preserving unmanaged config for global installs", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -180,6 +181,7 @@ describe("runInstall", () => {
     });
 
     expect(readMergeableConfig(join(userHome, ".codex", "config.toml"))).toEqual({
+      model: "old",
       approval_policy: "on-request",
       notice: "existing",
       features: { responses: true },
@@ -188,7 +190,183 @@ describe("runInstall", () => {
     });
   });
 
-  it("preserves allowlisted native config across platform installs", async () => {
+  it("preserves Codex comments, formatting, and order outside generated paths", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+
+    write(
+      join(outputDir, "codex", "config.toml"),
+      [
+        "[mcp_servers.generated]",
+        'command = "node"',
+        "",
+        "[mcp_servers.generated.env]",
+        'TOKEN = "generated"',
+        "",
+      ].join("\n"),
+    );
+    const existing = [
+      "# --- Headroom persistent provider ---",
+      'model_provider = "headroom"',
+      'openai_base_url = "http://127.0.0.1:8787/v1"',
+      "",
+      "notify = [",
+      '  "C:\\\\Users\\\\Nejc\\\\codex-computer-use.exe",',
+      '  "turn-ended",',
+      "]",
+      "matrix = [",
+      "  [1, 2],",
+      "  [3, 4],",
+      "]",
+      'message = """',
+      "[not.a.table]",
+      '"""',
+      "[model_providers.headroom]",
+      'name = "Headroom persistent proxy"',
+      'base_url = "http://127.0.0.1:8787/v1"',
+      "supports_websockets = true",
+      "requires_openai_auth = true",
+      "# --- end Headroom persistent provider ---",
+      "",
+    ].join("\r\n");
+    write(join(userHome, ".codex", "config.toml"), existing);
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: userHome,
+      userHome,
+      platforms: ["codex"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    const installed = read(join(userHome, ".codex", "config.toml"));
+    expect(installed.startsWith(existing)).toBe(true);
+    expect(installed.slice(existing.length)).toContain("[mcp_servers]");
+    expect(readMergeableConfig(join(userHome, ".codex", "config.toml"))).toMatchObject({
+      model_provider: "headroom",
+      model_providers: { headroom: { requires_openai_auth: true } },
+      mcp_servers: { generated: { command: "node", env: { TOKEN: "generated" } } },
+    });
+  });
+
+  it("merges Codex implicit parents, inline tables, and arrays of tables at the correct paths", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+
+    write(
+      join(outputDir, "codex", "config.toml"),
+      [
+        "[windows]",
+        'sandbox = "elevated"',
+        "",
+        "[mcp_servers.generated]",
+        'command = "node"',
+        "",
+        "[mcp_servers.generated.env]",
+        'TOKEN = "generated"',
+        "",
+        "[[plugins]]",
+        'name = "one"',
+        "",
+        "[[plugins]]",
+        'name = "two"',
+        "",
+      ].join("\n"),
+    );
+    write(
+      join(userHome, ".codex", "config.toml"),
+      [
+        "# keep this comment",
+        'mcp_servers = { keep = { command = "old" } }',
+        "",
+        "[windows.policy]",
+        "enabled = true",
+        "",
+      ].join("\n"),
+    );
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: userHome,
+      userHome,
+      platforms: ["codex"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    const installedPath = join(userHome, ".codex", "config.toml");
+    expect(read(installedPath)).toContain("# keep this comment");
+    expect(readMergeableConfig(installedPath)).toEqual({
+      mcp_servers: {
+        keep: { command: "old" },
+        generated: { command: "node", env: { TOKEN: "generated" } },
+      },
+      windows: { policy: { enabled: true }, sandbox: "elevated" },
+      plugins: [{ name: "one" }, { name: "two" }],
+    });
+  });
+
+  it("replaces conflicting Codex table and array-of-tables representations", async () => {
+    const cases = [
+      {
+        existing: ["# keep table transition", "unrelated = true", "", "[plugins]", 'name = "old"', ""].join("\n"),
+        generated: ["[[plugins]]", 'name = "new"', ""].join("\n"),
+        expected: [{ name: "new" }],
+      },
+      {
+        existing: ["# keep inline transition", "unrelated = true", 'plugins = [{ name = "old" }]', ""].join("\n"),
+        generated: ["[[plugins]]", 'name = "new"', ""].join("\n"),
+        expected: [{ name: "new" }],
+      },
+      {
+        existing: ["# keep array transition", "unrelated = true", "", "[[plugins]]", 'name = "old"', ""].join("\n"),
+        generated: ["[plugins]", 'name = "new"', ""].join("\n"),
+        expected: { name: "new" },
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const root = createTempRoot();
+      const sourceDir = join(root, ".ulis");
+      const outputDir = join(sourceDir, "generated");
+      const userHome = join(root, "home");
+      mkdirSync(sourceDir, { recursive: true });
+      mkdirSync(userHome, { recursive: true });
+      write(join(outputDir, "codex", "config.toml"), testCase.generated);
+      write(join(userHome, ".codex", "config.toml"), testCase.existing);
+
+      await runInstall({
+        sourceDir,
+        outputDir,
+        destBase: userHome,
+        userHome,
+        platforms: ["codex"],
+        rebuild: false,
+        logger: silentLogger,
+      });
+
+      const installedPath = join(userHome, ".codex", "config.toml");
+      const installed = read(installedPath);
+      expect(installed).toContain(testCase.existing.split("\n")[0]!);
+      expect(readMergeableConfig(installedPath)).toEqual({
+        unrelated: true,
+        plugins: testCase.expected,
+      });
+    }
+  });
+
+  it("preserves native config across platform installs", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -283,7 +461,9 @@ describe("runInstall", () => {
     });
 
     expect(JSON.parse(read(join(projectDir, ".claude", "settings.json")))).toEqual({
+      env: { OLD: "1" },
       hooks: { PreToolUse: [{ matcher: "existing" }] },
+      mcpServers: { old: { command: "old" } },
       statusLine: { type: "command", command: "bash ~/.claude/statusline.sh" },
       enabledPlugins: { "plugin@example": true },
       extraKnownMarketplaces: { example: { source: { source: "github", repo: "owner/repo" } } },
@@ -368,7 +548,7 @@ describe("runInstall", () => {
     expect(existsSync(join(projectDir, ".opencode", "opencode.json"))).toBe(false);
   });
 
-  it("removes stale Codex config when generated config is absent and no allowlisted keys exist", async () => {
+  it("leaves existing Codex config unchanged when generated config is absent", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -391,7 +571,7 @@ describe("runInstall", () => {
     });
 
     expect(read(join(projectDir, ".codex", "AGENTS.md"))).toBe("Generated instructions.\n");
-    expect(existsSync(join(projectDir, ".codex", "config.toml"))).toBe(false);
+    expect(read(join(projectDir, ".codex", "config.toml"))).toBe('model = "old"\n');
   });
 
   it("backs up existing config before failing to parse preserved native config", async () => {
@@ -1060,12 +1240,12 @@ describe("runInstall", () => {
     });
   });
 
-  it("preserves user-owned keys in ~/.claude.json on global install and replaces mcpServers wholesale", async () => {
+  it("overlays generated MCP servers into ~/.claude.json without removing unmanaged servers", async () => {
     // Regression: ULIS used to capture only the `mcpServers` slice of an
     // existing ~/.claude.json and write back just that slice, wiping every
     // other key (projects, enabledPlugins, theme, history, ...). Global Claude
-    // installs must preserve those user-owned keys verbatim and overwrite only
-    // the mcpServers block, which ULIS owns.
+    // installs must preserve user-owned keys and unmanaged MCP servers while
+    // overwriting generated values at the same paths.
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -1088,7 +1268,7 @@ describe("runInstall", () => {
           enabledPlugins: { "marketplace@example": true },
           autoUpdatesChannel: "latest",
           telemetryStatus: "enabled",
-          // ULIS-owned mcpServers slice (will be replaced):
+          // Existing MCP servers are merged by name:
           mcpServers: { existing: { command: "old" }, shared: { command: "old" } },
         },
         null,
@@ -1106,14 +1286,17 @@ describe("runInstall", () => {
       logger: silentLogger,
     });
 
-    // Every user-owned key survives verbatim; mcpServers comes entirely from generated.
+    // Existing state and unmanaged MCP servers survive; generated conflicts win.
     expect(JSON.parse(read(join(userHome, ".claude.json")))).toEqual({
       theme: "dark",
       projects: { "/home/me/repo": { lastModified: "2026-05-15", history: ["msg1", "msg2"] } },
       enabledPlugins: { "marketplace@example": true },
       autoUpdatesChannel: "latest",
       telemetryStatus: "enabled",
-      mcpServers: { shared: { command: "generated" } },
+      mcpServers: {
+        existing: { command: "old" },
+        shared: { command: "generated" },
+      },
     });
   });
 
@@ -1150,10 +1333,11 @@ describe("runInstall", () => {
       logger: silentLogger,
     });
 
-    // mcpServers (ULIS-owned) is removed; user-owned keys survive.
+    // No generated file means the existing file is left unchanged.
     expect(JSON.parse(read(join(userHome, ".claude.json")))).toEqual({
       theme: "dark",
       projects: { "/home/me/repo": { lastModified: "2026-05-15" } },
+      mcpServers: { stale: { command: "old" } },
     });
   });
 
