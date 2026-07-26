@@ -75,7 +75,9 @@ jobs:
       - name: "🏷️ Read released version"
         id: package
         if: steps.release.outputs.created == 'true'
-        run: echo "version=$(node -p \"require('./package.json').version\")" >> "$GITHUB_OUTPUT"
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: "🔖 Ensure release tag"
         if: steps.release.outputs.created == 'true'
