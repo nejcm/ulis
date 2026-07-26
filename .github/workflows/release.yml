@@ -1,26 +1,33 @@
 name: Release
 
 on:
-  workflow_dispatch:
   push:
     branches:
-      - master
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
-  packages: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
     name: "🚀 Build & Publish"
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' ||
-      startsWith(github.event.head_commit.message, 'chore(release):') ||
-      contains(github.event.head_commit.message, '[release]')
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' &&
+      !startsWith(github.event.head_commit.message, 'chore(release):'))
 
     steps:
       - name: "🛎️ Checkout"
         uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
 
       - name: "🥟 Setup Bun"
         uses: oven-sh/setup-bun@v2
@@ -39,27 +46,6 @@ jobs:
       - name: "🏗️ Build"
         run: bun run build
 
-      - name: "🏷️ Extract version from package.json"
-        id: pkg
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          PRERELEASE=$(node -p "require('./package.json').version.match(/-(\\w+)/)?.[1] ?? ''")
-          DIST_TAG=${PRERELEASE:-latest}
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
-
-      - name: "🔖 Create and push tag"
-        continue-on-error: true
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git ls-remote --tags origin | grep -q "refs/tags/v${{ steps.pkg.outputs.version }}$"; then
-            echo "Tag v${{ steps.pkg.outputs.version }} already exists, skipping."
-          else
-            git tag "v${{ steps.pkg.outputs.version }}"
-            git push origin "v${{ steps.pkg.outputs.version }}"
-          fi
-
       - name: "📦 Setup Node for npm"
         uses: actions/setup-node@v6
         with:
@@ -67,23 +53,12 @@ jobs:
           registry-url: "https://registry.npmjs.org"
           scope: "@nejcm"
 
-      - name: "🔐 Verify npm auth"
+      - name: "🔧 Configure Git identity"
         run: |
-          npm config set @nejcm:registry https://registry.npmjs.org/
-          npm whoami
-          npm ping
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: "📤 Publish with np"
+        run: bun run release
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: "📤 Publish to npm"
-        run: |
-          npm config set @nejcm:registry https://registry.npmjs.org/
-          npm publish --access public --tag ${{ steps.pkg.outputs.dist_tag }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: "🎉 Create GitHub Release"
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: "v${{ steps.pkg.outputs.version }}"
-          generate_release_notes: true
