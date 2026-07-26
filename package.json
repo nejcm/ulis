@@ -61,6 +61,7 @@
   },
   "dependencies": {
     "@cel-tui/core": "~0.8.3",
+    "@decimalturn/toml-patch": "~2.1.0",
     "cac": "~7.0.0",
     "gray-matter": "~4.0.3",
     "smol-toml": "~1.6.1",

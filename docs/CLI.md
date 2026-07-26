@@ -93,15 +93,15 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 
 **Install strategy per platform:**
 
-| Platform  | Managed entries                                                              | Preserved native config                                                       |
-| --------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Claude    | generated `agents/` and `skills/` entries by name; `commands/`, `rules/`, …  | `settings.json` `hooks`, UI/plugin settings; `.claude.json` `mcpServers`      |
-| OpenCode  | generated `agents/core`, `agents/specialized`, and `skills/` entries by name | `opencode.json` `mcp`                                                         |
-| Codex     | generated `agents/` and `skills/` entries by name                            | `config.toml` `projects`, `hooks`, `mcp_servers`, `tui`, `notice`, `features` |
-| Cursor    | generated `agents/` and `skills/` entries by name                            | `mcp.json` `mcpServers`                                                       |
-| ForgeCode | generated `.forge/agents` and `.forge/skills` entries by name; `AGENTS.md`   | `.forge/.mcp.json` `mcpServers`, `.forge.toml`                                |
+| Platform  | Managed entries                                                              | Preserved native config                                                                |
+| --------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Claude    | generated `agents/` and `skills/` entries by name; `commands/`, `rules/`, …  | all `settings.json` and global `.claude.json` values; project `.mcp.json` `mcpServers` |
+| OpenCode  | generated `agents/core`, `agents/specialized`, and `skills/` entries by name | `opencode.json` `mcp`                                                                  |
+| Codex     | generated `agents/` and `skills/` entries by name                            | all `config.toml` values; unrelated comments and order                                 |
+| Cursor    | generated `agents/` and `skills/` entries by name                            | `mcp.json` `mcpServers`                                                                |
+| ForgeCode | generated `.forge/agents` and `.forge/skills` entries by name; `AGENTS.md`   | `.forge/.mcp.json` `mcpServers`, `.forge.toml`                                         |
 
-Install preserves unmanaged destination agents and skills unless generated output has the same native name. Generated output wins at the same config path, and raw fragments win through the generated output because raw is merged during build. Existing non-allowlisted native config values are removed. If `--backup` is set, backups are created before parsing preserved native config.
+Install preserves unmanaged destination agents and skills unless generated output has the same native name. For Codex `config.toml`, Claude `settings.json`, and global `.claude.json`, the existing file is the base: generated values overwrite only matching paths, while absent values remain. Other native configs retain their allowlisted preservation rules. Raw fragments win through the generated output because raw is merged during build. If `--backup` is set, backups are created before parsing preserved native config.
 
 ---
 

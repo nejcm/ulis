@@ -1,6 +1,8 @@
 import { cpSync, existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 
+import { patch as patchToml, TomlDocument, TomlFormat } from "@decimalturn/toml-patch";
 import * as smolToml from "smol-toml";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
@@ -27,6 +29,115 @@ export function mergeConfigValues(base: unknown, override: unknown): unknown {
     result[key] = mergeConfigValues(result[key], value);
   }
   return result;
+}
+
+function patchTomlOverlay(existingContent: string, generatedContent: string, merged: unknown): string {
+  const format = TomlFormat.autoDetectFormat(existingContent);
+  const compatibleContent = removeConflictingTomlRepresentations(existingContent, generatedContent);
+  const arraySeededContent = seedMissingTomlTables(compatibleContent, generatedContent, "array");
+  let retryContent = arraySeededContent;
+  let retryFilter: ((header: TomlTableHeader) => boolean) | undefined;
+  try {
+    const patched = patchToml(arraySeededContent, merged, format);
+    const patchedConfig = smolToml.parse(patched);
+    if (isDeepStrictEqual(patchedConfig, merged)) return patched;
+    retryContent = patched;
+    retryFilter = ({ path }) => !isDeepStrictEqual(getConfigPath(patchedConfig, path), getConfigPath(merged, path));
+  } catch {
+    // Missing nested tables are seeded below before retrying.
+  }
+
+  const seededContent = seedMissingTomlTables(retryContent, generatedContent, "table", retryFilter);
+  const patched = patchToml(seededContent, merged, format);
+  if (!isDeepStrictEqual(smolToml.parse(patched), merged)) {
+    throw new Error("TOML patch did not produce the requested merged config");
+  }
+  return patched;
+}
+
+function removeConflictingTomlRepresentations(existingContent: string, generatedContent: string): string {
+  const desiredKinds = new Map(
+    tomlTableHeaders(generatedContent).map(({ kind, path }) => [JSON.stringify(path), kind]),
+  );
+  if (desiredKinds.size === 0) return existingContent;
+
+  const removals: Array<{ start: number; end: number }> = [];
+  const lineOffsets = tomlLineOffsets(existingContent);
+  const addRemoval = (loc: { start: { line: number; column: number }; end: { line: number; column: number } }) => {
+    const start = lineOffsets[loc.start.line - 1]! + loc.start.column;
+    let end = lineOffsets[loc.end.line - 1]! + loc.end.column;
+    if (existingContent.startsWith("\r\n", end)) end += 2;
+    else if (existingContent[end] === "\n") end += 1;
+    removals.push({ start, end });
+  };
+
+  for (const block of new TomlDocument(existingContent).cst) {
+    if (block.type === "Table" || block.type === "TableArray") {
+      const tablePath = block.key.item.value;
+      const existingKind = block.type === "TableArray" ? "array" : "table";
+      const desiredKind = desiredKinds.get(JSON.stringify(tablePath));
+      if (desiredKind !== undefined && desiredKind !== existingKind) {
+        addRemoval(block.loc);
+        continue;
+      }
+
+      for (const item of block.items) {
+        if (item.type !== "KeyValue") continue;
+        if (desiredKinds.has(JSON.stringify([...tablePath, ...item.key.value]))) addRemoval(item.loc);
+      }
+    } else if (block.type === "KeyValue" && desiredKinds.has(JSON.stringify(block.key.value))) {
+      addRemoval(block.loc);
+    }
+  }
+
+  return removals
+    .sort((left, right) => right.start - left.start)
+    .reduce((content, { start, end }) => content.slice(0, start) + content.slice(end), existingContent);
+}
+
+function tomlLineOffsets(content: string): number[] {
+  const offsets = [0];
+  for (let index = 0; index < content.length; index += 1) {
+    if (content[index] === "\n") offsets.push(index + 1);
+  }
+  return offsets;
+}
+
+function seedMissingTomlTables(
+  existingContent: string,
+  generatedContent: string,
+  onlyKind?: "array" | "table",
+  shouldSeed?: (header: TomlTableHeader) => boolean,
+): string {
+  const existingHeaders = new Set(tomlTableHeaders(existingContent).map(({ key }) => key));
+  const missingHeaders = tomlTableHeaders(generatedContent)
+    .filter(({ kind }) => onlyKind === undefined || kind === onlyKind)
+    .filter((header) => shouldSeed?.(header) ?? true)
+    .filter(({ key }) => !existingHeaders.has(key))
+    .map(({ line }) => line);
+
+  if (missingHeaders.length === 0) return existingContent;
+  const newline = existingContent.includes("\r\n") ? "\r\n" : "\n";
+  const separator = existingContent.endsWith(newline) ? newline : `${newline}${newline}`;
+  return `${existingContent}${separator}${missingHeaders.join(`${newline}${newline}`)}${newline}`;
+}
+
+interface TomlTableHeader {
+  readonly key: string;
+  readonly kind: "array" | "table";
+  readonly line: string;
+  readonly path: readonly string[];
+}
+
+function tomlTableHeaders(content: string): TomlTableHeader[] {
+  const lines = content.split(/\r?\n/);
+  return new TomlDocument(content).cst.flatMap((block) => {
+    if (block.type !== "Table" && block.type !== "TableArray") return [];
+    const kind = block.type === "TableArray" ? "array" : "table";
+    const path = block.key.item.value;
+    const line = lines[block.loc.start.line - 1]!;
+    return [{ key: `${kind}:${JSON.stringify(path)}`, kind, line, path }];
+  });
 }
 
 const MERGE_EXTS = new Set([".json", ".toml", ".yaml", ".yml"]);
@@ -101,6 +212,7 @@ export interface PreservedNativeConfigContext {
 }
 
 type Ownership = "file" | "paths";
+type OverlayMode = "json" | "toml";
 
 interface PreservedNativeConfigSpec {
   readonly platform: Platform;
@@ -108,6 +220,8 @@ interface PreservedNativeConfigSpec {
   readonly generatedPath: (context: PreservedNativeConfigContext) => string;
   readonly targetPath: (context: PreservedNativeConfigContext) => string;
   readonly preservedPaths: readonly ConfigPath[];
+  /** Preserve the complete existing object as the base, taking precedence over `ownership`. */
+  readonly overlay?: OverlayMode | ((context: PreservedNativeConfigContext) => OverlayMode | undefined);
   /**
    * Ownership model for the target file. May be a literal or context-derived:
    * - "file" (default): ULIS owns the whole file. `preservedPaths` are
@@ -127,10 +241,12 @@ export interface PreservedNativeConfigEntry {
   readonly targetPath: string;
   readonly preservedPaths: readonly ConfigPath[];
   readonly ownership?: Ownership;
+  readonly overlay?: OverlayMode;
 }
 
 export interface CapturedPreservedNativeConfig extends PreservedNativeConfigEntry {
   readonly preservedConfig: unknown | undefined;
+  readonly originalContent?: string;
 }
 
 export class PreservedNativeConfigParseError extends Error {
@@ -165,6 +281,7 @@ export const PRESERVED_NATIVE_CONFIGS = [
       ["agentPushNotifEnabled"],
       ["theme"],
     ],
+    overlay: "json",
   },
   {
     platform: "claude",
@@ -176,20 +293,18 @@ export const PRESERVED_NATIVE_CONFIGS = [
     //   contributes `mcpServers`).
     // - Project install (<cwd>): project-scope `<cwd>/.mcp.json` (committed, just `{ mcpServers }`).
     // The generated `.claude.json` content (`{ mcpServers: {...} }`) fits both formats.
-    // Ownership differs by mode:
-    // - Global (~/.claude.json): "paths" — ULIS owns ONLY `mcpServers`. Every
-    //   other key (projects, enabledPlugins, theme, history, telemetry, ...)
-    //   is preserved verbatim across installs. Critical: without this, Claude
-    //   Code's user-scope state is wiped on every install.
+    // Merge behavior differs by mode:
+    // - Global (~/.claude.json): overlay generated MCP values onto the complete
+    //   existing file, preserving all absent keys and unmanaged MCP servers.
     // - Project (<cwd>/.mcp.json): "file" — the file is just `{ mcpServers }`,
-    //   and we want to merge generated servers on top of any user/team-added
-    //   ones already in the file.
+    //   retaining the existing selective merge behavior.
     targetPath: (context) =>
       isSamePath(context.destBase, context.userHome)
         ? join(context.destBase, ".claude.json")
         : join(context.destBase, ".mcp.json"),
     preservedPaths: [["mcpServers"]],
     ownership: (context) => (isSamePath(context.destBase, context.userHome) ? "paths" : "file"),
+    overlay: (context) => (isSamePath(context.destBase, context.userHome) ? "json" : undefined),
   },
   {
     platform: "codex",
@@ -197,6 +312,7 @@ export const PRESERVED_NATIVE_CONFIGS = [
     generatedPath: (context) => join(context.outputDir, "codex", "config.toml"),
     targetPath: (context) => join(platformConfigDir("codex", context.destBase, context.userHome), "config.toml"),
     preservedPaths: [["projects"], ["hooks"], ["mcp_servers"], ["tui"], ["notice"], ["features"]],
+    overlay: "toml",
   },
   {
     platform: "cursor",
@@ -229,12 +345,15 @@ export function getPreservedNativeConfigEntries(
   return PRESERVED_NATIVE_CONFIGS.filter((spec) => spec.platform === platform).map((spec) => {
     const rawOwnership = "ownership" in spec ? spec.ownership : undefined;
     const ownership: Ownership = typeof rawOwnership === "function" ? rawOwnership(context) : (rawOwnership ?? "file");
+    const rawOverlay = "overlay" in spec ? spec.overlay : undefined;
+    const overlay = typeof rawOverlay === "function" ? rawOverlay(context) : rawOverlay;
     return {
       label: spec.label,
       generatedPath: spec.generatedPath(context),
       targetPath: spec.targetPath(context),
       preservedPaths: spec.preservedPaths,
       ownership,
+      ...(overlay ? { overlay } : {}),
     };
   });
 }
@@ -243,10 +362,10 @@ export function capturePreservedNativeConfigs(
   platform: Platform,
   context: PreservedNativeConfigContext,
 ): readonly CapturedPreservedNativeConfig[] {
-  return getPreservedNativeConfigEntries(platform, context).map((entry) => ({
-    ...entry,
-    preservedConfig: capturePreservedConfig(entry),
-  }));
+  return getPreservedNativeConfigEntries(platform, context).map((entry) => {
+    const captured = capturePreservedConfig(entry);
+    return { ...entry, ...captured };
+  });
 }
 
 export function writePreservedNativeConfigs(
@@ -258,19 +377,30 @@ export function writePreservedNativeConfigs(
   }
 }
 
-function capturePreservedConfig(entry: PreservedNativeConfigEntry): unknown | undefined {
-  if (!existsSync(entry.targetPath)) return undefined;
-  let preserved: Record<string, unknown>;
+function capturePreservedConfig(
+  entry: PreservedNativeConfigEntry,
+): Pick<CapturedPreservedNativeConfig, "preservedConfig" | "originalContent"> {
+  if (!existsSync(entry.targetPath)) return { preservedConfig: undefined };
+
   try {
     const existing = readMergeableConfig(entry.targetPath);
-    preserved =
+    if (entry.overlay) {
+      return {
+        preservedConfig: existing,
+        ...(entry.overlay === "toml" ? { originalContent: readFile(entry.targetPath) } : {}),
+      };
+    }
+
+    const preserved =
       entry.ownership === "paths"
         ? omitConfigPaths(existing, entry.preservedPaths)
         : pickConfigPaths(existing, entry.preservedPaths);
+    return {
+      preservedConfig: Object.keys(preserved).length > 0 ? preserved : undefined,
+    };
   } catch (error) {
     throw new PreservedNativeConfigParseError(entry.targetPath, error);
   }
-  return Object.keys(preserved).length > 0 ? preserved : undefined;
 }
 
 export function pickConfigPaths(source: unknown, paths: readonly ConfigPath[]): Record<string, unknown> {
@@ -340,6 +470,10 @@ function setConfigPath(target: Record<string, unknown>, path: readonly string[],
 function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger?: PreservedNativeConfigLogger): void {
   try {
     if (!existsSync(entry.generatedPath)) {
+      if (entry.overlay && existsSync(entry.targetPath)) {
+        logger?.success(`${entry.label} (preserved)`);
+        return;
+      }
       if (entry.preservedConfig !== undefined) {
         writeMergeableConfig(entry.targetPath, entry.preservedConfig);
         logger?.success(`${entry.label} (preserved)`);
@@ -356,8 +490,15 @@ function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger
       return;
     }
 
+    const generatedContent = readFile(entry.generatedPath);
     const generated = readMergeableConfig(entry.generatedPath);
-    writeMergeableConfig(entry.targetPath, mergeConfigValues(entry.preservedConfig, generated));
+    const merged = mergeConfigValues(entry.preservedConfig, generated);
+    if (entry.overlay === "toml") {
+      const existingContent = entry.originalContent ?? readFile(entry.targetPath);
+      writeFile(entry.targetPath, patchTomlOverlay(existingContent, generatedContent, merged));
+    } else {
+      writeMergeableConfig(entry.targetPath, merged);
+    }
     logger?.success(`${entry.label} (merged)`);
   } catch (error) {
     throw new Error(`Failed to merge preserved native config ${entry.generatedPath} -> ${entry.targetPath}`, {
