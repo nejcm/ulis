@@ -172,18 +172,19 @@ In CI or other non-interactive runs, add `--yes` so a missing preset name fails 
 
 ### Common flags
 
-| Flag                     | Applies to         | Description                                                                  |
-| ------------------------ | ------------------ | ---------------------------------------------------------------------------- |
-| `-g`, `--global`         | all                | Operate on `~/.ulis/` and home-level install targets (`~/.claude/`…)         |
-| `--source <path>`        | `build`, `install` | Override the source directory; with `--global`, installs still target home   |
-| `--target <platforms>`   | `build`, `install` | Comma-separated list: `claude`, `codex`, `cursor`, `opencode`, `forgecode`   |
-| `--preset <names>`       | `build`, `install` | Apply preset(s) from `~/.ulis/presets/` or bundled presets (comma-separated) |
-| `-y`, `--yes`            | `install`          | Skip confirmation prompts                                                    |
-| `--skip-rebuild`         | `install`          | Skip the build step and deploy existing `generated/`                         |
-| `--backup`               | `install`          | Back up existing platform dirs (`<dir>.backup.YYYYMMDD_HHMMSS`)              |
-| `--runner <npx\|bunx>`   | `install`          | Package runner for `extensions.yaml` (`npx` or `bunx`)                       |
-| `--skip-extensions`      | `install`          | Skip running entries from `extensions.yaml`                                  |
-| `--skip-external-skills` | `install`          | Skip installing external skills declared in `skills.yaml`                    |
+| Flag                     | Applies to                | Description                                                                   |
+| ------------------------ | ------------------------- | ----------------------------------------------------------------------------- |
+| `-g`, `--global`         | all                       | Operate on `~/.ulis/` and home-level install targets (`~/.claude/`…)          |
+| `--source <path>`        | `build`, `install`        | Override the source directory; with `--global`, installs still target home    |
+| `--target <platforms>`   | `build`, `install`        | Comma-separated list: `claude`, `codex`, `cursor`, `opencode`, `forgecode`    |
+| `--preset <names>`       | `build`, `install`        | Apply preset(s) from `~/.ulis/presets/` or bundled presets (comma-separated)  |
+| `-y`, `--yes`            | `install`                 | Skip confirmation prompts                                                     |
+| `--skip-rebuild`         | `install`                 | Skip the build step and deploy existing `generated/`                          |
+| `--backup`               | `install`                 | Back up existing platform dirs (`<dir>.backup.YYYYMMDD_HHMMSS`)               |
+| `--no-prune`             | `install`, preset install | Keep stale ULIS-installed agents and local skills; relinquish their ownership |
+| `--runner <npx\|bunx>`   | `install`                 | Package runner for `extensions.yaml` (`npx` or `bunx`)                        |
+| `--skip-extensions`      | `install`                 | Skip running entries from `extensions.yaml`                                   |
+| `--skip-external-skills` | `install`                 | Skip installing external skills declared in `skills.yaml`                     |
 
 ### Presets (quick reference)
 
@@ -237,7 +238,9 @@ For the full field-level schema and examples, see [docs/REFERENCE.md](docs/REFER
 | Cursor      | Merge (additive) | `./.cursor/`          | `~/.cursor/`                                                         |
 | ForgeCode   | Merge (additive) | `./.forge/`           | `~/.forge/`                                                          |
 
-Generated agent and skill entries replace destination entries with the same native name; unrelated destination agents and skills are left in place. `settings.json`, `.claude.json`, `mcp.json`, and ForgeCode's `.forge/.mcp.json` are deep-merged so user content outside `ulis`-managed keys is preserved. With `--backup`, existing platform directories/files are copied aside before overwriting.
+Generated agent and local skill entries replace destination entries with the same native name. ULIS records their paths in each platform root's `.ulis-manifest.json`; later installs remove tracked paths that are no longer generated while preserving untracked and tool-provided entries. The first manifest-aware install only adopts the current set. Use `--no-prune` to retain stale paths and make them unmanaged. External `skills.yaml` installs are not tracked.
+
+`settings.json`, `.claude.json`, `mcp.json`, and ForgeCode's `.forge/.mcp.json` are deep-merged so user content outside ULIS-managed keys is preserved. With `--backup`, existing platform directories/files, ownership manifests, and entries are copied aside before overwriting or pruning.
 
 `ulis install` runs phases in this order: **build → files → skills → extensions**. Extensions run last because they typically mutate the same files ulis just deployed.
 

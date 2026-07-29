@@ -50,6 +50,7 @@ async function main(): Promise<void> {
     .option("--target <platforms>", "Only build/install the given platform(s) (comma-separated)")
     .option("--skip-rebuild", "Skip the build step and install existing generated output")
     .option("--backup", "Back up existing platform dirs before overwriting")
+    .option("--no-prune", "Keep agents and local skills previously installed by ULIS")
     .option("--preset <names>", "Apply user-global or bundled preset(s) (comma-separated)")
     .option("--runner <npx|bunx>", "Package runner used for extension installs (npx | bunx)")
     .option("--skip-extensions", "Skip running entries from extensions.yaml")
@@ -62,6 +63,7 @@ async function main(): Promise<void> {
         target: options.target,
         rebuild: !options.skipRebuild,
         backup: Boolean(options.backup),
+        prune: options.prune !== false,
         preset: options.preset,
         runner: parseRunner(options.runner),
         extensions: !options.skipExtensions,
@@ -91,6 +93,7 @@ async function main(): Promise<void> {
     .option("-y, --yes", "Skip preset install confirmation prompts (useful for CI)")
     .option("--target <platforms>", "Only install the given platform(s) for preset install (comma-separated)")
     .option("--backup", "Back up existing platform dirs before preset install")
+    .option("--no-prune", "Keep agents and local skills previously installed by ULIS")
     .option("--runner <npx|bunx>", "Package runner used for preset extension installs (npx | bunx)")
     .option("--skip-extensions", "Skip running entries from preset extensions.yaml")
     .option("--skip-external-skills", "Skip installing external skills from preset skills.yaml")
@@ -103,6 +106,7 @@ async function main(): Promise<void> {
           yes: Boolean(options.yes),
           target: options.target,
           backup: Boolean(options.backup),
+          prune: options.prune !== false,
           runner: parseRunner(options.runner),
           extensions: !options.skipExtensions,
           skipExternalSkills: Boolean(options.skipExternalSkills),

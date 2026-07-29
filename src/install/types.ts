@@ -9,6 +9,7 @@ export interface InstallContext {
   readonly userHome: string;
   readonly globalInstall: boolean;
   readonly backup: boolean;
+  readonly prune: boolean;
   readonly timestamp: string;
   readonly extensions: ExtensionsConfig;
   readonly runner: Runner;

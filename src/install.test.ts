@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -1106,6 +1116,437 @@ describe("runInstall", () => {
     expect(read(join(projectDir, ".forge", "agents", "local.md"))).toBe("Local forge agent.\n");
     expect(read(join(projectDir, ".forge", "skills", "managed", "SKILL.md"))).toBe("Generated forge skill.\n");
     expect(read(join(projectDir, ".forge", "skills", "local", "SKILL.md"))).toBe("Local forge skill.\n");
+    for (const configDir of [".claude", ".codex", ".cursor", ".opencode", ".forge"]) {
+      expect(existsSync(join(projectDir, configDir, ".ulis-manifest.json"))).toBe(true);
+    }
+  });
+
+  it("prunes only previously managed agents and skills across every platform", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+
+    const layouts = [
+      ["claude", ".claude", "agents/managed.md", "skills/managed"],
+      ["codex", ".codex", "agents/managed.toml", "skills/managed"],
+      ["cursor", ".cursor", "agents/managed.mdc", "skills/managed"],
+      ["opencode", ".opencode", "agents/specialized/managed.md", "skills/managed"],
+      ["forgecode", ".forge", ".forge/agents/managed.md", ".forge/skills/managed"],
+    ] as const;
+
+    for (const [platform, configDir, agentPath, skillPath] of layouts) {
+      const generatedRoot = join(outputDir, platform);
+      write(join(generatedRoot, ...agentPath.split("/")), "Generated agent.\n");
+      write(join(generatedRoot, ...skillPath.split("/"), "SKILL.md"), "Generated skill.\n");
+      const destinationRoot = join(projectDir, configDir);
+      write(join(destinationRoot, "agents", "local.md"), "Unmanaged agent.\n");
+      write(join(destinationRoot, "skills", "local", "SKILL.md"), "Unmanaged skill.\n");
+    }
+    createForgecodeOutput(outputDir);
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["claude", "codex", "cursor", "opencode", "forgecode"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    for (const [platform, configDir, agentPath, skillPath] of layouts) {
+      const generatedRoot = join(outputDir, platform);
+      const nativeAgentPath = platform === "forgecode" ? agentPath.slice(".forge/".length) : agentPath;
+      const nativeSkillPath = platform === "forgecode" ? skillPath.slice(".forge/".length) : skillPath;
+      write(join(projectDir, configDir, ...nativeAgentPath.split("/")), "User-modified managed agent.\n");
+      rmSync(join(generatedRoot, ...agentPath.split("/")));
+      rmSync(join(generatedRoot, ...skillPath.split("/")), { recursive: true });
+    }
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["claude", "codex", "cursor", "opencode", "forgecode"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    for (const [platform, configDir, agentPath, skillPath] of layouts) {
+      const nativeAgentPath = platform === "forgecode" ? agentPath.slice(".forge/".length) : agentPath;
+      const nativeSkillPath = platform === "forgecode" ? skillPath.slice(".forge/".length) : skillPath;
+      expect(existsSync(join(projectDir, configDir, ...nativeAgentPath.split("/")))).toBe(false);
+      expect(existsSync(join(projectDir, configDir, ...nativeSkillPath.split("/")))).toBe(false);
+      expect(read(join(projectDir, configDir, "agents", "local.md"))).toBe("Unmanaged agent.\n");
+      expect(read(join(projectDir, configDir, "skills", "local", "SKILL.md"))).toBe("Unmanaged skill.\n");
+    }
+  });
+
+  it("--no-prune preserves stale entries and relinquishes their ownership", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const generatedAgent = join(outputDir, "claude", "agents", "managed.md");
+    write(generatedAgent, "Generated agent.\n");
+    mkdirSync(userHome, { recursive: true });
+
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["claude"] as const,
+      rebuild: false,
+      logger: silentLogger,
+    };
+    await runInstall(options);
+    rmSync(generatedAgent);
+    await runInstall({ ...options, prune: false });
+    await runInstall(options);
+
+    expect(read(join(projectDir, ".claude", "agents", "managed.md"))).toBe("Generated agent.\n");
+    expect(JSON.parse(read(join(projectDir, ".claude", ".ulis-manifest.json")))).toMatchObject({
+      agents: [],
+      skills: [],
+    });
+  });
+
+  it("leaves unselected platform entries and manifests untouched", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const claudeAgent = join(outputDir, "claude", "agents", "managed.md");
+    const codexAgent = join(outputDir, "codex", "agents", "managed.toml");
+    write(claudeAgent, "Claude agent.\n");
+    write(codexAgent, "Codex agent.\n");
+    mkdirSync(userHome, { recursive: true });
+
+    const common = { sourceDir, outputDir, destBase: projectDir, userHome, rebuild: false, logger: silentLogger };
+    await runInstall({ ...common, platforms: ["claude", "codex"] });
+    const codexManifestPath = join(projectDir, ".codex", ".ulis-manifest.json");
+    const previousCodexManifest = read(codexManifestPath);
+    rmSync(claudeAgent);
+    rmSync(codexAgent);
+
+    await runInstall({ ...common, platforms: ["claude"] });
+
+    expect(existsSync(join(projectDir, ".claude", "agents", "managed.md"))).toBe(false);
+    expect(read(join(projectDir, ".codex", "agents", "managed.toml"))).toBe("Codex agent.\n");
+    expect(read(codexManifestPath)).toBe(previousCodexManifest);
+  });
+
+  it("keeps the new entry after a case-only managed path rename", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const upperAgent = join(outputDir, "claude", "agents", "Worker.md");
+    const lowerAgent = join(outputDir, "claude", "agents", "worker.md");
+    write(upperAgent, "Upper name.\n");
+    mkdirSync(userHome, { recursive: true });
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["claude"] as const,
+      rebuild: false,
+      logger: silentLogger,
+    };
+
+    await runInstall(options);
+    renameSync(upperAgent, lowerAgent);
+    write(lowerAgent, "Lower name.\n");
+    await runInstall(options);
+
+    expect(read(join(projectDir, ".claude", "agents", "worker.md"))).toBe("Lower name.\n");
+    expect(JSON.parse(read(join(projectDir, ".claude", ".ulis-manifest.json"))).agents).toEqual(["agents/worker.md"]);
+  });
+
+  it("accepts safe agent filenames containing consecutive dots", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    write(join(outputDir, "claude", "agents", "foo..bar.md"), "Dotted agent.\n");
+    mkdirSync(userHome, { recursive: true });
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["claude"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(read(join(projectDir, ".claude", "agents", "foo..bar.md"))).toBe("Dotted agent.\n");
+  });
+
+  it("aborts before mutation when a generated managed entry has the wrong type", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    write(join(outputDir, "claude", "AGENTS.md"), "Generated Claude.\n");
+    write(join(outputDir, "codex", "agents", "not-a-file.toml", "content.txt"), "Unexpected directory.\n");
+    write(join(projectDir, ".claude", "AGENTS.md"), "Existing Claude.\n");
+    mkdirSync(userHome, { recursive: true });
+
+    await expect(
+      runInstall({
+        sourceDir,
+        outputDir,
+        destBase: projectDir,
+        userHome,
+        platforms: ["claude", "codex"],
+        rebuild: false,
+        logger: silentLogger,
+      }),
+    ).rejects.toThrow("Expected generated file");
+
+    expect(read(join(projectDir, ".claude", "AGENTS.md"))).toBe("Existing Claude.\n");
+  });
+
+  it("aborts before mutation when a stale agent path was replaced by a directory", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const generatedAgent = join(outputDir, "codex", "agents", "managed.toml");
+    write(join(outputDir, "claude", "AGENTS.md"), "Generated Claude.\n");
+    write(generatedAgent, "Generated Codex.\n");
+    mkdirSync(userHome, { recursive: true });
+    const common = { sourceDir, outputDir, destBase: projectDir, userHome, rebuild: false, logger: silentLogger };
+    await runInstall({ ...common, platforms: ["codex"] });
+    rmSync(generatedAgent);
+    rmSync(join(projectDir, ".codex", "agents", "managed.toml"));
+    write(join(projectDir, ".codex", "agents", "managed.toml", "local.txt"), "Unmanaged content.\n");
+    write(join(projectDir, ".claude", "AGENTS.md"), "Existing Claude.\n");
+
+    await expect(runInstall({ ...common, platforms: ["claude", "codex"] })).rejects.toThrow("Unsafe managed file");
+
+    expect(read(join(projectDir, ".claude", "AGENTS.md"))).toBe("Existing Claude.\n");
+    expect(read(join(projectDir, ".codex", "agents", "managed.toml", "local.txt"))).toBe("Unmanaged content.\n");
+  });
+
+  it("--no-prune retains a stale type-changed path and relinquishes ownership", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const generatedAgent = join(outputDir, "codex", "agents", "managed.toml");
+    write(generatedAgent, "Generated Codex.\n");
+    mkdirSync(userHome, { recursive: true });
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["codex"] as const,
+      rebuild: false,
+      logger: silentLogger,
+    };
+    await runInstall(options);
+    rmSync(generatedAgent);
+    rmSync(join(projectDir, ".codex", "agents", "managed.toml"));
+    write(join(projectDir, ".codex", "agents", "managed.toml", "local.txt"), "Retained content.\n");
+
+    await runInstall({ ...options, prune: false });
+
+    expect(read(join(projectDir, ".codex", "agents", "managed.toml", "local.txt"))).toBe("Retained content.\n");
+    expect(JSON.parse(read(join(projectDir, ".codex", ".ulis-manifest.json"))).agents).toEqual([]);
+  });
+
+  it("reserves the ownership manifest filename from generated raw output", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const copiedEntries: string[] = [];
+    const logger: Logger = {
+      ...silentLogger,
+      success(message) {
+        copiedEntries.push(message);
+      },
+    };
+    const injected = JSON.stringify({ version: 999, agents: ["agents/victim.md"], skills: [] });
+    for (const platform of ["claude", "codex", "opencode"] as const) {
+      write(join(outputDir, platform, ".ulis-manifest.json"), injected);
+    }
+    write(join(outputDir, "cursor", ".ULIS-MANIFEST.JSON"), injected);
+    createForgecodeOutput(outputDir);
+    write(join(outputDir, "forgecode", ".ulis-manifest.json"), injected);
+    write(join(outputDir, "forgecode", ".forge", ".ulis-manifest.json"), injected);
+    mkdirSync(userHome, { recursive: true });
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["claude", "codex", "cursor", "opencode", "forgecode"],
+      rebuild: false,
+      logger,
+    });
+
+    for (const configDir of [".claude", ".codex", ".cursor", ".opencode", ".forge"]) {
+      expect(JSON.parse(read(join(projectDir, configDir, ".ulis-manifest.json")))).toEqual({
+        version: 1,
+        agents: [],
+        skills: [],
+      });
+    }
+    expect(copiedEntries).not.toContain(".ulis-manifest.json");
+    expect(copiedEntries).not.toContain(".ULIS-MANIFEST.JSON");
+  });
+
+  it("aborts first adoption before a managed namespace junction can receive generated output", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const outsideAgents = join(root, "outside-agents");
+    write(join(outputDir, "claude", "AGENTS.md"), "Generated Claude.\n");
+    write(join(outputDir, "codex", "agents", "managed.toml"), "Generated Codex.\n");
+    write(join(projectDir, ".claude", "AGENTS.md"), "Existing Claude.\n");
+    mkdirSync(outsideAgents, { recursive: true });
+    mkdirSync(join(projectDir, ".codex"), { recursive: true });
+    symlinkSync(outsideAgents, join(projectDir, ".codex", "agents"), process.platform === "win32" ? "junction" : "dir");
+    mkdirSync(userHome, { recursive: true });
+
+    await expect(
+      runInstall({
+        sourceDir,
+        outputDir,
+        destBase: projectDir,
+        userHome,
+        platforms: ["claude", "codex"],
+        rebuild: false,
+        logger: silentLogger,
+      }),
+    ).rejects.toThrow("symbolic link");
+
+    expect(read(join(projectDir, ".claude", "AGENTS.md"))).toBe("Existing Claude.\n");
+    expect(existsSync(join(outsideAgents, "managed.toml"))).toBe(false);
+  });
+
+  it("aborts before mutation when a managed namespace resolves outside the platform root", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const outsideAgents = join(root, "outside-agents");
+    write(join(outputDir, "claude", "AGENTS.md"), "Generated Claude.\n");
+    write(join(outputDir, "codex", "AGENTS.md"), "Generated Codex.\n");
+    write(join(projectDir, ".claude", "AGENTS.md"), "Existing Claude.\n");
+    write(join(outsideAgents, "managed.toml"), "Outside agent.\n");
+    mkdirSync(join(projectDir, ".codex"), { recursive: true });
+    symlinkSync(outsideAgents, join(projectDir, ".codex", "agents"), process.platform === "win32" ? "junction" : "dir");
+    write(
+      join(projectDir, ".codex", ".ulis-manifest.json"),
+      JSON.stringify({ version: 1, agents: ["agents/managed.toml"], skills: [] }),
+    );
+    mkdirSync(userHome, { recursive: true });
+
+    await expect(
+      runInstall({
+        sourceDir,
+        outputDir,
+        destBase: projectDir,
+        userHome,
+        platforms: ["claude", "codex"],
+        rebuild: false,
+        logger: silentLogger,
+      }),
+    ).rejects.toThrow("Unsafe managed path");
+
+    expect(read(join(projectDir, ".claude", "AGENTS.md"))).toBe("Existing Claude.\n");
+    expect(read(join(outsideAgents, "managed.toml"))).toBe("Outside agent.\n");
+  });
+
+  for (const [caseName, manifest] of [
+    ["malformed JSON", "{"],
+    ["a future version", JSON.stringify({ version: 2, agents: [], skills: [] })],
+    ["path traversal", JSON.stringify({ version: 1, agents: ["agents/../../outside.md"], skills: [] })],
+  ] as const) {
+    it(`aborts every selected platform before mutation when a manifest has ${caseName}`, async () => {
+      const root = createTempRoot();
+      const sourceDir = join(root, ".ulis");
+      const outputDir = join(sourceDir, "generated");
+      const projectDir = join(root, "project");
+      const userHome = join(root, "home");
+      write(join(outputDir, "claude", "AGENTS.md"), "Generated Claude.\n");
+      write(join(outputDir, "codex", "AGENTS.md"), "Generated Codex.\n");
+      write(join(projectDir, ".claude", "AGENTS.md"), "Existing Claude.\n");
+      write(join(projectDir, ".codex", ".ulis-manifest.json"), manifest);
+      mkdirSync(userHome, { recursive: true });
+
+      await expect(
+        runInstall({
+          sourceDir,
+          outputDir,
+          destBase: projectDir,
+          userHome,
+          platforms: ["claude", "codex"],
+          rebuild: false,
+          logger: silentLogger,
+        }),
+      ).rejects.toThrow();
+
+      expect(read(join(projectDir, ".claude", "AGENTS.md"))).toBe("Existing Claude.\n");
+      expect(existsSync(join(projectDir, ".claude", ".ulis-manifest.json"))).toBe(false);
+    });
+  }
+
+  it("backs up the ownership manifest and stale entries before pruning", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const generatedAgent = join(outputDir, "claude", "agents", "managed.md");
+    write(generatedAgent, "Generated agent.\n");
+    mkdirSync(userHome, { recursive: true });
+
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["claude"] as const,
+      rebuild: false,
+      logger: silentLogger,
+    };
+    await runInstall(options);
+    rmSync(generatedAgent);
+    await runInstall({ ...options, backup: true });
+
+    const backupName = readdirSync(projectDir).find(
+      (entry) => entry.startsWith(".claude.") && entry.endsWith(".backup"),
+    );
+    expect(backupName).toBeDefined();
+    expect(existsSync(join(projectDir, backupName!, ".ulis-manifest.json"))).toBe(true);
+    expect(existsSync(join(projectDir, backupName!, "agents", "managed.md"))).toBe(true);
   });
 
   it("removes OpenCode same-name agents from the old category when the generated category changes", async () => {
@@ -1118,12 +1559,27 @@ describe("runInstall", () => {
     mkdirSync(projectDir, { recursive: true });
     mkdirSync(userHome, { recursive: true });
 
-    write(join(outputDir, "opencode", "agents", "specialized", "worker.md"), "Generated worker.\n");
-    write(join(outputDir, "opencode", "agents", "core", "reviewer.md"), "Generated reviewer.\n");
+    write(join(outputDir, "opencode", "agents", "core", "worker.md"), "Generated core worker.\n");
+    write(join(outputDir, "opencode", "agents", "specialized", "reviewer.md"), "Generated specialized reviewer.\n");
     write(join(projectDir, ".opencode", "agents", "core", "worker.md"), "Old core worker.\n");
     write(join(projectDir, ".opencode", "agents", "core", "local.md"), "Local core agent.\n");
     write(join(projectDir, ".opencode", "agents", "specialized", "reviewer.md"), "Old specialized reviewer.\n");
     write(join(projectDir, ".opencode", "agents", "specialized", "local.md"), "Local specialized agent.\n");
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["opencode"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    rmSync(join(outputDir, "opencode", "agents", "core", "worker.md"));
+    rmSync(join(outputDir, "opencode", "agents", "specialized", "reviewer.md"));
+    write(join(outputDir, "opencode", "agents", "specialized", "worker.md"), "Generated worker.\n");
+    write(join(outputDir, "opencode", "agents", "core", "reviewer.md"), "Generated reviewer.\n");
 
     await runInstall({
       sourceDir,
@@ -1425,6 +1881,34 @@ describe("runPresetInstall", () => {
     expect(read(join(projectDir, ".claude", "shared.txt"))).toBe("raw B shared\n");
     expect(existsSync(join(presetA, "generated"))).toBe(false);
     expect(existsSync(join(presetB, "generated"))).toBe(false);
+  });
+
+  it("reconciles ownership when preset-only installs change the authoritative set", async () => {
+    const root = createTempRoot();
+    const populatedPreset = join(root, "populated");
+    const emptyPreset = join(root, "empty");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    write(join(populatedPreset, "config.yaml"), "version: 1\nname: populated\n");
+    write(
+      join(populatedPreset, "agents", "worker.md"),
+      "---\ndescription: Worker\nmodel: claude-haiku-4-5-20251001\ntools:\n  read: true\n---\n\nWorker.\n",
+    );
+    write(join(emptyPreset, "config.yaml"), "version: 1\nname: empty\n");
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+
+    const options = {
+      destBase: projectDir,
+      userHome,
+      platforms: ["claude"] as const,
+      logger: silentLogger,
+    };
+    await runPresetInstall({ ...options, presets: [{ name: "populated", dir: populatedPreset }] });
+    expect(existsSync(join(projectDir, ".claude", "agents", "worker.md"))).toBe(true);
+
+    await runPresetInstall({ ...options, presets: [{ name: "empty", dir: emptyPreset }] });
+    expect(existsSync(join(projectDir, ".claude", "agents", "worker.md"))).toBe(false);
   });
 
   it("runs preset-declared external skills and extensions only", async () => {

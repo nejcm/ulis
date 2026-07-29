@@ -84,7 +84,7 @@ describe("tui state", () => {
     try {
       const state = createInitialState();
       state.screen = "plan";
-      state.cursor = 7;
+      state.cursor = planItems(state).indexOf("Validate");
 
       expect(handleTuiKey(state, "enter")).toEqual({ type: "start", action: "validate" });
     } finally {
@@ -100,7 +100,7 @@ describe("tui state", () => {
     try {
       const state = createInitialState();
       state.screen = "plan";
-      state.cursor = 9;
+      state.cursor = planItems(state).indexOf("Install");
 
       expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
       expect(state.screen as string).toBe("installReview");
@@ -116,7 +116,7 @@ describe("tui state", () => {
     try {
       const state = createInitialState();
       state.screen = "plan";
-      state.cursor = 8;
+      state.cursor = planItems(state).indexOf("Build only");
 
       expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
       expect(state.screen as string).toBe("missingSource");
@@ -199,11 +199,11 @@ describe("tui state", () => {
     Date.now = () => now;
 
     try {
-      state.cursor = 6;
+      state.cursor = planItems(state).indexOf("Validate");
       expect(handleTuiKey(state, "enter")).toEqual({ type: "start", action: "presetValidate" });
 
       now += 45;
-      state.cursor = 7;
+      state.cursor = planItems(state).indexOf("Install");
       expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
       expect(state.screen as string).toBe("presetInstallReview");
     } finally {
@@ -369,7 +369,7 @@ describe("tui state", () => {
   it("presetInstallReview toggles extension installs with space", () => {
     const state = createInitialState();
     state.screen = "presetInstallReview";
-    state.cursor = 1;
+    state.cursor = 2;
     state.presetInstallExtensions = true;
 
     handleTuiKey(state, " ");
@@ -380,7 +380,7 @@ describe("tui state", () => {
   it("presetInstallReview start returns preset install effect", () => {
     const state = createInitialState();
     state.screen = "presetInstallReview";
-    state.cursor = 2;
+    state.cursor = 3;
 
     expect(handleTuiKey(state, "enter")).toEqual({ type: "start", action: "presetInstall" });
   });
@@ -388,7 +388,7 @@ describe("tui state", () => {
   it("presetInstallReview blocks start when no platforms are selected", () => {
     const state = createInitialState();
     state.screen = "presetInstallReview";
-    state.cursor = 2;
+    state.cursor = 3;
     state.platforms = [];
 
     expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
@@ -400,7 +400,7 @@ describe("tui state", () => {
       { name: "team", displayName: "Team", description: "", source: "user", dir: "/presets/team" },
     ]);
     state.screen = "presetInstallReview";
-    state.cursor = 3;
+    state.cursor = 4;
 
     handleTuiKey(state, "enter");
 
@@ -414,7 +414,7 @@ describe("tui state", () => {
     ]);
     state.flow = "presetsOnly";
     state.screen = "presetInstallReview";
-    state.cursor = 3;
+    state.cursor = 4;
 
     handleTuiKey(state, "enter");
 

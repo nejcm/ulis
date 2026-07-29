@@ -1,5 +1,5 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
-import { basename, extname, join } from "node:path";
+import { join } from "node:path";
 
 import type { Logger } from "../build.js";
 import { InstallError } from "./errors.js";
@@ -68,13 +68,13 @@ export function copyPlatformContents(
   }
 
   for (const entry of entries) {
-    if (skipNames.has(entry)) {
+    if (hasName(skipNames, entry)) {
       continue;
     }
 
     const sourcePath = join(sourceDir, entry);
     const targetPath = join(targetDir, entry);
-    const namedDirectory = namedDirectories[entry];
+    const namedDirectory = findNamedDirectory(namedDirectories, entry);
     if (namedDirectory) {
       copyNamedDirectory(sourcePath, targetPath, namedDirectory, logger);
       logger?.success(entry);
@@ -95,12 +95,30 @@ function pruneExtraTargetEntries(
 ): void {
   const sourceNames = new Set(sourceEntries);
   for (const targetEntry of readDirectoryEntries(targetDir)) {
-    if (sourceNames.has(targetEntry) || skipNames.has(targetEntry) || namedDirectories[targetEntry]) {
+    if (
+      hasName(sourceNames, targetEntry) ||
+      hasName(skipNames, targetEntry) ||
+      findNamedDirectory(namedDirectories, targetEntry)
+    ) {
       continue;
     }
 
     removePath(join(targetDir, targetEntry));
   }
+}
+
+function hasName(names: ReadonlySet<string>, candidate: string): boolean {
+  const normalized = candidate.toLowerCase();
+  return [...names].some((name) => name.toLowerCase() === normalized);
+}
+
+function findNamedDirectory(
+  directories: Readonly<Record<string, NamedDirectoryCopyRule>>,
+  candidate: string,
+): NamedDirectoryCopyRule | undefined {
+  const normalized = candidate.toLowerCase();
+  const key = Object.keys(directories).find((name) => name.toLowerCase() === normalized);
+  return key ? directories[key] : undefined;
 }
 
 function copyNamedDirectory(sourceDir: string, targetDir: string, rule: NamedDirectoryCopyRule, logger?: Logger): void {
@@ -114,7 +132,6 @@ function copyNamedDirectory(sourceDir: string, targetDir: string, rule: NamedDir
   for (const entry of entries) {
     const sourcePath = join(sourceDir, entry);
     const targetPath = join(targetDir, entry);
-    removeMatchingNamedEntries(targetDir, entry, rule);
     removePath(targetPath);
     copyPath(sourcePath, targetPath);
     logger?.dim(`  ${entry}`);
@@ -138,26 +155,9 @@ function copyNestedNamedDirectory(
     for (const entry of readDirectoryEntries(sourceNestedDir)) {
       const sourcePath = join(sourceNestedDir, entry);
       const targetPath = join(targetNestedDir, entry);
-      removeMatchingNamedEntries(targetDir, entry, rule);
       removePath(targetPath);
       copyPath(sourcePath, targetPath);
       logger?.dim(`  ${relativeDir}/${entry}`);
-    }
-  }
-}
-
-function removeMatchingNamedEntries(targetDir: string, entry: string, rule: NamedDirectoryCopyRule): void {
-  const entryBaseName = basename(entry, extname(entry));
-  for (const relativeDir of rule.alternateRelativeDirs ?? []) {
-    const alternateTargetDir = join(targetDir, relativeDir);
-    if (!existsSync(alternateTargetDir)) {
-      continue;
-    }
-
-    for (const alternateEntry of readDirectoryEntries(alternateTargetDir)) {
-      if (basename(alternateEntry, extname(alternateEntry)) === entryBaseName) {
-        removePath(join(alternateTargetDir, alternateEntry));
-      }
     }
   }
 }

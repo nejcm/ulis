@@ -26,6 +26,7 @@ export interface TuiPreferences {
   readonly selectedPresetNames?: readonly string[];
   readonly presetSourceMode?: PresetSourceMode;
   readonly backup?: boolean;
+  readonly prune?: boolean;
   readonly rebuild?: boolean;
   readonly presetInstallExtensions?: boolean;
 }
@@ -103,6 +104,7 @@ function legacyFlowPreferences(state: TuiState, preferences: TuiPreferences): Tu
     next.destinationMode = preferences.destinationMode;
   }
   if (typeof preferences.backup === "boolean") next.backup = preferences.backup;
+  if (typeof preferences.prune === "boolean") next.prune = preferences.prune;
   if (typeof preferences.rebuild === "boolean") next.rebuild = preferences.rebuild;
   if (typeof preferences.presetInstallExtensions === "boolean") {
     next.presetInstallExtensions = preferences.presetInstallExtensions;
@@ -190,6 +192,7 @@ function sanitizeFlowPreferences(raw: Record<string, unknown>): TuiFlowPreferenc
   }
   if (isPresetSourceMode(raw.presetSourceMode)) next.presetSourceMode = raw.presetSourceMode;
   if (typeof raw.backup === "boolean") next.backup = raw.backup;
+  if (typeof raw.prune === "boolean") next.prune = raw.prune;
   if (typeof raw.rebuild === "boolean") next.rebuild = raw.rebuild;
   if (typeof raw.presetInstallExtensions === "boolean") {
     next.presetInstallExtensions = raw.presetInstallExtensions;

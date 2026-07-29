@@ -16,13 +16,9 @@ import {
 } from "../utils/config-merger.js";
 import { InstallError } from "./errors.js";
 import { backupPath, copyPath, copyPlatformContents, ensureDir, readDirectoryEntries } from "./fs.js";
+import { MANAGED_PLATFORM_LAYOUTS } from "./layouts.js";
+import { ULIS_MANIFEST_FILENAME } from "./manifest.js";
 import type { InstallContext } from "./types.js";
-
-const AGENT_SKILL_DIRS = { agents: {}, skills: {} };
-const OPENCODE_AGENT_SKILL_DIRS = {
-  agents: { alternateRelativeDirs: ["core", "specialized"] },
-  skills: {},
-};
 
 export async function installOpencode(context: InstallContext): Promise<void> {
   const targetDir = platformConfigDir("opencode", context.destBase, context.userHome);
@@ -34,7 +30,8 @@ export async function installOpencode(context: InstallContext): Promise<void> {
 
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
-    namedDirectories: OPENCODE_AGENT_SKILL_DIRS,
+    skipNames: reservedNames(),
+    namedDirectories: managedDirectoryRules("opencode"),
     pruneExtraNames: true,
   });
   writePlatformPreservedNativeConfigs("opencode", preservedConfigs, context);
@@ -58,8 +55,8 @@ export async function installClaude(context: InstallContext): Promise<void> {
 
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
-    skipNames: new Set(["settings.json", ".claude.json"]),
-    namedDirectories: AGENT_SKILL_DIRS,
+    skipNames: reservedNames("settings.json", ".claude.json"),
+    namedDirectories: managedDirectoryRules("claude"),
   });
 }
 
@@ -73,8 +70,8 @@ export async function installCodex(context: InstallContext): Promise<void> {
   ensureDir(targetDir);
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
-    skipNames: new Set(["config.toml"]),
-    namedDirectories: AGENT_SKILL_DIRS,
+    skipNames: reservedNames("config.toml"),
+    namedDirectories: managedDirectoryRules("codex"),
   });
   writePlatformPreservedNativeConfigs("codex", preservedConfigs, context);
 }
@@ -92,8 +89,8 @@ export async function installCursor(context: InstallContext): Promise<void> {
 
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
-    skipNames: new Set(["mcp.json"]),
-    namedDirectories: AGENT_SKILL_DIRS,
+    skipNames: reservedNames("mcp.json"),
+    namedDirectories: managedDirectoryRules("cursor"),
   });
 }
 
@@ -112,14 +109,14 @@ export async function installForgecode(context: InstallContext): Promise<void> {
   if (existsSync(sourceForgeDir)) {
     copyPlatformContents(sourceForgeDir, targetForgeDir, {
       logger: context.logger,
-      skipNames: new Set([".mcp.json"]),
-      namedDirectories: AGENT_SKILL_DIRS,
+      skipNames: reservedNames(".mcp.json"),
+      namedDirectories: managedDirectoryRules("forgecode"),
     });
   }
 
   copyPlatformContents(sourceDir, targetForgeDir, {
     logger: context.logger,
-    skipNames: new Set([resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project), ".forge.toml"]),
+    skipNames: reservedNames(resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project), ".forge.toml"),
   });
 
   writePlatformPreservedNativeConfigs("forgecode", preservedConfigs, context);
@@ -251,6 +248,18 @@ function backupFile(targetPath: string, context: InstallContext): void {
   const targetBackupPath = backupPath(targetPath, context.timestamp);
   copyPath(targetPath, targetBackupPath);
   logInfo(context, `[backup] ${targetPath} -> ${targetBackupPath}`);
+}
+
+function reservedNames(...names: readonly string[]): ReadonlySet<string> {
+  return new Set([ULIS_MANIFEST_FILENAME, ...names]);
+}
+
+function managedDirectoryRules(platform: Platform) {
+  const categories = MANAGED_PLATFORM_LAYOUTS[platform].agentDirectories.filter(Boolean);
+  return {
+    agents: categories.length > 0 ? { alternateRelativeDirs: categories } : {},
+    skills: {},
+  };
 }
 
 function logHeader(context: InstallContext, message: string): void {

@@ -33,6 +33,7 @@ export type TuiPlanItem =
   | "Platforms"
   | "Install destination"
   | "Backup"
+  | "Prune removed agents and skills"
   | "Use latest build output"
   | "Run preset extensions"
   | "Skip external skills"
@@ -58,6 +59,7 @@ export interface TuiFlowPreferences {
   readonly selectedPresetNames?: readonly string[];
   readonly presetSourceMode?: PresetSourceMode;
   readonly backup?: boolean;
+  readonly prune?: boolean;
   readonly rebuild?: boolean;
   readonly presetInstallExtensions?: boolean;
   readonly skipExternalSkills?: boolean;
@@ -78,6 +80,7 @@ export interface TuiState {
   selectedPresetNames: string[];
   presetSourceMode: PresetSourceMode;
   backup: boolean;
+  prune: boolean;
   rebuild: boolean;
   presetInstallExtensions: boolean;
   skipExternalSkills: boolean;
@@ -112,6 +115,7 @@ export const DASHBOARD_ITEMS: readonly TuiPlanItem[] = [
   "Platforms",
   "Install destination",
   "Backup",
+  "Prune removed agents and skills",
   "Use latest build output",
   "Skip external skills",
   "Validate",
@@ -125,6 +129,7 @@ const PRESET_ONLY_PLAN_ITEMS: readonly TuiPlanItem[] = [
   "Platforms",
   "Install destination",
   "Backup",
+  "Prune removed agents and skills",
   "Run preset extensions",
   "Skip external skills",
   "Validate",
@@ -157,6 +162,7 @@ export function createInitialState(availablePresets: readonly PresetListEntry[] 
     selectedPresetNames: [],
     presetSourceMode: "auto",
     backup: true,
+    prune: true,
     rebuild: true,
     presetInstallExtensions: true,
     skipExternalSkills: false,
@@ -360,6 +366,7 @@ export function flowPreferencesFromState(state: TuiState): TuiFlowPreferences {
     selectedPresetNames: [...state.selectedPresetNames],
     presetSourceMode: state.presetSourceMode,
     backup: state.backup,
+    prune: state.prune,
     rebuild: state.rebuild,
     presetInstallExtensions: state.presetInstallExtensions,
     skipExternalSkills: state.skipExternalSkills,
@@ -408,6 +415,7 @@ export function applyFlowPreferences(state: TuiState, flow: TuiFlow = state.flow
   }
   if (preferences.presetSourceMode) state.presetSourceMode = preferences.presetSourceMode;
   if (typeof preferences.backup === "boolean") state.backup = preferences.backup;
+  if (typeof preferences.prune === "boolean") state.prune = preferences.prune;
   if (typeof preferences.rebuild === "boolean") state.rebuild = preferences.rebuild;
   if (typeof preferences.presetInstallExtensions === "boolean") {
     state.presetInstallExtensions = preferences.presetInstallExtensions;
@@ -545,6 +553,12 @@ function handlePlanKey(state: TuiState, key: string): TuiEffect {
     return { type: "none" };
   }
 
+  if (item === "Prune removed agents and skills" && isToggleKey(key)) {
+    state.prune = !state.prune;
+    state.notice = "";
+    return { type: "none" };
+  }
+
   if (item === "Use latest build output" && isToggleKey(key)) {
     state.rebuild = !state.rebuild;
     state.notice = "";
@@ -591,6 +605,9 @@ function handlePlanKey(state: TuiState, key: string): TuiEffect {
       break;
     case "Backup":
       state.backup = !state.backup;
+      break;
+    case "Prune removed agents and skills":
+      state.prune = !state.prune;
       break;
     case "Use latest build output":
       state.rebuild = !state.rebuild;
@@ -824,14 +841,16 @@ function handleInstallReviewKey(state: TuiState, key: string): TuiEffect {
 }
 
 function handlePresetInstallReviewKey(state: TuiState, key: string): TuiEffect {
-  moveCursor(state, key, 3);
+  moveCursor(state, key, 4);
   if (!isConfirmKey(key) && !isToggleKey(key)) return { type: "none" };
 
   if (state.cursor === 0) {
     state.backup = !state.backup;
   } else if (state.cursor === 1) {
-    state.presetInstallExtensions = !state.presetInstallExtensions;
+    state.prune = !state.prune;
   } else if (state.cursor === 2) {
+    state.presetInstallExtensions = !state.presetInstallExtensions;
+  } else if (state.cursor === 3) {
     if (state.platforms.length === 0) {
       state.notice = "Select at least one platform first.";
       return { type: "none" };
