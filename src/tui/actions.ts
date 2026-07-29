@@ -75,6 +75,7 @@ export async function runTuiAction(
       globalInstall: planned.globalInstall,
       platforms: state.platforms,
       backup: state.backup,
+      prune: state.prune,
       logger,
       presets,
       installExtensions: state.presetInstallExtensions,
@@ -123,6 +124,7 @@ async function runActionInChildProcess(
     if (planSource(state).globalInstall) args.push("--global");
     if (!state.rebuild) args.push("--skip-rebuild");
     if (state.backup) args.push("--backup");
+    if (!state.prune) args.push("--no-prune");
     if (state.skipExternalSkills) args.push("--skip-external-skills");
   }
 

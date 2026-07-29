@@ -24,6 +24,7 @@ export interface PresetInstallCmdOptions {
   readonly yes?: boolean;
   readonly target?: string | string[];
   readonly backup?: boolean;
+  readonly prune?: boolean;
   readonly runner?: "npx" | "bunx";
   readonly extensions?: boolean;
   readonly skipExternalSkills?: boolean;
@@ -87,6 +88,7 @@ export async function presetInstallCmd(
     globalInstall: Boolean(options.global),
     platforms: targets,
     backup: options.backup ?? false,
+    prune: options.prune ?? true,
     logger: log,
     presets,
     runner: options.runner,

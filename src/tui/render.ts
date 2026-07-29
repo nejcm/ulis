@@ -149,6 +149,7 @@ function renderPlan(state: TuiState) {
     { text: "" },
     { text: "Install options", fgColor: "color06", bold: true },
     { text: "Backup: ", inlineValue: state.backup ? "on" : "off" },
+    { text: "Prune removed agents and skills: ", inlineValue: state.prune ? "on" : "off" },
     { text: "Use latest build output: ", inlineValue: state.rebuild ? "on" : "off" },
     { text: "Skip external skills: ", inlineValue: state.skipExternalSkills ? "on" : "off" },
   ];
@@ -179,6 +180,7 @@ function planLabel(state: TuiState, label: TuiPlanItem): string {
   if (label === "Preset layers" || label === "Preset sources") return `${selectedPresetCount(state)} selected`;
   if (label === "Platforms") return `${state.platforms.length} selected`;
   if (label === "Backup") return state.backup ? "on" : "off";
+  if (label === "Prune removed agents and skills") return state.prune ? "on" : "off";
   if (label === "Use latest build output") return state.rebuild ? "on" : "off";
   if (label === "Run preset extensions") return state.presetInstallExtensions ? "on" : "off";
   if (label === "Skip external skills") return state.skipExternalSkills ? "on" : "off";
@@ -498,10 +500,11 @@ function renderPresetInstallReview(state: TuiState) {
     { text: "Action: install selected preset directories resolved by the TUI", fgColor: "color08" },
     { text: "" },
     selectableLine(state.cursor, 0, `[${state.backup ? "x" : " "}] Backup existing configs before install`),
-    selectableLine(state.cursor, 1, `[${state.presetInstallExtensions ? "x" : " "}] Run preset extensions`),
+    selectableLine(state.cursor, 1, `[${state.prune ? "x" : " "}] Prune removed agents and skills`),
+    selectableLine(state.cursor, 2, `[${state.presetInstallExtensions ? "x" : " "}] Run preset extensions`),
     { text: "" },
-    selectableLine(state.cursor, 2, "Start preset install"),
-    selectableLine(state.cursor, 3, "Back to presets"),
+    selectableLine(state.cursor, 3, "Start preset install"),
+    selectableLine(state.cursor, 4, "Back to presets"),
     { text: "" },
     {
       text: state.notice || "Preset install does not read or merge the current source.",
@@ -540,6 +543,7 @@ function formatInstallCommand(state: TuiState): string {
   if (state.selectedPresetNames.length > 0) args.push("--preset", state.selectedPresetNames.join(","));
   if (!state.rebuild) args.push("--skip-rebuild");
   if (state.backup) args.push("--backup");
+  if (!state.prune) args.push("--no-prune");
   if (state.skipExternalSkills) args.push("--skip-external-skills");
   return args.map(quoteCommandArg).join(" ");
 }

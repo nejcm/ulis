@@ -7,6 +7,7 @@ import { analyzePresets, runBuild, type Logger } from "./build.js";
 import { ULIS_GENERATED_DIRNAME } from "./config.js";
 import { generate, writeResult } from "./generators/index.js";
 import { InstallError } from "./install/errors.js";
+import { preflightOwnership, reconcileOwnership } from "./install/manifest.js";
 import { installClaude, installCodex, installCursor, installForgecode, installOpencode } from "./install/platforms.js";
 import type { InstallContext, Runner as InstallRunner } from "./install/types.js";
 import { loadExtensions, mergeExtensionsConfigs } from "./parsers/extensions.js";
@@ -36,6 +37,8 @@ export interface InstallOptions {
   /** Install skills globally (`npx skills ... -g`) instead of project-local. */
   readonly globalInstall?: boolean;
   readonly backup?: boolean;
+  /** Remove agents and local skills previously installed by ULIS but no longer generated. */
+  readonly prune?: boolean;
   readonly rebuild?: boolean;
   readonly logger?: Logger;
   readonly userHome?: string;
@@ -58,6 +61,8 @@ export interface PresetInstallOptions {
   /** Install skills globally (`npx skills ... -g`) instead of project-local. */
   readonly globalInstall?: boolean;
   readonly backup?: boolean;
+  /** Remove agents and local skills previously installed by ULIS but no longer generated. */
+  readonly prune?: boolean;
   readonly logger?: Logger;
   readonly userHome?: string;
   /** Override the package runner used for `extensions.yaml` entries. */
@@ -103,6 +108,7 @@ interface GeneratedInstallOptions {
   readonly userHome: string;
   readonly globalInstall: boolean;
   readonly backup: boolean;
+  readonly prune: boolean;
   readonly platforms: readonly Platform[];
   readonly skillsConfig: SkillsConfig;
   readonly extensionsConfig: ExtensionsConfig;
@@ -175,6 +181,7 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
   const userHome = resolve(options.userHome ?? homedir());
   const globalInstall = options.globalInstall ?? isSamePath(destBase, userHome);
   const backup = options.backup ?? false;
+  const prune = options.prune ?? true;
   const rebuild = options.rebuild ?? false;
 
   loadDotEnv(destBase);
@@ -225,6 +232,7 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
     userHome,
     globalInstall,
     backup,
+    prune,
     platforms,
     skillsConfig,
     extensionsConfig,
@@ -253,6 +261,7 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
   const userHome = resolve(options.userHome ?? homedir());
   const globalInstall = options.globalInstall ?? isSamePath(destBase, userHome);
   const backup = options.backup ?? false;
+  const prune = options.prune ?? true;
   const installExtensionsEnabled = options.installExtensions ?? true;
   const installSkillsEnabled = options.installSkills ?? true;
   const runner = resolveRunner({ cliFlag: options.runner });
@@ -293,6 +302,7 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
       userHome,
       globalInstall,
       backup,
+      prune,
       platforms,
       skillsConfig,
       extensionsConfig,
@@ -313,12 +323,20 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
 
 async function installGeneratedOutput(options: GeneratedInstallOptions): Promise<void> {
   const timestamp = makeTimestamp();
+  const ownership = preflightOwnership(
+    options.platforms,
+    options.outputDir,
+    options.destBase,
+    options.userHome,
+    options.prune,
+  );
   const context: InstallContext = {
     outputDir: options.outputDir,
     destBase: options.destBase,
     userHome: options.userHome,
     globalInstall: options.globalInstall,
     backup: options.backup,
+    prune: options.prune,
     timestamp,
     extensions: options.extensionsConfig,
     runner: options.runner,
@@ -345,6 +363,9 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
         await installForgecode(context);
         break;
     }
+    const platformOwnership = ownership.get(platform);
+    if (!platformOwnership) throw new InstallError(`Missing ownership preflight data for ${platform}`);
+    reconcileOwnership(platform, platformOwnership, context.prune, context.logger);
   }
 
   if (options.installSkillsEnabled) {

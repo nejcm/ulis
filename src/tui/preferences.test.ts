@@ -115,6 +115,7 @@ describe("tui preferences", () => {
         project: {
           platforms: ["codex"],
           backup: false,
+          prune: true,
         },
       },
     });
@@ -161,6 +162,7 @@ describe("tui preferences", () => {
           selectedPresetNames: ["team"],
           presetSourceMode: "auto",
           backup: false,
+          prune: true,
           rebuild: false,
           presetInstallExtensions: true,
           skipExternalSkills: false,

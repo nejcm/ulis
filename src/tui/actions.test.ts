@@ -150,6 +150,7 @@ describe("tui actions child process flow", () => {
     state.platforms = ["codex"];
     state.destinationMode = "global";
     state.backup = true;
+    state.prune = false;
     state.rebuild = false;
     const logger = createLogger();
 
@@ -167,6 +168,7 @@ describe("tui actions child process flow", () => {
     expect(args).toContain("--global");
     expect(args).toContain("--skip-rebuild");
     expect(args).toContain("--backup");
+    expect(args).toContain("--no-prune");
   });
 
   it("preset install action uses resolved preset directories", async () => {
@@ -183,6 +185,7 @@ describe("tui actions child process flow", () => {
     state.platforms = ["codex"];
     state.destinationMode = "global";
     state.backup = true;
+    state.prune = false;
     state.presetInstallExtensions = false;
     const logger = createLogger();
 
@@ -194,6 +197,7 @@ describe("tui actions child process flow", () => {
       globalInstall: true,
       platforms: ["codex"],
       backup: true,
+      prune: false,
       installExtensions: false,
       presets: [
         { name: "a", dir: "/project/presets/a" },

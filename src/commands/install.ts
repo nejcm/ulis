@@ -12,6 +12,7 @@ import { parseTargets, type BuildCmdOptions } from "./build.js";
 export interface InstallCmdOptions extends BuildCmdOptions {
   readonly yes?: boolean;
   readonly backup?: boolean;
+  readonly prune?: boolean;
   readonly rebuild?: boolean;
   readonly runner?: "npx" | "bunx";
   readonly extensions?: boolean;
@@ -47,6 +48,7 @@ export async function installCmd(options: InstallCmdOptions = {}): Promise<void>
     globalInstall: mode === "global",
     platforms: targets,
     backup: options.backup ?? false,
+    prune: options.prune ?? true,
     rebuild: options.rebuild ?? true,
     logger: log,
     presets,

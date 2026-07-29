@@ -73,7 +73,8 @@ Run `build` and then deploy the generated configs onto the target platform direc
 ```bash
 ulis install [-g | --global] [--source <path>] [--target <platforms>]
              [-y | --yes] [--skip-rebuild] [--backup] [--preset <names>]
-             [--runner <npx|bunx>] [--skip-extensions] [--skip-external-skills]
+             [--runner <npx|bunx>] [--no-prune]
+             [--skip-extensions] [--skip-external-skills]
 ```
 
 | Flag                     | Effect                                                                                                                                                     |
@@ -84,6 +85,7 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 | `-y`, `--yes`            | Skip the "about to overwrite" confirmation prompt.                                                                                                         |
 | `--skip-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`.                                                                                   |
 | `--backup`               | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.                                                                          |
+| `--no-prune`             | Keep agents and local skills from the previous ULIS install; retained stale entries become unmanaged.                                                      |
 | `--preset <names>`       | Same resolution as `ulis build --preset` (user-global directory, then bundled).                                                                            |
 | `--runner <npx\|bunx>`   | Package runner used for `extensions.yaml` entries. `npx` or `bunx`. Overrides `runner` in `config.yaml`. Default: auto-detect (`bunx` if present).         |
 | `--skip-extensions`      | Skip running entries from `extensions.yaml`. Useful in CI where network installs are not desired.                                                          |
@@ -101,7 +103,9 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 | Cursor    | generated `agents/` and `skills/` entries by name                            | `mcp.json` `mcpServers`                                                                |
 | ForgeCode | generated `.forge/agents` and `.forge/skills` entries by name; `AGENTS.md`   | `.forge/.mcp.json` `mcpServers`, `.forge.toml`                                         |
 
-Install preserves unmanaged destination agents and skills unless generated output has the same native name. For Codex `config.toml`, Claude `settings.json`, and global `.claude.json`, the existing file is the base: generated values overwrite only matching paths, while absent values remain. Other native configs retain their allowlisted preservation rules. Raw fragments win through the generated output because raw is merged during build. If `--backup` is set, backups are created before parsing preserved native config.
+Install records generated agents and local skills in `.ulis-manifest.json` at each selected platform config root. On the first manifest-aware install, ULIS adopts the current set and removes nothing. Later installs remove previously tracked paths that are no longer generated, including platform-disabled entries, while preserving every untracked agent or skill. Manifest validation for all selected platforms completes before any destination is modified. Unselected platforms are untouched. `--no-prune` keeps stale paths but refreshes ownership to the current set. External `skills.yaml` installs are not tracked.
+
+For Codex `config.toml`, Claude `settings.json`, and global `.claude.json`, the existing file is the base: generated values overwrite only matching paths, while absent values remain. Other native configs retain their allowlisted preservation rules. Raw fragments win through the generated output because raw is merged during build. If `--backup` is set, backups include the previous manifest and managed entries before pruning.
 
 ---
 
@@ -113,7 +117,7 @@ Launch the interactive terminal dashboard. Use it to start from a workflow, revi
 ulis tui
 ```
 
-The TUI starts with workflow choices: update this project, update global configs, use a custom source, or install presets only. Each choice pre-fills an editable plan; before running, you can still change source, destination, preset layers or sources, platforms, backups, latest-build behavior, and preset extension installs. If a project or global source is missing, the TUI can initialize it before continuing. Installs require a review screen with the equivalent CLI command before files are written.
+The TUI starts with workflow choices: update this project, update global configs, use a custom source, or install presets only. Each choice pre-fills an editable plan; before running, you can still change source, destination, preset layers or sources, platforms, backups, pruning, latest-build behavior, and preset extension installs. Pruning is on by default and the command preview includes `--no-prune` when disabled.
 
 Keyboard controls:
 
@@ -134,7 +138,7 @@ ulis preset [--list]
 ulis preset list
 ulis preset install <names...> [-g | --global] [--target <platforms>]
                     [-y | --yes] [--backup] [--runner <npx|bunx>]
-                    [--skip-extensions] [--skip-external-skills]
+                    [--no-prune] [--skip-extensions] [--skip-external-skills]
 ```
 
 `-l` / `--list` is accepted. The default action is `list`. Each line shows the directory name (what you pass to `--preset`), a `user` or `bundled` label, optional `name` / `description` from `preset.yaml`, and the display title when it differs from the folder name.
@@ -147,6 +151,7 @@ ulis preset install <names...> [-g | --global] [--target <platforms>]
 | `--target <platforms>`   | Only install the listed platforms.                                                           |
 | `-y`, `--yes`            | Skip overwrite confirmation prompts and fail fast for missing presets.                       |
 | `--backup`               | Copy existing platform dirs/configs before writing.                                          |
+| `--no-prune`             | Keep stale agents and local skills and relinquish their previous ULIS ownership.             |
 | `--runner <npx\|bunx>`   | Package runner for preset `extensions.yaml` entries. `npx` or `bunx`; default: auto-detect.  |
 | `--skip-extensions`      | Skip preset `extensions.yaml` entries. Preset `skills.yaml` entries still run when declared. |
 | `--skip-external-skills` | Skip installing external skills from preset `skills.yaml` entries.                           |
