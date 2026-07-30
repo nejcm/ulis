@@ -94,16 +94,22 @@ function installRuntimeFakes(): void {
 
 function createLogger() {
   const dim: string[] = [];
+  const info: string[] = [];
+  const success: string[] = [];
   const warn: string[] = [];
+  const error: string[] = [];
   return {
     header: (_message: string) => undefined,
-    info: (_message: string) => undefined,
-    success: (_message: string) => undefined,
+    info: (message: string) => info.push(message),
+    success: (message: string) => success.push(message),
     dim: (message: string) => dim.push(message),
     warn: (message: string) => warn.push(message),
-    error: (_message: string) => undefined,
+    error: (message: string) => error.push(message),
+    infoLogs: info,
+    successLogs: success,
     dimLogs: dim,
     warnLogs: warn,
+    errorLogs: error,
   };
 }
 
@@ -268,8 +274,34 @@ describe("tui actions child process flow", () => {
     child.emitClose(0);
     await run;
 
-    expect(logger.dimLogs).toContain("stdout-line");
+    expect(logger.infoLogs).toContain("stdout-line");
     expect(logger.warnLogs).toContain("stderr-line");
+  });
+
+  it("preserves child log levels without duplicating their tags", async () => {
+    installRuntimeFakes();
+    spawnCalls.length = 0;
+    spawnedChildren.length = 0;
+    const state = createInitialState();
+    const logger = createLogger();
+
+    const run = runTuiAction(state, "build", logger);
+    const child = spawnedChildren[0]!;
+    child.stdout.emit("line", "\u001b[36m[info]\u001b[0m source ready");
+    child.stdout.emit("line", "\u001b[32m[done]\u001b[0m build complete");
+    child.stdout.emit("line", "  copied: .codex/config.toml");
+    child.stderr.emit("line", "\u001b[33m[warn]\u001b[0m deprecated option");
+    child.stderr.emit("line", "\u001b[31m[error]\u001b[0m invalid config");
+    child.stderr.emit("line", "\u001b[31m[error]\u001b[0m   path: .ulis/ulis.yaml");
+    child.emitClose(0);
+    await run;
+
+    expect(logger.infoLogs).toContain("source ready");
+    expect(logger.infoLogs).toContain("copied: .codex/config.toml");
+    expect(logger.successLogs).toEqual(["build complete"]);
+    expect(logger.warnLogs).toContain("deprecated option");
+    expect(logger.errorLogs).toEqual(["invalid config", "path: .ulis/ulis.yaml"]);
+    expect(logger.infoLogs).not.toContain("[info] source ready");
   });
 
   it("rejects when child process exits non-zero", async () => {

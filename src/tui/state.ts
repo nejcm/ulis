@@ -26,21 +26,6 @@ export type SourceMode = "project" | "global" | "custom";
 export type DestinationMode = "project" | "global";
 export type PresetSourceMode = "auto" | "project" | "global" | "bundled";
 export type TuiPreferenceScope = TuiFlow;
-export type TuiPlanItem =
-  | "Preset layers"
-  | "Preset sources"
-  | "Base source"
-  | "Platforms"
-  | "Install destination"
-  | "Backup"
-  | "Prune removed agents and skills"
-  | "Use latest build output"
-  | "Run preset extensions"
-  | "Skip external skills"
-  | "Validate"
-  | "Build only"
-  | "Install"
-  | "Back to start";
 
 export interface PlannedSource {
   readonly sourceDir: string;
@@ -109,33 +94,37 @@ type NavigationDirection = "up" | "down";
 const KEY_DUPLICATE_WINDOW_MS = 35;
 let lastKeyEvent: { readonly id: string; readonly at: number } | undefined;
 
-export const DASHBOARD_ITEMS: readonly TuiPlanItem[] = [
+export const DASHBOARD_ITEMS = [
   "Preset layers",
   "Base source",
   "Platforms",
   "Install destination",
-  "Backup",
+  "Skip external skills",
   "Prune removed agents and skills",
   "Use latest build output",
-  "Skip external skills",
+  "Backup",
   "Validate",
   "Build only",
   "Install",
   "Back to start",
 ] as const;
+const DASHBOARD_BREAKS = [3, 7, 10];
 
-const PRESET_ONLY_PLAN_ITEMS: readonly TuiPlanItem[] = [
+const PRESET_ONLY_PLAN_ITEMS = [
   "Preset sources",
   "Platforms",
   "Install destination",
-  "Backup",
-  "Prune removed agents and skills",
   "Run preset extensions",
   "Skip external skills",
+  "Prune removed agents and skills",
+  "Backup",
   "Validate",
   "Install",
   "Back to start",
 ] as const;
+const PRESET_ONLY_BREAKS = [2, 6, 8];
+
+export type TuiPlanItem = (typeof DASHBOARD_ITEMS)[number] | (typeof PRESET_ONLY_PLAN_ITEMS)[number];
 
 export const FLOW_ITEMS = [
   "Update this project",
@@ -356,6 +345,10 @@ function nextPresetSourceMode(mode: PresetSourceMode): PresetSourceMode {
 
 export function planItems(state: TuiState): readonly TuiPlanItem[] {
   return state.flow === "presetsOnly" ? PRESET_ONLY_PLAN_ITEMS : DASHBOARD_ITEMS;
+}
+
+export function planItemsBreaks(state: TuiState): readonly number[] {
+  return state.flow === "presetsOnly" ? PRESET_ONLY_BREAKS : DASHBOARD_BREAKS;
 }
 
 export function flowPreferencesFromState(state: TuiState): TuiFlowPreferences {

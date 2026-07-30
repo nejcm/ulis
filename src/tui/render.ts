@@ -16,10 +16,12 @@ import {
   visiblePresetChoices,
   type TuiState,
   type TuiPlanItem,
+  planItemsBreaks,
 } from "./state.js";
 
 interface UiLine {
   readonly text: string;
+  readonly logTag?: LogTag;
   readonly value?: string;
   readonly inlineValue?: string;
   readonly fgColor?: Color;
@@ -27,8 +29,13 @@ interface UiLine {
   readonly indent?: number;
 }
 
-const CARD_MAX_WIDTH = 104;
-const PLAN_DIVIDER = "-".repeat(CARD_MAX_WIDTH - 6);
+interface LogTag {
+  readonly text: string;
+  readonly fgColor: Color;
+}
+
+const CARD_MAX_WIDTH = 88;
+const PLAN_DIVIDER = "-".repeat(CARD_MAX_WIDTH - 3);
 const TITLE = [
   " _   _ _     ___ ____  ",
   "| | | | |   |_ _/ ___| ",
@@ -120,11 +127,10 @@ function renderFlowSelection(state: TuiState) {
 function renderPlan(state: TuiState) {
   const plan = planSource(state);
   const items = planItems(state);
+  const breaks = planItemsBreaks(state);
   const rows: UiLine[] = items.flatMap((label, index) => {
     const row = planActionLine(state, label, index);
-    const shouldBreak =
-      label === "Platforms" || label === "Use latest build output" || label === "Run preset extensions";
-    return shouldBreak ? [row, { text: "" }] : [row];
+    return breaks.includes(index) ? [row, { text: "" }] : [row];
   });
   const presetLabel = state.flow === "presetsOnly" ? "Preset sources" : "Preset layers";
   const overviewLines: UiLine[] = [
@@ -251,6 +257,20 @@ function renderCustomSource(state: TuiState, handlers?: CustomSourceHandlers) {
 }
 
 function renderUiLine(line: UiLine): Node {
+  if (line.logTag != null) {
+    return HStack(
+      {
+        width: "100%",
+        padding: { x: 1 + (line.indent ?? 0) },
+        alignItems: "start",
+        justifyContent: "start",
+      },
+      [
+        Text(line.logTag.text, { bold: true, fgColor: line.logTag.fgColor }),
+        VStack({ flex: 1, alignItems: "stretch" }, [Text(` ${line.text || " "}`, { wrap: "word" })]),
+      ],
+    );
+  }
   if (line.inlineValue != null) {
     return HStack(
       {
@@ -516,7 +536,16 @@ function renderPresetInstallReview(state: TuiState) {
 function renderLogLines(state: TuiState): UiLine[] {
   const recent = state.logs.slice(-40);
   if (recent.length === 0) return [{ text: "Waiting for log output...", fgColor: "color08" }];
-  return recent.map((entry) => ({ text: entry }));
+  return recent.map((entry) => splitLogTag(entry));
+}
+
+export function splitLogTag(entry: string): Pick<UiLine, "text" | "logTag"> {
+  const match = entry.match(/^\[(info|done|warn|error)\]\s*([\s\S]*)$/u);
+  if (!match) return { text: entry };
+
+  const [, level, text] = match;
+  const fgColor = { info: "color06", done: "color02", warn: "color03", error: "color01" }[level] as Color;
+  return { text, logTag: { text: `[${level}]`, fgColor } };
 }
 
 function renderCard(title: string, subtitle: string, lines: readonly UiLine[]) {
