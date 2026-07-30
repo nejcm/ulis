@@ -20,11 +20,17 @@ import {
 
 interface UiLine {
   readonly text: string;
+  readonly logTag?: LogTag;
   readonly value?: string;
   readonly inlineValue?: string;
   readonly fgColor?: Color;
   readonly bold?: boolean;
   readonly indent?: number;
+}
+
+interface LogTag {
+  readonly text: string;
+  readonly fgColor: Color;
 }
 
 const CARD_MAX_WIDTH = 104;
@@ -251,6 +257,20 @@ function renderCustomSource(state: TuiState, handlers?: CustomSourceHandlers) {
 }
 
 function renderUiLine(line: UiLine): Node {
+  if (line.logTag != null) {
+    return HStack(
+      {
+        width: "100%",
+        padding: { x: 1 + (line.indent ?? 0) },
+        alignItems: "start",
+        justifyContent: "start",
+      },
+      [
+        Text(line.logTag.text, { bold: true, fgColor: line.logTag.fgColor }),
+        VStack({ flex: 1, alignItems: "stretch" }, [Text(` ${line.text || " "}`, { wrap: "word" })]),
+      ],
+    );
+  }
   if (line.inlineValue != null) {
     return HStack(
       {
@@ -516,7 +536,16 @@ function renderPresetInstallReview(state: TuiState) {
 function renderLogLines(state: TuiState): UiLine[] {
   const recent = state.logs.slice(-40);
   if (recent.length === 0) return [{ text: "Waiting for log output...", fgColor: "color08" }];
-  return recent.map((entry) => ({ text: entry }));
+  return recent.map((entry) => splitLogTag(entry));
+}
+
+export function splitLogTag(entry: string): Pick<UiLine, "text" | "logTag"> {
+  const match = entry.match(/^\[(info|done|warn|error)\]\s*([\s\S]*)$/u);
+  if (!match) return { text: entry };
+
+  const [, level, text] = match;
+  const fgColor = { info: "color06", done: "color02", warn: "color03", error: "color01" }[level] as Color;
+  return { text, logTag: { text: `[${level}]`, fgColor } };
 }
 
 function renderCard(title: string, subtitle: string, lines: readonly UiLine[]) {

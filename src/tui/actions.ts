@@ -145,14 +145,12 @@ async function runActionInChildProcess(
 
     const stdout = runtimeDependencies.createInterface({ input: child.stdout });
     stdout.on("line", (line) => {
-      const text = stripAnsi(line).trim();
-      if (text.length > 0) logger.dim(text);
+      forwardChildLogLine(logger, line, "info");
     });
 
     const stderr = runtimeDependencies.createInterface({ input: child.stderr });
     stderr.on("line", (line) => {
-      const text = stripAnsi(line).trim();
-      if (text.length > 0) logger.warn(text);
+      forwardChildLogLine(logger, line, "warn");
     });
 
     child.on("error", (error) => reject(error));
@@ -172,6 +170,19 @@ function throwIfAborted(signal: AbortSignal | undefined, action: Exclude<TuiActi
 
 function stripAnsi(value: string): string {
   return value.replace(/\u001b\[[0-9;]*m/gu, "");
+}
+
+function forwardChildLogLine(logger: Logger, line: string, fallback: "info" | "warn"): void {
+  const text = stripAnsi(line).trim();
+  if (text.length === 0) return;
+
+  const match = text.match(/^\[(info|done|warn|error)\]\s*(.*)$/u);
+  const level = match?.[1] ?? fallback;
+  const message = match?.[2] ?? text;
+  if (level === "done") logger.success(message);
+  else if (level === "warn") logger.warn(message);
+  else if (level === "error") logger.error(message);
+  else logger.info(message);
 }
 
 export const __test = {
