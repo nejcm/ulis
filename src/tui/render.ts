@@ -16,6 +16,7 @@ import {
   visiblePresetChoices,
   type TuiState,
   type TuiPlanItem,
+  planItemsBreaks,
 } from "./state.js";
 
 interface UiLine {
@@ -33,8 +34,8 @@ interface LogTag {
   readonly fgColor: Color;
 }
 
-const CARD_MAX_WIDTH = 104;
-const PLAN_DIVIDER = "-".repeat(CARD_MAX_WIDTH - 6);
+const CARD_MAX_WIDTH = 88;
+const PLAN_DIVIDER = "-".repeat(CARD_MAX_WIDTH - 3);
 const TITLE = [
   " _   _ _     ___ ____  ",
   "| | | | |   |_ _/ ___| ",
@@ -126,11 +127,10 @@ function renderFlowSelection(state: TuiState) {
 function renderPlan(state: TuiState) {
   const plan = planSource(state);
   const items = planItems(state);
+  const breaks = planItemsBreaks(state);
   const rows: UiLine[] = items.flatMap((label, index) => {
     const row = planActionLine(state, label, index);
-    const shouldBreak =
-      label === "Platforms" || label === "Use latest build output" || label === "Run preset extensions";
-    return shouldBreak ? [row, { text: "" }] : [row];
+    return breaks.includes(index) ? [row, { text: "" }] : [row];
   });
   const presetLabel = state.flow === "presetsOnly" ? "Preset sources" : "Preset layers";
   const overviewLines: UiLine[] = [
