@@ -1162,7 +1162,6 @@ describe("runInstall", () => {
     for (const [platform, configDir, agentPath, skillPath] of layouts) {
       const generatedRoot = join(outputDir, platform);
       const nativeAgentPath = platform === "forgecode" ? agentPath.slice(".forge/".length) : agentPath;
-      const nativeSkillPath = platform === "forgecode" ? skillPath.slice(".forge/".length) : skillPath;
       write(join(projectDir, configDir, ...nativeAgentPath.split("/")), "User-modified managed agent.\n");
       rmSync(join(generatedRoot, ...agentPath.split("/")));
       rmSync(join(generatedRoot, ...skillPath.split("/")), { recursive: true });
