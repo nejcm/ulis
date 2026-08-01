@@ -146,6 +146,12 @@ describe("Claude generator", () => {
     const mcp = JSON.parse(get(m, ".claude.json"));
     expect(mcp.mcpServers).toHaveProperty("test-local");
     expect(mcp.mcpServers).toHaveProperty("test-remote");
+    expect(mcp.mcpServers["test-local"]).toEqual({
+      type: "stdio",
+      command: "node",
+      args: ["./mcp-server.js"],
+      env: { API_KEY: "${TEST_API_KEY}" },
+    });
   });
 
   it("emits configured Claude permissions in settings.json", () => {
@@ -350,6 +356,30 @@ describe("Cursor generator", () => {
     const mcp = JSON.parse(get(m, "mcp.json"));
     expect(mcp.mcpServers).toHaveProperty("test-local");
     expect(mcp.mcpServers).toHaveProperty("test-remote");
+  });
+
+  it("preserves a server's disabled flag in mcp.json", () => {
+    const m = runProject("cursor", {
+      ...buildProject(),
+      mcp: {
+        servers: {
+          disabled: {
+            type: "local",
+            command: "npx",
+            disabled: true,
+          },
+        },
+      },
+    });
+
+    expect(JSON.parse(get(m, "mcp.json"))).toEqual({
+      mcpServers: {
+        disabled: {
+          command: "npx",
+          disabled: true,
+        },
+      },
+    });
   });
 
   it("emits permissions.json when Cursor allowlists are configured", () => {

@@ -124,7 +124,7 @@ const defaultRuntimeDependencies: RuntimeDependencies = {
     return spawnSync(command, [...args], options);
   },
   runAsyncCommand(command, args, options) {
-    return runAsyncCommand(command, args, options);
+    return runAsyncCommand(resolveExecutable(command), args, options);
   },
 };
 
@@ -467,7 +467,6 @@ async function installSkills(
       const result = await runSkillCommand("npx", npxArgs, {
         stdio: ["ignore", "pipe", "pipe"],
         cwd: installBaseDir,
-        shell: process.platform === "win32",
         signal,
       });
       throwIfAborted(signal);
@@ -539,7 +538,6 @@ async function installExtensions(
     const result = await runSkillCommand(runner, args, {
       stdio: ["ignore", "pipe", "pipe"],
       cwd: installBaseDir,
-      shell: process.platform === "win32",
       signal,
     });
     throwIfAborted(signal);
@@ -577,12 +575,18 @@ export function resolveRunner({
 }
 
 function commandExists(command: string): boolean {
-  const lookupCommand = process.platform === "win32" ? "where" : "which";
+  const lookupCommand = process.platform === "win32" ? "where.exe" : "which";
   const result = runCommand(lookupCommand, [command], {
     stdio: "ignore",
-    shell: process.platform === "win32",
   });
   return result.status === 0;
+}
+
+function resolveExecutable(command: string): string {
+  if (process.platform === "win32" && (command === "npx" || command === "bunx")) {
+    return `${command}.cmd`;
+  }
+  return command;
 }
 
 function formatCommandFailure(result: { stdout?: unknown; stderr?: unknown; status?: unknown; error?: Error }): string {
