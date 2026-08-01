@@ -749,7 +749,7 @@ describe("runInstall", () => {
     expect(skillsCommands[0]!.args).not.toContain("opencode");
     expect(skillsCommands[0]!.args).not.toContain("claude-code");
     expect(skillsCommands[0]!.args).not.toContain("cursor");
-    expect(shellOptions).toEqual([undefined]);
+    expect(shellOptions).toEqual([true]);
   });
 
   it("skips external skill installs when installSkills is false", async () => {
@@ -1961,7 +1961,7 @@ describe("runPresetInstall", () => {
     expect(commands.some((call) => call.command === "npx" && call.args.includes("preset-extension@latest"))).toBe(
       false,
     );
-    expect(shellOptions).toEqual([undefined, undefined]);
+    expect(shellOptions).toEqual([true, true]);
   });
 
   it("writes Claude MCP servers to <home>/.claude.json on a global preset install", async () => {

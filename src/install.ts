@@ -467,6 +467,7 @@ async function installSkills(
       const result = await runSkillCommand("npx", npxArgs, {
         stdio: ["ignore", "pipe", "pipe"],
         cwd: installBaseDir,
+        shell: process.platform === "win32",
         signal,
       });
       throwIfAborted(signal);
@@ -538,6 +539,7 @@ async function installExtensions(
     const result = await runSkillCommand(runner, args, {
       stdio: ["ignore", "pipe", "pipe"],
       cwd: installBaseDir,
+      shell: process.platform === "win32",
       signal,
     });
     throwIfAborted(signal);
