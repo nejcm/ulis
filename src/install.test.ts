@@ -719,13 +719,15 @@ describe("runInstall", () => {
     write(join(sourceDir, "skills.yaml"), ['"*":', "  skills:", "    - name: test/skill", ""].join("\n"));
 
     const commands: Array<{ command: string; args: readonly string[] }> = [];
+    const shellOptions: Array<boolean | string | undefined> = [];
     __test.setRuntimeDependencies({
       runCommand(command, args) {
         commands.push({ command, args });
         return { status: 0, stdout: "", stderr: "" } as never;
       },
-      async runAsyncCommand(command, args) {
+      async runAsyncCommand(command, args, options) {
         commands.push({ command, args });
+        shellOptions.push(options.shell);
         return { status: 0, stdout: "", stderr: "" };
       },
     });
@@ -747,6 +749,7 @@ describe("runInstall", () => {
     expect(skillsCommands[0]!.args).not.toContain("opencode");
     expect(skillsCommands[0]!.args).not.toContain("claude-code");
     expect(skillsCommands[0]!.args).not.toContain("cursor");
+    expect(shellOptions).toEqual([true]);
   });
 
   it("skips external skill installs when installSkills is false", async () => {
@@ -1929,13 +1932,15 @@ describe("runPresetInstall", () => {
     );
 
     const commands: Array<{ command: string; args: readonly string[] }> = [];
+    const shellOptions: Array<boolean | string | undefined> = [];
     __test.setRuntimeDependencies({
       runCommand(command, args) {
         commands.push({ command, args });
         return { status: 0, stdout: "", stderr: "" } as never;
       },
-      async runAsyncCommand(command, args) {
+      async runAsyncCommand(command, args, options) {
         commands.push({ command, args });
+        shellOptions.push(options.shell);
         return { status: 0, stdout: "", stderr: "" };
       },
     });
@@ -1956,6 +1961,7 @@ describe("runPresetInstall", () => {
     expect(commands.some((call) => call.command === "npx" && call.args.includes("preset-extension@latest"))).toBe(
       false,
     );
+    expect(shellOptions).toEqual([true, true]);
   });
 
   it("writes Claude MCP servers to <home>/.claude.json on a global preset install", async () => {
@@ -1985,7 +1991,7 @@ describe("runPresetInstall", () => {
     expect(existsSync(join(userHome, ".claude.json"))).toBe(true);
     expect(existsSync(join(userHome, ".mcp.json"))).toBe(false);
     expect(JSON.parse(read(join(userHome, ".claude.json")))).toEqual({
-      mcpServers: { shared: { command: "node", args: ["server.js"] } },
+      mcpServers: { shared: { type: "stdio", command: "node", args: ["server.js"] } },
     });
   });
 

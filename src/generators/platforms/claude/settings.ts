@@ -5,18 +5,20 @@ function buildMcpBlock(mcp: ProjectBundle["mcp"]): Record<string, unknown> {
   const mcpServers: Record<string, unknown> = {};
   for (const [name, server] of mcpServersFor(mcp, "claude")) {
     if (server.type === "local") {
-      const entry: Record<string, unknown> = {};
+      const entry: Record<string, unknown> = { type: "stdio" };
       const { command, args } = normalizeLocalMcpCommand(server, "claude");
       if (command) entry.command = command;
       if (args) entry.args = args;
       const env = translateEnvMap(server.env, "claude");
       if (env) entry.env = env;
+      if (server.disabled !== undefined) entry.disabled = server.disabled;
       mcpServers[name] = entry;
     } else if (server.url) {
       const transportType = server.transport ?? "http";
       const entry: Record<string, unknown> = { type: transportType, url: server.url };
       const headers = translateEnvMap(server.headers, "claude");
       if (headers) entry.headers = headers;
+      if (server.disabled !== undefined) entry.disabled = server.disabled;
       mcpServers[name] = entry;
     }
   }

@@ -10,11 +10,13 @@ export function buildCursorConfigArtifacts(project: ProjectBundle): FileArtifact
       const entry: Record<string, unknown> = { url: server.url };
       const headers = translateEnvMap(server.headers, "cursor");
       if (headers) entry.headers = headers;
+      if (server.disabled !== undefined) entry.disabled = server.disabled;
       mcpServers[name] = entry;
     } else if (server.type === "local") {
       const entry: Record<string, unknown> = {};
       if (server.command) entry.command = server.command;
       if (server.args) entry.args = server.args;
+      if (server.disabled !== undefined) entry.disabled = server.disabled;
       mcpServers[name] = entry;
     }
   }

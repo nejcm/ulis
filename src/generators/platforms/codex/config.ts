@@ -73,6 +73,7 @@ export function buildCodexConfigToml(project: ProjectBundle): string {
         const args = server.args.map((a) => toTomlString(translateEnvVar(a, "codex"))).join(", ");
         lines.push(`args = [${args}]`);
       }
+      if (server.disabled !== undefined) lines.push(`disabled = ${server.disabled}`);
       if (server.env) {
         lines.push("");
         lines.push(`[mcp_servers.${name}.env]`);
@@ -85,12 +86,14 @@ export function buildCodexConfigToml(project: ProjectBundle): string {
       lines.push(`[mcp_servers.${name}]`);
       lines.push(`url = ${toTomlString(server.url)}`);
       for (const headerLine of codexHttpHeaderLines(server.headers)) lines.push(headerLine);
+      if (server.disabled !== undefined) lines.push(`disabled = ${server.disabled}`);
       lines.push("");
     } else if (server.localFallback) {
       lines.push(`[mcp_servers.${name}]`);
       lines.push(`command = ${toTomlString(server.localFallback.command)}`);
       const args = server.localFallback.args.map((a) => toTomlString(translateEnvVar(a, "codex"))).join(", ");
       lines.push(`args = [${args}]`);
+      if (server.disabled !== undefined) lines.push(`disabled = ${server.disabled}`);
       lines.push("");
     }
   }

@@ -414,6 +414,19 @@ describe("McpConfigSchema", () => {
     expect(result.servers.context7.url).toBe("https://mcp.example.com");
   });
 
+  it("preserves Cursor's disabled MCP flag", () => {
+    const result = McpConfigSchema.parse({
+      servers: {
+        browser: {
+          type: "local",
+          command: "npx",
+          disabled: true,
+        },
+      },
+    });
+    expect(result.servers.browser.disabled).toBe(true);
+  });
+
   it("rejects server with invalid type", () => {
     expect(() =>
       McpConfigSchema.parse({
