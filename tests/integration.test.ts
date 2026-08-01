@@ -154,6 +154,31 @@ describe("Claude generator", () => {
     });
   });
 
+  it("preserves a server's disabled flag in .claude.json", () => {
+    const m = runProject("claude", {
+      ...buildProject(),
+      mcp: {
+        servers: {
+          disabled: {
+            type: "local",
+            command: "node",
+            disabled: true,
+          },
+        },
+      },
+    });
+
+    expect(JSON.parse(get(m, ".claude.json"))).toEqual({
+      mcpServers: {
+        disabled: {
+          type: "stdio",
+          command: "node",
+          disabled: true,
+        },
+      },
+    });
+  });
+
   it("emits configured Claude permissions in settings.json", () => {
     const m = runProject("claude", {
       ...buildProject(),
@@ -247,6 +272,23 @@ describe("Codex generator", () => {
 
   it("generates config.toml with mcp_servers", () => {
     expect(get(m, "config.toml")).toContain("[mcp_servers.test-local]");
+  });
+
+  it("preserves a server's disabled flag in config.toml", () => {
+    const config = runProject("codex", {
+      ...buildProject(),
+      mcp: {
+        servers: {
+          disabled: {
+            type: "local",
+            command: "node",
+            disabled: true,
+          },
+        },
+      },
+    });
+
+    expect(get(config, "config.toml")).toContain('[mcp_servers.disabled]\ncommand = "node"\ndisabled = true');
   });
 
   it("does not emit implicit root config defaults", () => {
