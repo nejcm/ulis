@@ -32,7 +32,7 @@ The canonical source tree lives in `.ulis/` (or `~/.ulis/` in global mode).
 - `skills/`: one directory per skill with `SKILL.md` and optional assets.
 - `commands/`: slash command content copied into generated output.
 - `rules/`: Markdown rule files, including nested folders, compiled to native rule formats where supported.
-- `raw/`: common and platform-specific fragments merged into generated output (see [Raw overrides](#raw-overrides)).
+- `raw/`: shared and platform-specific fragments merged into generated output (see [Raw overrides](#raw-overrides)).
 
 For full file examples, see [Examples](./examples.md).
 
@@ -42,9 +42,9 @@ Files placed under `raw/` are merged into the generated output after each platfo
 
 ```text
 raw/
-├── common/          # applied to every platform
+├── all/             # applied to every platform
 │   └── AGENTS.md
-└── opencode/        # platform-specific, applied after common
+└── opencode/        # platform-specific, applied after all
     └── opencode.json
 ```
 
@@ -76,6 +76,8 @@ Supported merge formats: `.json`, `.toml`, `.yaml` / `.yml`.
 After build, `generated/opencode/opencode.json` will contain all generated MCP servers **plus** `my-server`, and `model` will be `anthropic/opus`.
 
 If a merge fails (e.g. malformed TOML), ULIS logs a warning and copies the raw file as-is so the build always completes.
+
+The shared directory is `raw/all/`. The legacy `raw/common/` directory is no longer recognized and must be renamed.
 
 ## Generated output
 

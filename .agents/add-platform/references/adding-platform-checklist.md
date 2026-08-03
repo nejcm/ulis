@@ -75,7 +75,7 @@ Inspect the reference tree under `example/`.
 Usually relevant:
 
 - `example/raw/README.md`
-- `example/raw/common/`
+- `example/raw/all/`
 - `example/raw/<platform>/`
 - `example/skills.yaml`
 - `example/plugins.yaml`
@@ -86,7 +86,7 @@ Questions to answer:
 - Should docs mention the new platform in generated output examples?
 - Does the example config need new per-platform keys?
 
-Reminder: `raw/common/` is injected into every generated platform output, while `raw/<platform>/` is target-specific.
+Reminder: `raw/all/` is injected into every generated platform output, while `raw/<platform>/` is target-specific. The legacy `raw/common/` directory is no longer recognized.
 
 ## 7. Update Documentation
 

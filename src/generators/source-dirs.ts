@@ -7,8 +7,5 @@ export function sourceDirs(project: ProjectBundle): readonly string[] {
 }
 
 export function rawDirs(project: ProjectBundle, platform: string): readonly string[] {
-  return sourceDirs(project).flatMap((sourceDir) => [
-    join(sourceDir, "raw", "common"),
-    join(sourceDir, "raw", platform),
-  ]);
+  return sourceDirs(project).flatMap((sourceDir) => [join(sourceDir, "raw", "all"), join(sourceDir, "raw", platform)]);
 }
