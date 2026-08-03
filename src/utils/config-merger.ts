@@ -169,11 +169,9 @@ export function writeMergeableConfig(filePath: string, value: unknown): void {
 
 function mergeOrCopyFile(srcFile: string, destFile: string): void {
   if (!fileExists(destFile) || !isMergeable(destFile)) {
-    writeFile(destFile, readFile(srcFile));
+    cpSync(srcFile, destFile);
     return;
   }
-
-  const rawContent = readFile(srcFile);
 
   try {
     const generated = readMergeableConfig(destFile);
@@ -181,7 +179,7 @@ function mergeOrCopyFile(srcFile: string, destFile: string): void {
     writeMergeableConfig(destFile, mergeConfigValues(generated, raw));
   } catch (err) {
     console.warn(`[config-merger] merge failed for ${destFile}: ${err}. Copying raw file as-is.`);
-    writeFile(destFile, rawContent);
+    cpSync(srcFile, destFile);
   }
 }
 

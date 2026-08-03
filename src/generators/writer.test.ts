@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { join } from "node:path";
 
 import { createTempRoot, readTextFile, writeTextFile } from "../test-utils/fs.js";
@@ -159,6 +160,72 @@ describe("writeResult", () => {
       nested: { keepGenerated: true, keepRaw: true, replace: "raw" },
       raw: true,
     });
+  });
+
+  it("copies nested raw files verbatim, including binary reference files", () => {
+    const root = createTempRoot("ulis-writer-");
+    const outDir = join(root, "out");
+    const rawDir = join(root, "raw", "all");
+    const referencePath = join(rawDir, "references", "manual.bin");
+    const referenceBytes = Buffer.from([0, 255, 1, 128, 42]);
+
+    mkdirSync(dirname(referencePath), { recursive: true });
+    writeFileSync(referencePath, referenceBytes);
+
+    writeResult(
+      {
+        artifacts: [],
+        post: { rawDirs: [rawDir], aliasFiles: [], skillDirs: [] },
+      },
+      outDir,
+      "claude",
+    );
+
+    expect(readFileSync(join(outDir, "references", "manual.bin"))).toEqual(referenceBytes);
+  });
+
+  it("replaces an existing generated binary raw file byte-for-byte", () => {
+    const root = createTempRoot("ulis-writer-");
+    const outDir = join(root, "out");
+    const rawDir = join(root, "raw", "all");
+    const referencePath = join(rawDir, "references", "manual.bin");
+    const referenceBytes = Buffer.from([0, 255, 1, 128, 42]);
+
+    mkdirSync(dirname(referencePath), { recursive: true });
+    writeFileSync(referencePath, referenceBytes);
+
+    writeResult(
+      {
+        artifacts: [{ path: "references/manual.bin", contents: "generated" }],
+        post: { rawDirs: [rawDir], aliasFiles: [], skillDirs: [] },
+      },
+      outDir,
+      "claude",
+    );
+
+    expect(readFileSync(join(outDir, "references", "manual.bin"))).toEqual(referenceBytes);
+  });
+
+  it("copies malformed mergeable raw files byte-for-byte after a merge failure", () => {
+    const root = createTempRoot("ulis-writer-");
+    const outDir = join(root, "out");
+    const rawDir = join(root, "raw", "all");
+    const rawConfigPath = join(rawDir, "config.json");
+    const rawBytes = Buffer.from([0x7b, 0xff, 0x7d]);
+
+    mkdirSync(dirname(rawConfigPath), { recursive: true });
+    writeFileSync(rawConfigPath, rawBytes);
+
+    writeResult(
+      {
+        artifacts: [{ path: "config.json", contents: "{}" }],
+        post: { rawDirs: [rawDir], aliasFiles: [], skillDirs: [] },
+      },
+      outDir,
+      "claude",
+    );
+
+    expect(readFileSync(join(outDir, "config.json"))).toEqual(rawBytes);
   });
 
   it("merges raw TOML with replacement semantics", () => {
