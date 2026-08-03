@@ -112,6 +112,10 @@ function seedMissingTomlTables(
   const existingHeaders = new Set(tomlTableHeaders(existingContent).map(({ key }) => key));
   const missingHeaders = tomlTableHeaders(generatedContent)
     .filter(({ kind }) => onlyKind === undefined || kind === onlyKind)
+    // toml-patch cannot patch a newly seeded nested array-of-tables (for
+    // example [[skills.config]]). Without the seed it emits an equivalent
+    // inline array and still preserves the surrounding document.
+    .filter(({ kind, path }) => kind !== "array" || path.length === 1)
     .filter((header) => shouldSeed?.(header) ?? true)
     .filter(({ key }) => !existingHeaders.has(key))
     .map(({ line }) => line);

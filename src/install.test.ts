@@ -327,6 +327,48 @@ describe("runInstall", () => {
     });
   });
 
+  it("merges nested Codex arrays of tables without patching errors", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+
+    write(
+      join(outputDir, "codex", "config.toml"),
+      [
+        "[[skills.config]]",
+        'path = "skills/example/SKILL.md"',
+        "enabled = false",
+        "",
+        "[[skills.config]]",
+        'path = "../.agents/skills/example/SKILL.md"',
+        "enabled = false",
+        "",
+      ].join("\n"),
+    );
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: userHome,
+      userHome,
+      platforms: ["codex"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(readMergeableConfig(join(userHome, ".codex", "config.toml"))).toEqual({
+      skills: {
+        config: [
+          { path: "skills/example/SKILL.md", enabled: false },
+          { path: "../.agents/skills/example/SKILL.md", enabled: false },
+        ],
+      },
+    });
+  });
+
   it("replaces conflicting Codex table and array-of-tables representations", async () => {
     const cases = [
       {
