@@ -6,7 +6,7 @@ Platform-specific source fragments that are injected verbatim into generated con
 
 ```
 raw/
-├── common/     # Injected into every platform's generated output
+├── all/        # Injected into every platform's generated output
 ├── claude/     # Claude Code-specific injections
 ├── codex/      # Codex-specific injections
 ├── cursor/     # Cursor-specific injections
@@ -20,18 +20,20 @@ During `bun run build`, the build system reads each subdirectory and copies its 
 
 | Source dir       | Destination            |
 | ---------------- | ---------------------- |
-| `raw/common/`    | All platform outputs   |
+| `raw/all/`       | All platform outputs   |
 | `raw/claude/`    | `generated/claude/`    |
 | `raw/codex/`     | `generated/codex/`     |
 | `raw/cursor/`    | `generated/cursor/`    |
 | `raw/opencode/`  | `generated/opencode/`  |
 | `raw/forgecode/` | `generated/forgecode/` |
 
-Files in `raw/common/` are copied to **every** platform's generated directory.
+Files in `raw/all/` are copied to **every** platform's generated directory.
+
+`raw/common/` is no longer recognized. Rename existing `raw/common/` directories to `raw/all/`.
 
 ## Current Files
 
-### `common/AGENTS.md`
+### `all/AGENTS.md`
 
 Cross-platform agent instructions injected into every tool's config. Contains:
 
@@ -48,10 +50,10 @@ Cross-platform agent instructions injected into every tool's config. Contains:
 | New OpenCode slash command                            | `commands/`       |
 | New reusable skill                                    | `skills/`         |
 | Platform-specific config block with no transformation | `raw/<platform>/` |
-| Shared instruction text injected into all platforms   | `raw/common/`     |
+| Shared instruction text injected into all platforms   | `raw/all/`        |
 
 ## Adding a Raw Fragment
 
-1. Create the file in the appropriate subdirectory (`raw/common/`, `raw/claude/`, etc.)
+1. Create the file in the appropriate subdirectory (`raw/all/`, `raw/claude/`, etc.)
 2. Run `bun run build` — the file will be copied into the generated output
 3. Run `bun run install:configs` to deploy

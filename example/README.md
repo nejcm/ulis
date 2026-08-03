@@ -22,4 +22,5 @@ ulis build --source example
 ## Notes
 
 - Generated output goes to `example/generated/<platform>/`.
-- If you need to customize native platform files directly, place them in `raw/common/` or `raw/<platform>/`.
+- If you need to customize native platform files directly, place them in `raw/all/` or `raw/<platform>/`.
+- Existing `raw/common/` directories must be renamed to `raw/all/`; the legacy name is no longer recognized.

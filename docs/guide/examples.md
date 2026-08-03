@@ -26,7 +26,7 @@ This page shows small, copyable examples for each `.ulis/` source type. Put thes
 ├── rules/
 │   └── typescript.md
 └── raw/
-    ├── common/
+    ├── all/
     │   └── AGENTS.md
     ├── opencode/
     │   └── opencode.json
@@ -310,7 +310,7 @@ cursor:
 
 ## Raw Overrides
 
-Raw files are merged after generation. Put shared files under `raw/common/`, and target-specific files under `raw/<platform>/`.
+Raw files are merged after generation. Put shared files under `raw/all/`, and target-specific files under `raw/<platform>/`. The legacy `raw/common/` directory is no longer recognized and must be renamed.
 
 ```json
 // raw/opencode/opencode.json
@@ -336,7 +336,7 @@ network_access = false
 ```
 
 ```markdown
-<!-- raw/common/AGENTS.md -->
+<!-- raw/all/AGENTS.md -->
 
 # Project Instructions
 

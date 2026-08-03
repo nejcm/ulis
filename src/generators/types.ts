@@ -36,7 +36,7 @@ export interface PostEmit {
   readonly skillsDestRelative?: string;
   /**
    * Content to append to files *after* raw-dir merges complete. Used by
-   * platforms that inject a rules index into AGENTS.md (which raw/common may
+   * platforms that inject a rules index into AGENTS.md (which raw/all may
    * have just written). Creates the file if it does not exist.
    */
   readonly appendAfterRaw?: readonly { readonly path: string; readonly content: string }[];
