@@ -1,6 +1,6 @@
 # Agent instructions
 
-## About this repository
+## About
 
 This repo is the source for the `@nejcm/ulis` CLI — a single source of truth for AI tool configs (Claude Code, Codex, OpenCode, Cursor, ForgeCode). The CLI reads a user-owned `.ulis/` tree (project-local) or `~/.ulis/` (global) and generates native configs for each platform.
 
