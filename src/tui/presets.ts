@@ -7,10 +7,11 @@ import { PresetMetaSchema } from "../schema.js";
 import { loadConfigFile } from "../utils/config-loader.js";
 import { bundledPresetsRoot, listPresetDirectories } from "../utils/resolve-presets.js";
 
-interface TuiPresetListOptions {
+export interface TuiPresetListOptions {
   readonly cwd?: string;
   readonly userHome?: string;
   readonly bundledRoot?: string;
+  readonly customRoot?: string;
 }
 
 export function listTuiPresets(options: TuiPresetListOptions = {}): readonly PresetListEntry[] {
@@ -20,6 +21,7 @@ export function listTuiPresets(options: TuiPresetListOptions = {}): readonly Pre
     ...listPresetRoot(join(cwd, ULIS_SOURCE_DIRNAME, ULIS_PRESETS_DIRNAME), "project"),
     ...listPresetRoot(join(userHome, ULIS_SOURCE_DIRNAME, ULIS_PRESETS_DIRNAME), "global"),
     ...listPresetRoot(bundledPresetsRoot(options.bundledRoot), "bundled"),
+    ...(options.customRoot ? listPresetRoot(options.customRoot, "custom") : []),
   ];
 }
 

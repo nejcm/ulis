@@ -226,6 +226,33 @@ describe("TUI text input", () => {
     await harness.renderOnce();
     expect(harness.controller.state.textInput).toBe("/pasted/path");
   });
+
+  it("loads presets from the submitted custom directory", async () => {
+    const requestedRoots: Array<string | undefined> = [];
+    const harness = await createHarness(100, 30, {
+      listPresets: (options) => {
+        requestedRoots.push(options?.customRoot);
+        return options?.customRoot
+          ? [
+              {
+                name: "team",
+                displayName: "Team",
+                description: "",
+                source: "custom",
+                dir: join(options.customRoot, "team"),
+              },
+            ]
+          : [];
+      },
+    });
+
+    await harness.controller.handleEffect({ type: "loadCustomPresetSource", path: "C:\\presets" });
+
+    expect(requestedRoots).toContain("C:\\presets");
+    expect(harness.controller.state.availablePresets).toContainEqual(
+      expect.objectContaining({ name: "team", source: "custom" }),
+    );
+  });
 });
 
 describe("TUI workflow runs", () => {

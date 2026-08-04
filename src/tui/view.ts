@@ -88,6 +88,8 @@ export function buildScreenView(state: TuiState, cwd?: string): ScreenView {
       return sourceView(state);
     case "customSource":
       return customSourceView(state);
+    case "customPresetSource":
+      return customPresetSourceView(state);
     case "presets":
       return presetsView(state);
     case "platforms":
@@ -134,7 +136,9 @@ function planView(state: TuiState, cwd?: string): ScreenView {
 
   const overview: ViewRow[] = [{ kind: "heading", text: "Input" }];
   if (showsPresetSourcePicker(state)) {
-    overview.push(field(`${presetLabel} location`, formatPresetSourceMode(state.presetSourceMode)));
+    overview.push(
+      field(`${presetLabel} location`, formatPresetSourceMode(state.presetSourceMode, state.customPresetSource)),
+    );
   }
   overview.push(field(presetLabel, formatPresets(state)));
   overview.push(
@@ -230,6 +234,22 @@ function customSourceView(state: TuiState): ScreenView {
   };
 }
 
+function customPresetSourceView(state: TuiState): ScreenView {
+  return {
+    title: "Custom preset directory",
+    subtitle: "Type a directory containing preset folders, then press Enter.",
+    breadcrumbs: ["Start", "Install presets only", "Presets", "Custom directory"],
+    panes: [pane("custom-preset-source", "Source", [])],
+    input: {
+      value: state.textInput,
+      placeholder: "Path to a presets directory",
+      focused: true,
+    },
+    notice: notice(state, "Enter scans the directory. Escape cancels."),
+    controls: ["Enter: scan", "Esc: cancel", "Ctrl+V: paste"],
+  };
+}
+
 function presetsView(state: TuiState): ScreenView {
   const rows: ViewRow[] = [];
   const sourceRows = showsPresetSourcePicker(state) ? 1 : 0;
@@ -237,8 +257,11 @@ function presetsView(state: TuiState): ScreenView {
   if (sourceRows === 1) {
     rows.push(
       option(state, 0, "Preset location", {
-        value: formatPresetSourceMode(state.presetSourceMode),
-        description: "Press Enter or Space to cycle where preset folders are searched.",
+        value: formatPresetSourceMode(state.presetSourceMode, state.customPresetSource),
+        description:
+          state.presetSourceMode === "custom"
+            ? "Press Enter to edit the directory, or Space to return to automatic locations."
+            : "Press Space to cycle locations, or Enter to choose a custom directory.",
       }),
       { kind: "blank" },
     );
@@ -290,7 +313,8 @@ function presetsView(state: TuiState): ScreenView {
 function presetSourceHeading(source: string): string {
   if (source === "project") return "Project presets";
   if (source === "global" || source === "user") return "Global presets";
-  return "Bundled presets";
+  if (source === "bundled") return "Bundled presets";
+  return "Custom presets";
 }
 
 function platformsView(state: TuiState): ScreenView {

@@ -53,6 +53,12 @@ export class TuiController {
     this.state = createInitialState();
     this.state.availablePresets = (options.listPresets ?? listTuiPresets)();
     const loadError = loadTuiPreferences(this.state, options.preferencesPath);
+    if (this.state.customPresetSource) {
+      this.state.availablePresets = (options.listPresets ?? listTuiPresets)({
+        customRoot: this.state.customPresetSource,
+      });
+      loadTuiPreferences(this.state, options.preferencesPath);
+    }
     if (loadError) this.state.notice = loadError;
     this.lastSavedPreferences = JSON.stringify(snapshotTuiPreferences(this.state));
 
@@ -105,6 +111,13 @@ export class TuiController {
           await (this.options.runAction ?? runTuiAction)(this.state, pendingAction, logger, { signal });
         }
       });
+      return;
+    }
+
+    if (effect.type === "loadCustomPresetSource") {
+      this.state.availablePresets = (this.options.listPresets ?? listTuiPresets)({ customRoot: effect.path });
+      this.persistPreferences();
+      this.render();
       return;
     }
 

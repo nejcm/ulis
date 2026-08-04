@@ -252,21 +252,66 @@ describe("tui state", () => {
     let now = 1_000;
     Date.now = () => now;
     try {
-      handleTuiKey(state, "enter");
+      handleTuiKey(state, "space");
       expect(state.presetSourceMode).toBe("project");
 
       now += 45;
-      handleTuiKey(state, "enter");
+      handleTuiKey(state, "space");
       expect(state.presetSourceMode).toBe("global");
+
+      state.selectedPresetNames = ["project:team"];
+      expect(selectedPresets(state)).toEqual([]);
+
+      state.selectedPresetNames = ["global:team"];
+      expect(selectedPresets(state)).toEqual([{ name: "team", dir: "/global/team" }]);
+
+      now += 45;
+      handleTuiKey(state, "space");
+      expect(state.presetSourceMode).toBe("bundled");
+
+      now += 45;
+      handleTuiKey(state, "space");
+      expect(state.presetSourceMode).toBe("auto");
     } finally {
       Date.now = originalNow;
     }
+  });
 
-    state.selectedPresetNames = ["project:team"];
-    expect(selectedPresets(state)).toEqual([]);
+  it("opens and loads a custom preset directory from the source picker", () => {
+    const state = createInitialState();
+    state.screen = "presets";
+    state.flow = "presetsOnly";
+    state.presetSourceMode = "bundled";
 
-    state.selectedPresetNames = ["global:team"];
-    expect(selectedPresets(state)).toEqual([{ name: "team", dir: "/global/team" }]);
+    handleTuiKey(state, "enter");
+    expect(state.screen as string).toBe("customPresetSource");
+    expect(state.presetSourceMode as string).toBe("bundled");
+
+    state.textInput = "./team-presets";
+    const { effect } = handleCustomSourceTextInputKey(state, "enter");
+
+    expect(effect).toEqual({ type: "loadCustomPresetSource", path: expect.stringContaining("team-presets") });
+    expect(state.customPresetSource).toContain("team-presets");
+    expect(state.presetSourceMode as string).toBe("custom");
+    expect(state.screen).toBe("presets");
+  });
+
+  it("only switches preset locations with Space", () => {
+    const state = createInitialState();
+    state.screen = "presets";
+    state.flow = "presetsOnly";
+
+    handleTuiKey(state, "enter");
+    expect(state.presetSourceMode).toBe("auto");
+    expect(state.screen as string).toBe("customPresetSource");
+
+    handleCustomSourceTextInputKey(state, "escape");
+
+    handleTuiKey(state, "x");
+    expect(state.presetSourceMode).toBe("auto");
+
+    handleTuiKey(state, "space");
+    expect(state.presetSourceMode).toBe("project");
   });
 
   it("preset-only auto source checks project and global before bundled", () => {

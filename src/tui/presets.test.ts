@@ -34,6 +34,26 @@ describe("listTuiPresets", () => {
       ["global-team", "global", "Global Team"],
     ]);
   });
+
+  it("scans a custom preset root", () => {
+    const customRoot = createTempRoot();
+    writePreset(join(customRoot, "custom-team"), "Custom Team");
+
+    const presets = listTuiPresets({
+      cwd: createTempRoot(),
+      userHome: createTempRoot(),
+      bundledRoot: createTempRoot(),
+      customRoot,
+    });
+
+    expect(presets).toContainEqual({
+      name: "custom-team",
+      source: "custom",
+      displayName: "Custom Team",
+      description: "",
+      dir: join(customRoot, "custom-team"),
+    });
+  });
 });
 
 function writePreset(dir: string, name: string): void {

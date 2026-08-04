@@ -73,6 +73,17 @@ describe("buildScreenView", () => {
     expect(view.input).toMatchObject({ value: "./configs", focused: true });
   });
 
+  it("exposes the custom preset directory input", () => {
+    const state = createInitialState();
+    state.screen = "customPresetSource";
+    state.textInput = "./presets";
+
+    const view = buildScreenView(state);
+
+    expect(view.title).toBe("Custom preset directory");
+    expect(view.input).toMatchObject({ value: "./presets", focused: true });
+  });
+
   it("renders running logs with their status tags", () => {
     const state = createInitialState();
     state.screen = "running";

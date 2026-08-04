@@ -157,7 +157,7 @@ function isDestinationMode(value: unknown): value is DestinationMode {
 }
 
 function isPresetSourceMode(value: unknown): value is PresetSourceMode {
-  return value === "auto" || value === "project" || value === "global" || value === "bundled";
+  return value === "auto" || value === "project" || value === "global" || value === "bundled" || value === "custom";
 }
 
 function isPlatform(value: unknown): value is Platform {
@@ -180,6 +180,9 @@ function sanitizeFlowPreferences(raw: Record<string, unknown>): TuiFlowPreferenc
 
   if (isDestinationMode(raw.destinationMode)) next.destinationMode = raw.destinationMode;
   if (typeof raw.customSource === "string" && raw.customSource.trim()) next.customSource = raw.customSource.trim();
+  if (typeof raw.customPresetSource === "string" && raw.customPresetSource.trim()) {
+    next.customPresetSource = raw.customPresetSource.trim();
+  }
   if (Array.isArray(raw.recentCustomSources)) {
     next.recentCustomSources = [...new Set(raw.recentCustomSources)]
       .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)

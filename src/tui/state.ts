@@ -12,6 +12,7 @@ export type TuiScreen =
   | "plan"
   | "source"
   | "customSource"
+  | "customPresetSource"
   | "presets"
   | "platforms"
   | "missingSource"
@@ -24,7 +25,7 @@ export type TuiAction = "validate" | "presetValidate" | "build" | "install" | "p
 export type TuiFlow = "project" | "global" | "custom" | "presetsOnly";
 export type SourceMode = "project" | "global" | "custom";
 export type DestinationMode = "project" | "global";
-export type PresetSourceMode = "auto" | "project" | "global" | "bundled";
+export type PresetSourceMode = "auto" | "project" | "global" | "bundled" | "custom";
 export type TuiPreferenceScope = TuiFlow;
 
 export interface PlannedSource {
@@ -39,6 +40,7 @@ export interface PlannedSource {
 export interface TuiFlowPreferences {
   readonly destinationMode?: DestinationMode;
   readonly customSource?: string;
+  readonly customPresetSource?: string;
   readonly recentCustomSources?: readonly string[];
   readonly platforms?: readonly Platform[];
   readonly selectedPresetNames?: readonly string[];
@@ -58,6 +60,7 @@ export interface TuiState {
   sourceMode: SourceMode;
   destinationMode: DestinationMode;
   customSource: string;
+  customPresetSource: string;
   recentCustomSources: string[];
   textInput: string;
   platforms: Platform[];
@@ -87,6 +90,7 @@ export type TuiEffect =
   | { readonly type: "cancelRunning" }
   | { readonly type: "start"; readonly action: Exclude<TuiAction, "init"> }
   | { readonly type: "initSource" }
+  | { readonly type: "loadCustomPresetSource"; readonly path: string }
   | { readonly type: "pasteClipboard" };
 
 type NavigationDirection = "up" | "down";
@@ -144,6 +148,7 @@ export function createInitialState(availablePresets: readonly PresetListEntry[] 
     sourceMode: "project",
     destinationMode: "project",
     customSource: "",
+    customPresetSource: "",
     recentCustomSources: [],
     textInput: "",
     platforms: [...PLATFORMS],
@@ -211,10 +216,11 @@ export function formatPresets(state: TuiState): string {
   return presets.length > 0 ? presets.join(", ") : "none";
 }
 
-export function formatPresetSourceMode(mode: PresetSourceMode): string {
+export function formatPresetSourceMode(mode: PresetSourceMode, customPresetSource?: string): string {
   if (mode === "project") return "Project ./.ulis/presets";
   if (mode === "global") return "Global ~/.ulis/presets";
   if (mode === "bundled") return "Bundled presets";
+  if (mode === "custom") return customPresetSource ? `Custom ${customPresetSource}` : "Custom preset directory";
   return "Auto project -> global -> bundled";
 }
 
@@ -277,6 +283,13 @@ export function openCustomSourceInput(state: TuiState): void {
   state.notice = "";
 }
 
+export function openCustomPresetSourceInput(state: TuiState): void {
+  state.textInput = state.customPresetSource;
+  state.screen = "customPresetSource";
+  state.cursor = 0;
+  state.notice = "";
+}
+
 export function togglePresetSelection(selected: readonly string[], presetName: string): string[] {
   return selected.includes(presetName) ? selected.filter((name) => name !== presetName) : [...selected, presetName];
 }
@@ -333,7 +346,8 @@ function comparePresetChoices(a: PresetListEntry, b: PresetListEntry): number {
 function presetSourceRank(source: PresetListEntry["source"]): number {
   if (source === "project") return 0;
   if (source === "global" || source === "user") return 1;
-  return 2;
+  if (source === "bundled") return 2;
+  return 3;
 }
 
 function nextPresetSourceMode(mode: PresetSourceMode): PresetSourceMode {
@@ -366,6 +380,9 @@ export function flowPreferencesFromState(state: TuiState): TuiFlowPreferences {
   };
 
   if (state.flow === "custom" && state.customSource) preferences.customSource = state.customSource;
+  if (state.flow === "presetsOnly" && state.customPresetSource) {
+    preferences.customPresetSource = state.customPresetSource;
+  }
 
   return preferences;
 }
@@ -392,6 +409,9 @@ export function applyFlowPreferences(state: TuiState, flow: TuiFlow = state.flow
   if (flow === "custom" && preferences.customSource) {
     state.customSource = preferences.customSource;
     state.recentCustomSources = rememberCustomSource(state.recentCustomSources, preferences.customSource);
+  }
+  if (flow === "presetsOnly" && preferences.customPresetSource) {
+    state.customPresetSource = preferences.customPresetSource;
   }
 
   if (preferences.platforms) {
@@ -432,17 +452,17 @@ export function handleTuiKey(state: TuiState, key: string): TuiEffect {
   if (state.screen === "running") return isAnyKey(key, "q") ? { type: "cancelRunning" } : { type: "none" };
   if (isDuplicateKeyEvent(key)) return { type: "none" };
 
-  if (isAnyKey(key, "ctrl+c", "q") && state.screen !== "customSource") {
+  if (isAnyKey(key, "ctrl+c", "q") && !isPathInputScreen(state.screen)) {
     return { type: "exit", code: 0 };
   }
 
-  if (isAnyKey(key, "backspace", "delete") && state.screen !== "customSource") {
+  if (isAnyKey(key, "backspace", "delete") && !isPathInputScreen(state.screen)) {
     return navigateBack(state);
   }
 
   // Path row uses the focused input renderable; typing is driven by its change
   // event, not by this root key handler.
-  if (state.screen === "customSource" && state.cursor === 0) {
+  if (isPathInputScreen(state.screen) && state.cursor === 0) {
     return { type: "none" };
   }
 
@@ -455,6 +475,8 @@ export function handleTuiKey(state: TuiState, key: string): TuiEffect {
       return handleSourceKey(state, key);
     case "customSource":
       return handleCustomSourceListKey(state, key);
+    case "customPresetSource":
+      return handleCustomPresetSourceListKey(state, key);
     case "presets":
       return handlePresetsKey(state, key);
     case "platforms":
@@ -674,26 +696,28 @@ function handleSourceKey(state: TuiState, key: string): TuiEffect {
 /** Called from TextInput `onKeyPress` when editing the custom path (cursor on path row). */
 export function handleCustomSourceTextInputKey(state: TuiState, key: string): CustomSourceTextInputKeyResult {
   key = normalizeKey(key);
-  if (state.screen !== "customSource" || state.cursor !== 0) {
+  if (!isPathInputScreen(state.screen) || state.cursor !== 0) {
     return { effect: { type: "none" }, preventDefault: false };
   }
 
   const direction = getArrowNavigationDirection(key);
-  if (direction) {
+  if (direction && state.screen === "customSource") {
     moveCursor(state, key, state.recentCustomSources.length);
     state.notice = "";
     return { effect: { type: "none" }, preventDefault: true };
   }
 
   if (isAnyKey(key, "escape")) {
-    state.screen = "source";
-    state.cursor = 2;
+    state.screen = state.screen === "customPresetSource" ? "presets" : "source";
+    state.cursor = state.screen === "presets" ? 0 : 2;
     return { effect: { type: "none" }, preventDefault: true };
   }
 
   if (isConfirmKey(key)) {
-    commitCustomSourceIfValid(state);
-    return { effect: { type: "none" }, preventDefault: true };
+    const effect =
+      state.screen === "customPresetSource" ? commitCustomPresetSourceIfValid(state) : { type: "none" as const };
+    if (state.screen === "customSource") commitCustomSourceIfValid(state);
+    return { effect, preventDefault: true };
   }
 
   return { effect: { type: "none" }, preventDefault: false };
@@ -701,7 +725,7 @@ export function handleCustomSourceTextInputKey(state: TuiState, key: string): Cu
 
 /** Sync the editor value from the input renderable's change event on the custom path screen. */
 export function applyCustomSourceTextInputChange(state: TuiState, value: string): void {
-  if (state.screen !== "customSource") return;
+  if (!isPathInputScreen(state.screen)) return;
   state.textInput = value;
   state.cursor = 0;
   state.notice = "";
@@ -723,6 +747,21 @@ function commitCustomSourceIfValid(state: TuiState): boolean {
   state.cursor = 0;
   state.notice = "";
   return true;
+}
+
+function commitCustomPresetSourceIfValid(state: TuiState): TuiEffect {
+  const rawValue = state.textInput.trim();
+  if (!rawValue) {
+    state.notice = "Enter a custom preset directory first.";
+    return { type: "none" };
+  }
+  const value = resolve(rawValue);
+  state.customPresetSource = value;
+  state.presetSourceMode = "custom";
+  state.screen = "presets";
+  state.cursor = 0;
+  state.notice = "";
+  return { type: "loadCustomPresetSource", path: value };
 }
 
 function handleCustomSourceListKey(state: TuiState, key: string): TuiEffect {
@@ -755,6 +794,14 @@ function handleCustomSourceListKey(state: TuiState, key: string): TuiEffect {
   return { type: "none" };
 }
 
+function handleCustomPresetSourceListKey(state: TuiState, key: string): TuiEffect {
+  if (isAnyKey(key, "escape")) {
+    state.screen = "presets";
+    state.cursor = 0;
+  }
+  return { type: "none" };
+}
+
 function handlePresetsKey(state: TuiState, key: string): TuiEffect {
   const presets = visiblePresetChoices(state);
   const sourceRows = showsPresetSourcePicker(state) ? 1 : 0;
@@ -765,7 +812,11 @@ function handlePresetsKey(state: TuiState, key: string): TuiEffect {
   if (!isConfirmKey(key) && !isToggleKey(key)) return { type: "none" };
 
   if (sourceRows === 1 && state.cursor === 0) {
-    state.presetSourceMode = nextPresetSourceMode(state.presetSourceMode);
+    if (isAnyKey(key, " ", "space")) {
+      state.presetSourceMode = nextPresetSourceMode(state.presetSourceMode);
+    } else if (isConfirmKey(key)) {
+      openCustomPresetSourceInput(state);
+    }
     state.notice = "";
   } else if (state.cursor >= sourceRows && state.cursor < presets.length + sourceRows) {
     const preset = presets[state.cursor - sourceRows];
@@ -780,6 +831,10 @@ function handlePresetsKey(state: TuiState, key: string): TuiEffect {
     state.notice = "";
   }
   return { type: "none" };
+}
+
+function isPathInputScreen(screen: TuiScreen): boolean {
+  return screen === "customSource" || screen === "customPresetSource";
 }
 
 function handlePlatformsKey(state: TuiState, key: string): TuiEffect {

@@ -268,7 +268,7 @@ export class TuiApp {
     this.renderer.keyInput.on("paste", this.onPaste);
     this.inputField.on(InputRenderableEvents.INPUT, (value: string) => {
       const { state } = this.options;
-      if (state.screen !== "customSource" || state.cursor !== 0) return;
+      if (!isPathInputScreen(state) || state.cursor !== 0) return;
       if (state.textInput === value) return;
       applyCustomSourceTextInputChange(state, value);
       this.commit();
@@ -293,7 +293,7 @@ export class TuiApp {
     }
 
     const { state } = this.options;
-    if (state.screen === "customSource" && state.cursor === 0) {
+    if (isPathInputScreen(state) && state.cursor === 0) {
       if (key === "ctrl+v" || key === "meta+v" || key === "cmd+v") {
         event.preventDefault();
         this.pasteFromClipboard();
@@ -319,7 +319,7 @@ export class TuiApp {
       return;
     }
     const { state } = this.options;
-    if (state.screen !== "customSource") return;
+    if (!isPathInputScreen(state)) return;
     event.preventDefault();
     const text = new TextDecoder().decode(event.bytes);
     if (!appendTextInput(state, text)) {
@@ -342,7 +342,7 @@ export class TuiApp {
   private activateRow(index: number): void {
     const { state } = this.options;
     state.cursor = index;
-    if (state.screen === "customSource" && index === 0) {
+    if (isPathInputScreen(state) && index === 0) {
       this.commit();
       return;
     }
@@ -589,6 +589,10 @@ export class TuiApp {
 
     return container;
   }
+}
+
+function isPathInputScreen(state: TuiState): boolean {
+  return state.screen === "customSource" || state.screen === "customPresetSource";
 }
 
 /** Maps an OpenTUI key event onto the plain key strings `state.ts` understands. */
