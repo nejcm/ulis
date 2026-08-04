@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -30,7 +30,7 @@ interface Harness extends TestRendererSetup {
 async function createHarness(
   width = 100,
   height = 30,
-  options: Omit<TuiControllerOptions, "exit" | "preferencesPath"> = {},
+  options: Omit<TuiControllerOptions, "exit"> = {},
 ): Promise<Harness> {
   const setup = await createTestRenderer({ width, height });
   activeRenderers.push(setup.renderer);
@@ -38,7 +38,7 @@ async function createHarness(
   const controller = new TuiController(setup.renderer, {
     exit: (code) => exitCodes.push(code),
     listPresets: () => [],
-    preferencesPath: preferencesPath(),
+    preferencesPath: options.preferencesPath ?? preferencesPath(),
     ...options,
   });
   controller.render();
@@ -225,6 +225,87 @@ describe("TUI text input", () => {
     harness.controller.render();
     await harness.renderOnce();
     expect(harness.controller.state.textInput).toBe("/pasted/path");
+  });
+
+  it("loads presets from the submitted custom directory", async () => {
+    const requestedRoots: Array<string | undefined> = [];
+    const harness = await createHarness(100, 30, {
+      listPresets: (options) => {
+        requestedRoots.push(options?.customRoot);
+        return options?.customRoot
+          ? [
+              {
+                name: "team",
+                displayName: "Team",
+                description: "",
+                source: "custom",
+                dir: join(options.customRoot, "team"),
+              },
+            ]
+          : [];
+      },
+    });
+
+    await harness.controller.handleEffect({ type: "loadCustomPresetSource", path: "C:\\presets" });
+
+    expect(requestedRoots).toContain("C:\\presets");
+    expect(harness.controller.state.availablePresets).toContainEqual(
+      expect.objectContaining({ name: "team", source: "custom" }),
+    );
+  });
+
+  it("restores a saved custom preset source and selection when entering the preset-only flow", async () => {
+    const filePath = preferencesPath();
+    writeFileSync(
+      filePath,
+      JSON.stringify({
+        version: 2,
+        scopes: {
+          presetsOnly: {
+            customPresetSource: "C:\\presets",
+            presetSourceMode: "custom",
+            selectedPresetNames: ["custom:team", "custom:removed"],
+          },
+        },
+      }),
+    );
+    const requestedRoots: Array<string | undefined> = [];
+    const harness = await createHarness(100, 30, {
+      preferencesPath: filePath,
+      listPresets: (options) => {
+        requestedRoots.push(options?.customRoot);
+        return options?.customRoot
+          ? [
+              {
+                name: "team",
+                displayName: "Team",
+                description: "",
+                source: "custom",
+                dir: join(options.customRoot, "team"),
+              },
+            ]
+          : [];
+      },
+    });
+
+    await harness.press("ARROW_DOWN", "ARROW_DOWN", "ARROW_DOWN", "RETURN");
+
+    expect(requestedRoots).toContain("C:\\presets");
+    expect(harness.controller.state.presetSourceMode).toBe("custom");
+    expect(harness.controller.state.customPresetSource).toBe("C:\\presets");
+    expect(harness.controller.state.selectedPresetNames).toEqual(["custom:team"]);
+  });
+
+  it("reports an empty custom preset directory", async () => {
+    const harness = await createHarness();
+    harness.controller.state.flow = "presetsOnly";
+    harness.controller.state.presetSourceMode = "custom";
+    harness.controller.state.customPresetSource = "C:\\empty-presets";
+
+    await harness.controller.handleEffect({ type: "loadCustomPresetSource", path: "C:\\empty-presets" });
+
+    expect(harness.controller.state.notice).toContain("No presets found");
+    expect(harness.controller.state.notice).toContain("C:\\empty-presets");
   });
 });
 

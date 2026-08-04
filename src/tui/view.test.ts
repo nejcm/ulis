@@ -73,6 +73,32 @@ describe("buildScreenView", () => {
     expect(view.input).toMatchObject({ value: "./configs", focused: true });
   });
 
+  it("exposes the custom preset directory input", () => {
+    const state = createInitialState();
+    state.screen = "customPresetSource";
+    state.textInput = "./presets";
+
+    const view = buildScreenView(state);
+
+    expect(view.title).toBe("Custom preset directory");
+    expect(view.input).toMatchObject({ value: "./presets", focused: true });
+    expect(view.panes).toEqual([]);
+  });
+
+  it("shows the custom preset path and extension warning in the install review", () => {
+    const state = createInitialState();
+    state.screen = "presetInstallReview";
+    state.flow = "presetsOnly";
+    state.presetSourceMode = "custom";
+    state.customPresetSource = "C:\\presets";
+    state.presetInstallExtensions = true;
+
+    const rows = buildScreenView(state).panes.flatMap((pane) => pane.rows);
+
+    expect(rows).toContainEqual(expect.objectContaining({ label: "Preset location", value: "Custom C:\\presets" }));
+    expect(rows).toContainEqual(expect.objectContaining({ kind: "text", text: expect.stringContaining("npx") }));
+  });
+
   it("renders running logs with their status tags", () => {
     const state = createInitialState();
     state.screen = "running";

@@ -13,7 +13,7 @@ export interface PresetListEntry {
   readonly name: string;
   readonly displayName: string;
   readonly description: string;
-  readonly source: "user" | "project" | "global" | "bundled";
+  readonly source: "user" | "project" | "global" | "bundled" | "custom";
   readonly dir: string;
 }
 

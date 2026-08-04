@@ -6,7 +6,7 @@ import { TuiApp } from "./app.js";
 import { readClipboardText } from "./clipboard.js";
 import { loadTuiPreferences, saveTuiPreferences, snapshotTuiPreferences } from "./preferences.js";
 import { listTuiPresets } from "./presets.js";
-import { createInitialState, type TuiEffect, type TuiState } from "./state.js";
+import { applyFlowPreferences, createInitialState, type TuiEffect, type TuiState } from "./state.js";
 
 const SPINNER_INTERVAL_MS = 120;
 const MAX_RETAINED_LOGS = 80;
@@ -51,7 +51,7 @@ export class TuiController {
     this.options = options;
 
     this.state = createInitialState();
-    this.state.availablePresets = (options.listPresets ?? listTuiPresets)();
+    this.state.availablePresets = (options.listPresets ?? listTuiPresets)({ cwd: options.cwd });
     const loadError = loadTuiPreferences(this.state, options.preferencesPath);
     if (loadError) this.state.notice = loadError;
     this.lastSavedPreferences = JSON.stringify(snapshotTuiPreferences(this.state));
@@ -105,6 +105,20 @@ export class TuiController {
           await (this.options.runAction ?? runTuiAction)(this.state, pendingAction, logger, { signal });
         }
       });
+      return;
+    }
+
+    if (effect.type === "loadCustomPresetSource") {
+      this.state.availablePresets = (this.options.listPresets ?? listTuiPresets)({
+        cwd: this.options.cwd,
+        customRoot: effect.path,
+      });
+      applyFlowPreferences(this.state, "presetsOnly", true);
+      if (!this.state.availablePresets.some((preset) => preset.source === "custom")) {
+        this.state.notice = `No presets found in custom directory: ${effect.path}`;
+      }
+      this.persistPreferences();
+      this.render();
       return;
     }
 

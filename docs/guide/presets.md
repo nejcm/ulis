@@ -77,6 +77,8 @@ In `ulis tui`, normal project/global/custom-source workflows call these **Preset
 
 The **Install presets only** workflow calls them **Preset sources**. That flow installs only the selected presets, does not require the current source to exist, and shows a review screen for destination, platforms, backups, and preset extensions before writing files.
 
+On the preset-location row, press Space to loop through project, global, bundled, and automatic locations. Press Enter to choose a custom directory containing preset folders. Custom directories are available in the TUI only; the CLI preset commands continue to use the standard user-global and bundled locations.
+
 ## Further reading
 
 - [Getting Started — optional presets](/guide/getting-started#optional-use-presets)

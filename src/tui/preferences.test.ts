@@ -134,6 +134,18 @@ describe("tui preferences", () => {
     expect(preferences.scopes?.project?.customSource).toBeUndefined();
   });
 
+  it("snapshots the custom preset directory for the presets-only flow", () => {
+    const state = createInitialState();
+    state.flow = "presetsOnly";
+    state.presetSourceMode = "custom";
+    state.customPresetSource = "/preset-sources/team";
+
+    expect(snapshotTuiPreferences(state).scopes?.presetsOnly).toMatchObject({
+      presetSourceMode: "custom",
+      customPresetSource: "/preset-sources/team",
+    });
+  });
+
   it("saves the current state to disk", () => {
     const root = createTempRoot();
     const filePath = join(root, "prefs.json");
