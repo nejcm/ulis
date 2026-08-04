@@ -14,6 +14,7 @@ ulis build --source example
 - `mcp.yaml` - MCP servers
 - `permissions.yaml` - per-platform permissions
 - `skills.yaml` - external skill installs
+- `extensions.yaml` - external CLI extension installs
 - `agents/` - agent markdown files
 - `skills/` - skill directories (`SKILL.md`)
 - `commands/` - command markdown files
@@ -22,5 +23,6 @@ ulis build --source example
 ## Notes
 
 - Generated output goes to `example/generated/<platform>/`.
+- YAML schema headers use the published package path under `../node_modules/@nejcm/ulis/schemas/`. Run `bun install` and `bun run build` in the repository before opening these files for schema autocomplete.
 - If you need to customize native platform files directly, place them in `raw/all/` or `raw/<platform>/`.
 - Existing `raw/common/` directories must be renamed to `raw/all/`; the legacy name is no longer recognized.

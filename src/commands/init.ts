@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import type { Logger } from "../build.js";
 import { ULIS_GENERATED_DIRNAME, ULIS_SOURCE_DIRNAME } from "../config.js";
@@ -18,6 +19,7 @@ import { logger as log } from "../utils/logger.js";
 
 export interface InitOptions {
   readonly global?: boolean;
+  readonly homeDir?: string;
   readonly logger?: Logger;
 }
 
@@ -29,7 +31,7 @@ const SUBDIRS = ["agents", "skills", "commands", "raw", "rules"] as const;
 export async function initCmd(options: InitOptions = {}): Promise<void> {
   const logger = options.logger ?? log;
   const cwd = process.cwd();
-  const targetRoot = options.global ? homedir() : cwd;
+  const targetRoot = options.global ? (options.homeDir ?? homedir()) : cwd;
   const targetDir = join(targetRoot, ULIS_SOURCE_DIRNAME);
 
   if (existsSync(targetDir)) {
@@ -39,7 +41,7 @@ export async function initCmd(options: InitOptions = {}): Promise<void> {
   const name = options.global ? "global" : (readProjectName(cwd) ?? basename(cwd));
   const context: ScaffoldContext = {
     name,
-    schemaBase: DEFAULT_SCHEMA_BASE,
+    schemaBase: options.global ? resolveInstalledSchemaBase() : DEFAULT_SCHEMA_BASE,
   };
 
   logger.header(`ulis init ${options.global ? "(global)" : "(project)"}`);
@@ -79,6 +81,21 @@ export async function initCmd(options: InitOptions = {}): Promise<void> {
     logger.dim(`  - Add agents to ~/${ULIS_SOURCE_DIRNAME}/agents/*.md`);
     logger.dim(`  - Run 'ulis install --global' to generate and install to ~/.claude/, ~/.codex/, etc.`);
   }
+}
+
+function resolveInstalledSchemaBase(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const packageRoots = [join(here, "..", ".."), join(here, "..")];
+  const packageRoot =
+    packageRoots.find((candidate) => {
+      try {
+        const packageJson = JSON.parse(readFileSync(join(candidate, "package.json"), "utf8")) as { name?: string };
+        return packageJson.name === "@nejcm/ulis";
+      } catch {
+        return false;
+      }
+    }) ?? packageRoots[0];
+  return pathToFileURL(join(packageRoot, "schemas")).href;
 }
 
 function readProjectName(cwd: string): string | undefined {

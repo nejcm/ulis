@@ -1,0 +1,4 @@
+# yaml-language-server: $schema=../node_modules/@nejcm/ulis/schemas/extensions.schema.json
+
+# Declarative extension installs per platform.
+# Add entries here when an external package should configure a target tool.
