@@ -421,8 +421,8 @@ export function applyFlowPreferences(state: TuiState, flow: TuiFlow = state.flow
 export interface CustomSourceTextInputKeyResult {
   readonly effect: TuiEffect;
   /**
-   * When true, the TextInput `onKeyPress` handler should return `false` to cel-tui
-   * (consume the key and skip default editing / bubbling).
+   * When true, the caller should consume the key and skip default editing /
+   * bubbling instead of letting the input renderable handle it.
    */
   readonly preventDefault: boolean;
 }
@@ -440,7 +440,8 @@ export function handleTuiKey(state: TuiState, key: string): TuiEffect {
     return navigateBack(state);
   }
 
-  // Path row uses cel-tui TextInput; typing is driven by onChange, not root onKeyPress.
+  // Path row uses the focused input renderable; typing is driven by its change
+  // event, not by this root key handler.
   if (state.screen === "customSource" && state.cursor === 0) {
     return { type: "none" };
   }
@@ -698,7 +699,7 @@ export function handleCustomSourceTextInputKey(state: TuiState, key: string): Cu
   return { effect: { type: "none" }, preventDefault: false };
 }
 
-/** Sync TextInput value from cel-tui `onChange` while on the custom path screen. */
+/** Sync the editor value from the input renderable's change event on the custom path screen. */
 export function applyCustomSourceTextInputChange(state: TuiState, value: string): void {
   if (state.screen !== "customSource") return;
   state.textInput = value;

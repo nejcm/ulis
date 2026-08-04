@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="864" height="528" viewBox="0 0 864 528" role="img" aria-label="ulis tui">
+<rect width="100%" height="100%" rx="8" fill="#0d1117"/>
+<g font-family="ui-monospace, 'SF Mono', 'Cascadia Mono', 'DejaVu Sans Mono', monospace" font-size="13">
+<text x="20.4" y="25.0" fill="#14b8a6" xml:space="preserve" textLength="159.6" lengthAdjust="spacingAndGlyphs" font-weight="700">Update this project</text>
+<text x="20.4" y="43.0" fill="#8a8a8a" xml:space="preserve" textLength="823.2" lengthAdjust="spacingAndGlyphs">Start  &gt;  Update this project  &gt;  Plan   -   Review and adjust the plan before choosing an action.</text>
+<text x="12.0" y="61.0" fill="#3f4b52" xml:space="preserve" textLength="840.0" lengthAdjust="spacingAndGlyphs">────────────────────────────────────────────────────────────────────────────────────────────────────</text>
+<text x="20.4" y="97.0" fill="#3f4b52" xml:space="preserve" textLength="16.8" lengthAdjust="spacingAndGlyphs">┌─</text>
+<text x="37.2" y="97.0" fill="#22d3ee" xml:space="preserve" textLength="75.6" lengthAdjust="spacingAndGlyphs"> Summary </text>
+<text x="112.8" y="97.0" fill="#3f4b52" xml:space="preserve" textLength="319.2" lengthAdjust="spacingAndGlyphs">─────────────────────────────────────┐</text>
+<text x="440.4" y="97.0" fill="#3f4b52" xml:space="preserve" textLength="16.8" lengthAdjust="spacingAndGlyphs">┌─</text>
+<text x="457.2" y="97.0" fill="#22d3ee" xml:space="preserve" textLength="75.6" lengthAdjust="spacingAndGlyphs"> Actions </text>
+<text x="532.8" y="97.0" fill="#3f4b52" xml:space="preserve" textLength="310.8" lengthAdjust="spacingAndGlyphs">────────────────────────────────────┐</text>
+<text x="20.4" y="115.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="37.2" y="115.0" fill="#22d3ee" xml:space="preserve" textLength="42.0" lengthAdjust="spacingAndGlyphs" font-weight="700">Input</text>
+<text x="423.6" y="115.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="115.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<rect x="457.2" y="102.0" width="126.0" height="18" fill="#0b3b45"/>
+<text x="457.2" y="115.0" fill="#22d3ee" xml:space="preserve" textLength="126.0" lengthAdjust="spacingAndGlyphs" font-weight="700">&gt; Preset layers</text>
+<rect x="583.2" y="102.0" width="159.6" height="18" fill="#0b3b45"/>
+<rect x="742.8" y="102.0" width="84.0" height="18" fill="#0b3b45"/>
+<text x="742.8" y="115.0" fill="#22d3ee" xml:space="preserve" textLength="84.0" lengthAdjust="spacingAndGlyphs">0 selected</text>
+<text x="835.2" y="115.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="133.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="37.2" y="133.0" fill="#d4d4d4" xml:space="preserve" textLength="109.2" lengthAdjust="spacingAndGlyphs">Preset layers</text>
+<text x="373.2" y="133.0" fill="#22d3ee" xml:space="preserve" textLength="33.6" lengthAdjust="spacingAndGlyphs">none</text>
+<text x="423.6" y="133.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="133.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="457.2" y="133.0" fill="#d4d4d4" xml:space="preserve" textLength="109.2" lengthAdjust="spacingAndGlyphs">  Base source</text>
+<text x="700.8" y="133.0" fill="#8a8a8a" xml:space="preserve" textLength="126.0" lengthAdjust="spacingAndGlyphs">Project ./.ulis</text>
+<text x="835.2" y="133.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="151.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="37.2" y="151.0" fill="#d4d4d4" xml:space="preserve" textLength="92.4" lengthAdjust="spacingAndGlyphs">Base source</text>
+<text x="205.2" y="151.0" fill="#22d3ee" xml:space="preserve" textLength="201.6" lengthAdjust="spacingAndGlyphs">Project ./.ulis -&gt; .ulis</text>
+<text x="423.6" y="151.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="151.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="457.2" y="151.0" fill="#d4d4d4" xml:space="preserve" textLength="92.4" lengthAdjust="spacingAndGlyphs">  Platforms</text>
+<text x="742.8" y="151.0" fill="#8a8a8a" xml:space="preserve" textLength="84.0" lengthAdjust="spacingAndGlyphs">5 selected</text>
+<text x="835.2" y="151.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="169.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="423.6" y="169.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="169.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="457.2" y="169.0" fill="#d4d4d4" xml:space="preserve" textLength="176.4" lengthAdjust="spacingAndGlyphs">  Install destination</text>
+<text x="650.4" y="169.0" fill="#8a8a8a" xml:space="preserve" textLength="176.4" lengthAdjust="spacingAndGlyphs">Project-local configs</text>
+<text x="835.2" y="169.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="187.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="37.2" y="187.0" fill="#22d3ee" xml:space="preserve" textLength="50.4" lengthAdjust="spacingAndGlyphs" font-weight="700">Output</text>
+<text x="423.6" y="187.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="187.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="835.2" y="187.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="205.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="37.2" y="205.0" fill="#d4d4d4" xml:space="preserve" textLength="75.6" lengthAdjust="spacingAndGlyphs">Platforms</text>
+<text x="121.2" y="205.0" fill="#22d3ee" xml:space="preserve" textLength="294.0" lengthAdjust="spacingAndGlyphs">OpenCode, Claude...ursor, ForgeCode</text>
+<text x="423.6" y="205.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="205.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="457.2" y="205.0" fill="#d4d4d4" xml:space="preserve" textLength="184.8" lengthAdjust="spacingAndGlyphs">  Skip external skills</text>
+<text x="801.6" y="205.0" fill="#8a8a8a" xml:space="preserve" textLength="25.2" lengthAdjust="spacingAndGlyphs">off</text>
+<text x="835.2" y="205.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="223.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="37.2" y="223.0" fill="#d4d4d4" xml:space="preserve" textLength="159.6" lengthAdjust="spacingAndGlyphs">Install destination</text>
+<text x="205.2" y="223.0" fill="#22d3ee" xml:space="preserve" textLength="210.0" lengthAdjust="spacingAndGlyphs">Project-loc...onfigs -&gt; .</text>
+<text x="423.6" y="223.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="223.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="457.2" y="223.0" fill="#d4d4d4" xml:space="preserve" textLength="277.2" lengthAdjust="spacingAndGlyphs">  Prune removed agents and skills</text>
+<text x="810.0" y="223.0" fill="#8a8a8a" xml:space="preserve" textLength="16.8" lengthAdjust="spacingAndGlyphs">on</text>
+<text x="835.2" y="223.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="241.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="423.6" y="241.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="241.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="457.2" y="241.0" fill="#d4d4d4" xml:space="preserve" textLength="210.0" lengthAdjust="spacingAndGlyphs">  Use latest build output</text>
+<text x="810.0" y="241.0" fill="#8a8a8a" xml:space="preserve" textLength="16.8" lengthAdjust="spacingAndGlyphs">on</text>
+<text x="835.2" y="241.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="259.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="37.2" y="259.0" fill="#22d3ee" xml:space="preserve" textLength="126.0" lengthAdjust="spacingAndGlyphs" font-weight="700">Install options</text>
+<text x="423.6" y="259.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="259.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="457.2" y="259.0" fill="#d4d4d4" xml:space="preserve" textLength="67.2" lengthAdjust="spacingAndGlyphs">  Backup</text>
+<text x="810.0" y="259.0" fill="#8a8a8a" xml:space="preserve" textLength="16.8" lengthAdjust="spacingAndGlyphs">on</text>
+<text x="835.2" y="259.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="277.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="37.2" y="277.0" fill="#d4d4d4" xml:space="preserve" textLength="50.4" lengthAdjust="spacingAndGlyphs">Backup</text>
+<text x="390.0" y="277.0" fill="#22d3ee" xml:space="preserve" textLength="16.8" lengthAdjust="spacingAndGlyphs">on</text>
+<text x="423.6" y="277.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="277.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="835.2" y="277.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="295.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="37.2" y="295.0" fill="#d4d4d4" xml:space="preserve" textLength="260.4" lengthAdjust="spacingAndGlyphs">Prune removed agents and skills</text>
+<text x="390.0" y="295.0" fill="#22d3ee" xml:space="preserve" textLength="16.8" lengthAdjust="spacingAndGlyphs">on</text>
+<text x="423.6" y="295.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="295.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="457.2" y="295.0" fill="#d4d4d4" xml:space="preserve" textLength="84.0" lengthAdjust="spacingAndGlyphs">  Validate</text>
+<text x="835.2" y="295.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="313.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="37.2" y="313.0" fill="#d4d4d4" xml:space="preserve" textLength="193.2" lengthAdjust="spacingAndGlyphs">Use latest build output</text>
+<text x="390.0" y="313.0" fill="#22d3ee" xml:space="preserve" textLength="16.8" lengthAdjust="spacingAndGlyphs">on</text>
+<text x="423.6" y="313.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="313.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="457.2" y="313.0" fill="#d4d4d4" xml:space="preserve" textLength="100.8" lengthAdjust="spacingAndGlyphs">  Build only</text>
+<text x="835.2" y="313.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="331.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="37.2" y="331.0" fill="#d4d4d4" xml:space="preserve" textLength="168.0" lengthAdjust="spacingAndGlyphs">Skip external skills</text>
+<text x="381.6" y="331.0" fill="#22d3ee" xml:space="preserve" textLength="25.2" lengthAdjust="spacingAndGlyphs">off</text>
+<text x="423.6" y="331.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="331.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="457.2" y="331.0" fill="#d4d4d4" xml:space="preserve" textLength="75.6" lengthAdjust="spacingAndGlyphs">  Install</text>
+<text x="835.2" y="331.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="349.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="423.6" y="349.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="349.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="835.2" y="349.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="367.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="423.6" y="367.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="367.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="457.2" y="367.0" fill="#d4d4d4" xml:space="preserve" textLength="126.0" lengthAdjust="spacingAndGlyphs">  Back to start</text>
+<text x="835.2" y="367.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="385.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="423.6" y="385.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="385.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="835.2" y="385.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="403.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="423.6" y="403.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="403.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="835.2" y="403.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="421.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="423.6" y="421.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="421.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="835.2" y="421.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="439.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="423.6" y="439.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="439.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="835.2" y="439.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="457.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="423.6" y="457.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="440.4" y="457.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="835.2" y="457.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
+<text x="20.4" y="475.0" fill="#3f4b52" xml:space="preserve" textLength="411.6" lengthAdjust="spacingAndGlyphs">└───────────────────────────────────────────────┘</text>
+<text x="440.4" y="475.0" fill="#3f4b52" xml:space="preserve" textLength="403.2" lengthAdjust="spacingAndGlyphs">└──────────────────────────────────────────────┘</text>
+<text x="12.0" y="493.0" fill="#3f4b52" xml:space="preserve" textLength="840.0" lengthAdjust="spacingAndGlyphs">────────────────────────────────────────────────────────────────────────────────────────────────────</text>
+<text x="20.4" y="511.0" fill="#8a8a8a" xml:space="preserve" textLength="823.2" lengthAdjust="spacingAndGlyphs">j/k or arrows: move   Enter: select   Backspace: back   q: quit   mouse: click rows, wheel scrolls</text>
+</g></svg>

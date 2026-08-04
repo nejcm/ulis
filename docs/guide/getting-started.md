@@ -18,7 +18,7 @@ or
 bun add -g @nejcm/ulis
 ```
 
-Requires Node 20+.
+Requires Node 20+. The interactive dashboard (`ulis tui`) additionally requires [Bun](https://bun.sh), because its renderer runs through Bun's FFI — see [`ulis tui`](/CLI#ulis-tui). Every other command runs on Node.
 
 ## Install the packaged `ulis` skill
 

@@ -148,6 +148,25 @@ describe("tui actions child process flow", () => {
     expect(call.args).toContain("team");
   });
 
+  it("uses the propagated CLI entry when running in the Bun TUI child", async () => {
+    installRuntimeFakes();
+    spawnCalls.length = 0;
+    spawnedChildren.length = 0;
+    const previous = process.env.ULIS_CLI_ENTRY;
+    process.env.ULIS_CLI_ENTRY = "/app/dist/cli.js";
+
+    try {
+      const run = runTuiAction(createInitialState(), "build", createLogger());
+      spawnedChildren[0]!.emitClose(0);
+      await run;
+      expect(spawnCalls[0]!.args).toContain("/app/dist/cli.js");
+      expect(spawnCalls[0]!.args).not.toContain(process.argv[1]);
+    } finally {
+      if (previous == null) delete process.env.ULIS_CLI_ENTRY;
+      else process.env.ULIS_CLI_ENTRY = previous;
+    }
+  });
+
   it("install action includes non-interactive and install flags", async () => {
     installRuntimeFakes();
     spawnCalls.length = 0;
