@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { buildCmd } from "./build.js";
 import { initCmd } from "./init.js";
@@ -45,6 +46,17 @@ describe("commands", () => {
     expect(readFileSync(join(projectRoot, ".ulis", "config.yaml"), "utf8")).toContain("name: command-test");
     expect(readFileSync(join(projectRoot, ".ulis", "extensions.yaml"), "utf8")).toContain("extensions");
     expect(readFileSync(join(projectRoot, ".gitignore"), "utf8")).toContain("/.ulis/generated/");
+  });
+
+  it("initCmd points global schema refs at the installed package", async () => {
+    const homeRoot = createTempRoot();
+
+    await initCmd({ global: true, homeDir: homeRoot });
+
+    const installedSchemas = pathToFileURL(resolve(join(import.meta.dirname, "../../schemas"))).href;
+    expect(readFileSync(join(homeRoot, ".ulis", "config.yaml"), "utf8")).toContain(
+      `$schema=${installedSchemas}/config.schema.json`,
+    );
   });
 
   it("buildCmd writes selected generated output under the project source tree", async () => {

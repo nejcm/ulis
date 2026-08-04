@@ -275,9 +275,9 @@ A single failing extension logs a warning and the install continues. Skip the ph
 
 ## Schema autocomplete
 
-Scaffolded YAML files include a `# yaml-language-server: $schema=…` header pointing at `./node_modules/@nejcm/ulis/schemas/*.schema.json`. VS Code's YAML extension picks these up automatically when the package is installed.
+Scaffolded project YAML files include a `# yaml-language-server: $schema=…` header pointing at `./node_modules/@nejcm/ulis/schemas/*.schema.json`. Install `@nejcm/ulis` in the project if the CLI itself is installed globally and you want local schema autocomplete. Global scaffolds point directly at the `schemas/` directory in the running ULIS installation.
 
-Schemas are also regenerated on every `npm run build` via `bun run gen:schemas`.
+The published package contains the same schemas under `schemas/`; they are regenerated before packaging and on every `bun run build` via `bun run gen:schemas`.
 
 ---
 
