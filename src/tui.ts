@@ -1,221 +1,30 @@
-import { ProcessTerminal, VStack, cel } from "@cel-tui/core";
+import { createCliRenderer, CliRenderEvents } from "@opentui/core";
 
-import type { Logger } from "./build.js";
-import { initializeMissingSource, runTuiAction } from "./tui/actions.js";
-import { readClipboardText } from "./tui/clipboard.js";
-import { loadTuiPreferences, saveTuiPreferences, snapshotTuiPreferences } from "./tui/preferences.js";
-import { listTuiPresets } from "./tui/presets.js";
-import { renderScreen, type CustomSourceHandlers } from "./tui/render.js";
-import {
-  appendTextInput,
-  applyCustomSourceTextInputChange,
-  createInitialState,
-  handleCustomSourceTextInputKey,
-  handleTuiKey,
-  type TuiState,
-} from "./tui/state.js";
-
-const state: TuiState = createInitialState();
-let lastSavedPreferences = "";
-let currentRunAbortController: AbortController | undefined;
-
-function main(): void {
-  state.availablePresets = listTuiPresets();
-  const loadError = loadTuiPreferences(state);
-  if (loadError) state.notice = loadError;
-  lastSavedPreferences = JSON.stringify(snapshotTuiPreferences(state));
-  cel.init(new ProcessTerminal());
-  cel.viewport(renderApp);
-}
-
-function renderApp() {
-  return VStack(
-    {
-      width: "100%",
-      height: "100%",
-      padding: { x: 1, y: 1 },
-      justifyContent: "start",
-      alignItems: "start",
-      overflow: "scroll",
-      scrollbar: true,
-      fgColor: "color07",
-      focusable: true,
-      onKeyPress: (key) => {
-        const effect = handleTuiKey(state, key);
-        renderAfterPreferenceSave();
-        void handleEffect(effect);
-      },
-    },
-    [renderScreen(state, customSourceHandlers())],
-  );
-}
-
-function customSourceHandlers(): CustomSourceHandlers | undefined {
-  if (state.screen !== "customSource") return undefined;
-  return {
-    onCustomSourceChange: (value: string) => {
-      applyCustomSourceTextInputChange(state, value);
-      renderAfterPreferenceSave();
-    },
-    onCustomSourceKeyPress: (key: string) => {
-      const { effect, preventDefault } = handleCustomSourceTextInputKey(state, key);
-      renderAfterPreferenceSave();
-      void handleEffect(effect);
-      return preventDefault ? false : undefined;
-    },
-  };
-}
-
-function renderAfterPreferenceSave(): void {
-  const saveError = persistTuiPreferences();
-  if (saveError) state.notice = saveError;
-  cel.render();
-}
-
-async function handleEffect(effect: ReturnType<typeof handleTuiKey>): Promise<void> {
-  if (effect.type === "none") return;
-  if (effect.type === "exit") {
-    exitApp(effect.code);
-    return;
-  }
-  if (effect.type === "cancelRunning") {
-    if (currentRunAbortController == null) return;
-    pushLog("[warn] Stopping current workflow...");
-    currentRunAbortController.abort();
-    return;
-  }
-
-  if (effect.type === "initSource") {
-    const pendingAction = state.pendingAction;
-    state.pendingAction = undefined;
-    const title =
-      pendingAction == null ? "Initialize source" : `Initialize source and ${formatActionTitle(pendingAction)}`;
-    const successMessage =
-      pendingAction == null
-        ? "Source initialized successfully."
-        : `Source initialized and ${formatActionTitle(pendingAction)} completed successfully.`;
-    await runWithLogs(title, successMessage, async (logger, signal) => {
-      await initializeMissingSource(state, logger);
-      if (pendingAction != null) await runTuiAction(state, pendingAction, logger, { signal });
-    });
-    return;
-  }
-
-  if (effect.type === "pasteClipboard") {
-    if (!appendTextInput(state, readClipboardText())) {
-      state.notice = "Clipboard is empty or contains unsupported text.";
-    }
-    cel.render();
-    return;
-  }
-
-  await runWithLogs(
-    formatActionTitle(effect.action),
-    `${formatActionTitle(effect.action)} completed successfully.`,
-    (logger, signal) => {
-      return runTuiAction(state, effect.action, logger, { signal });
-    },
-  );
-}
-
-async function runWithLogs(
-  title: string,
-  successMessage: string,
-  run: (logger: Logger, signal: AbortSignal) => void | Promise<void>,
-): Promise<void> {
-  const abortController = new AbortController();
-  currentRunAbortController = abortController;
-  state.logs = [`Starting: ${title}`];
-  state.notice = "";
-  state.resultTitle = "";
-  state.resultMessage = "";
-  state.screen = "running";
-  state.runningSpinnerFrame = 0;
-  cel.render();
-  const spinnerInterval = setInterval(() => {
-    if (state.screen !== "running") return;
-    state.runningSpinnerFrame = (state.runningSpinnerFrame + 1) % 4;
-    cel.render();
-  }, 120);
-
-  try {
-    await run(createUiLogger(), abortController.signal);
-    state.resultTitle = `${title} Complete`;
-    state.resultMessage = successMessage;
-  } catch (error) {
-    if (abortController.signal.aborted) {
-      state.resultTitle = `${title} Stopped`;
-      state.resultMessage = `${title} stopped by user.`;
-      pushLog(`[warn] ${state.resultMessage}`);
-    } else {
-      state.resultTitle = `${title} Failed`;
-      state.resultMessage = error instanceof Error ? error.message : String(error);
-      pushLog(`[error] ${state.resultMessage}`);
-    }
-  } finally {
-    if (currentRunAbortController === abortController) currentRunAbortController = undefined;
-    clearInterval(spinnerInterval);
-    state.screen = "result";
-    cel.render();
-  }
-}
-
-function createUiLogger(): Logger {
-  return {
-    header: (message) => pushLog(`=== ${message} ===`),
-    info: (message) => pushLog(`[info] ${message}`),
-    success: (message) => pushLog(`[done] ${message}`),
-    warn: (message) => pushLog(`[warn] ${message}`),
-    error: (message) => pushLog(`[error] ${message}`),
-    dim: (message) => pushLog(`      ${message}`),
-  };
-}
-
-function pushLog(message: string): void {
-  state.logs = [...state.logs, message].slice(-80);
-  cel.render();
-}
-
-function persistTuiPreferences(): string | undefined {
-  const nextSnapshot = JSON.stringify(snapshotTuiPreferences(state));
-  if (nextSnapshot === lastSavedPreferences) return;
-
-  const error = saveTuiPreferences(state);
-  if (error == null) lastSavedPreferences = nextSnapshot;
-  return error;
-}
-
-function formatActionTitle(action: "validate" | "presetValidate" | "build" | "install" | "presetInstall"): string {
-  if (action === "validate") return "Validate";
-  if (action === "presetValidate") return "Preset Validate";
-  if (action === "build") return "Build";
-  if (action === "presetInstall") return "Preset Install";
-  return "Install";
-}
-
-function exitApp(code: number): void {
-  cel.stop();
-  process.exit(code);
-}
-
-export const __test = {
-  getState(): TuiState {
-    return state;
-  },
-  resetState(): void {
-    Object.assign(state, createInitialState());
-    lastSavedPreferences = JSON.stringify(snapshotTuiPreferences(state));
-  },
-  handleEffect,
-};
+import { TuiController } from "./tui/controller.js";
 
 /**
  * Start the interactive ULIS terminal UI.
+ *
+ * Requires Bun: OpenTUI's renderer is backed by a native library that is only
+ * reachable through Bun's FFI. `commands/tui.ts` re-launches this module under
+ * Bun when the CLI itself is running on Node.
  */
-export function runTui(): void {
-  main();
+export async function runTui(): Promise<void> {
+  const renderer = await createCliRenderer({
+    exitOnCtrlC: false,
+    useMouse: true,
+    targetFps: 30,
+  });
+
+  const controller = new TuiController(renderer);
+  renderer.on(CliRenderEvents.RESIZE, () => controller.render());
+  controller.render();
 }
 
 if (import.meta.main) {
-  main();
+  runTui().catch((error: unknown) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Failed to start the ULIS TUI: ${message}`);
+    process.exit(1);
+  });
 }

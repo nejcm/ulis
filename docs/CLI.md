@@ -125,7 +125,24 @@ Keyboard controls:
 - `Enter` confirms selections and runs actions.
 - `x` or `Space` toggles checkbox-style options (destination, presets, platforms, install options).
 - `Backspace` goes back to the previous screen.
-- `q` or `Ctrl+C` exits from non-input screens.
+- `q` exits from non-input screens; `Ctrl+C` always exits, including while editing a path.
+
+Mouse controls:
+
+- Click a row to select and confirm it.
+- Scroll the wheel over a panel to scroll it.
+
+The layout is responsive: at 96 columns or wider the plan screen shows actions to the left of the summary, below that they stack with actions below the summary, and below 50×16 the TUI shows a resize prompt until the terminal grows.
+
+### Bun requirement
+
+`ulis tui` renders through [OpenTUI](https://github.com/sst/opentui), whose renderer is only available through Bun's FFI. Every other command runs on Node as usual.
+
+- Under Bun, the TUI runs in-process.
+- Under Node, the CLI locates a `bun` executable (`BUN_INSTALL`, `~/.bun/bin`, then `PATH`), launches the TUI with it in the same working directory and environment, forwards `SIGINT`/`SIGTERM`/`SIGHUP`, and exits with the child's status.
+- If Bun is not installed, `ulis tui` prints an installation hint and exits with code 1. Use `ulis build`, `ulis install`, and `ulis preset` instead.
+
+Preferences (last-used source, destination, platforms, presets, and install options) persist to `.ulis-tui.json` in your home directory and are only read by the TUI.
 
 ---
 

@@ -46,6 +46,7 @@
     "format": "oxfmt .",
     "gen:reference": "tsx src/tools/gen-reference.ts",
     "gen:schemas": "tsx src/tools/gen-json-schema.ts",
+    "gen:screenshot": "bun src/tui/gen-tui-screenshot.ts",
     "copy:presets": "tsx src/tools/copy-presets.ts",
     "lint": "tsc --noEmit",
     "test:coverage": "bun test --coverage",
@@ -61,8 +62,8 @@
     "release": "tsx scripts/release.ts"
   },
   "dependencies": {
-    "@cel-tui/core": "~0.8.3",
     "@decimalturn/toml-patch": "~2.1.0",
+    "@opentui/core": "0.5.1",
     "cac": "~7.0.0",
     "gray-matter": "~4.0.3",
     "smol-toml": "~1.6.1",

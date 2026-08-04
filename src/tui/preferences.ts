@@ -130,7 +130,9 @@ export function loadTuiPreferences(state: TuiState, filePath: string = getTuiPre
 
 export function saveTuiPreferences(state: TuiState, filePath: string = getTuiPreferencesPath()): string | undefined {
   try {
-    mkdirSync(dirname(filePath), { recursive: true });
+    // Bun's `mkdirSync(".", { recursive: true })` throws EEXIST where Node does not.
+    const dir = dirname(filePath);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     writeFileSync(filePath, JSON.stringify(snapshotTuiPreferences(state), null, 2) + "\n", "utf-8");
     return;
   } catch (error) {

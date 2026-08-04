@@ -11,7 +11,8 @@ Stack: TypeScript bundled with `tsup` (Node 20+, ESM). Dev runtime: Bun. CLI fra
 ## Key conventions
 
 - **Zod v4 only.** Use `z.toJSONSchema(schema, { target: "draft-7" })` for JSON Schema generation — never `zod-to-json-schema` (v3-only, produces empty schemas against v4).
-- **Bundler scope.** `tsup.config.ts` uses `noExternal: ["@cel-tui/core"]` — that dep ships raw TS and must be bundled. Do not widen `noExternal` to everything; CJS deps (e.g. `gray-matter`) rely on dynamic `require` and will break if forced into the ESM bundle.
+- **Bundler scope.** `tsup.config.ts` emits two bundles: `dist/cli.js` (Node) and `dist/tui.js` (Bun-only, with `@opentui/core` kept `external` so Bun resolves the platform-native package). Do not widen `noExternal`; CJS deps (e.g. `gray-matter`) rely on dynamic `require` and will break if forced into the ESM bundle.
+- **The TUI needs Bun.** OpenTUI's renderer initializes through Bun's FFI and throws under Node. `ulis tui` runs in-process under Bun; under Node it re-launches `dist/tui.js` with a discovered `bun` binary (`src/tui/launcher.ts`) and mirrors the child's exit code. Keep `@opentui/core` imports confined to `src/tui.ts` and `src/tui/` — `src/tui/launcher.test.ts` enforces this.
 - **No bundled canonical content.** The CLI is a parser/validator/generator only. Anything user-facing must be scaffolded by `ulis init` or read from the user's `.ulis/` tree.
 - **Source resolution precedence:** `--source <path>` → `--global` (`~/.ulis/`) → `./.ulis/` (CWD only, no walk-up). Errors hint at the right `ulis init` variant.
 

@@ -9,7 +9,7 @@
 
 Instead of maintaining separate "dialects" per platform, you keep a single canonical tree in `.ulis/` (per project) or `~/.ulis/` (global). Running `ulis` generates the native files each platform expects and installs them into the right locations.
 
-![ulis TUI](./tui.png)
+![ulis TUI](./tui.svg)
 
 ---
 
@@ -42,7 +42,7 @@ or
 bun add -g @nejcm/ulis
 ```
 
-Requires Node 20+. Works with both Node and Bun runtimes.
+Requires Node 20+. Works with both Node and Bun runtimes. `ulis tui` additionally requires [Bun](https://bun.sh) — its renderer runs through Bun's FFI; every other command runs on Node.
 
 ## Installable skills
 
@@ -162,13 +162,13 @@ In CI or other non-interactive runs, add `--yes` so a missing preset name fails 
 
 ## Commands
 
-| Command        | Purpose                                                                  |
-| -------------- | ------------------------------------------------------------------------ |
-| `ulis init`    | Scaffold `.ulis/` in the current project (or `~/.ulis/` with `--global`) |
-| `ulis build`   | Generate configs into `<source>/generated/` without installing           |
-| `ulis install` | Build, then deploy generated configs to the target platform directories  |
-| `ulis preset`  | List available presets from `~/.ulis/presets/`                           |
-| `ulis tui`     | Launch the interactive dashboard for source, presets, build, and install |
+| Command        | Purpose                                                                                                   |
+| -------------- | --------------------------------------------------------------------------------------------------------- |
+| `ulis init`    | Scaffold `.ulis/` in the current project (or `~/.ulis/` with `--global`)                                  |
+| `ulis build`   | Generate configs into `<source>/generated/` without installing                                            |
+| `ulis install` | Build, then deploy generated configs to the target platform directories                                   |
+| `ulis preset`  | List available presets from `~/.ulis/presets/`                                                            |
+| `ulis tui`     | Launch the interactive dashboard for source, presets, build, and install (requires [Bun](https://bun.sh)) |
 
 ### Common flags
 
@@ -296,17 +296,18 @@ bun run build      # bundles dist/cli.js + regenerates dist/schemas + schemas/ (
 
 ### Dev scripts
 
-| Script                  | Purpose                                                                      |
-| ----------------------- | ---------------------------------------------------------------------------- |
-| `bun run build`         | Bundle CLI (`tsup`) and regenerate JSON schemas                              |
-| `bun run dev`           | Run `ulis build` against the `example/` directory                            |
-| `bun run ulis <args>`   | Run the CLI from source (`tsx src/cli.ts …`)                                 |
-| `bun run tui`           | Launch the interactive TUI from source                                       |
-| `bun run test`          | Run the unit + integration suite                                             |
-| `bun run lint`          | `tsc --noEmit`                                                               |
-| `bun run format`        | Format with [oxfmt](https://oxc.rs/docs/guide/usage/formatter.html)          |
-| `bun run gen:schemas`   | Regenerate `dist/schemas/*.schema.json` and `schemas/*.schema.json` from Zod |
-| `bun run gen:reference` | Regenerate `docs/REFERENCE.md`                                               |
+| Script                   | Purpose                                                                      |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| `bun run build`          | Bundle CLI (`tsup`) and regenerate JSON schemas                              |
+| `bun run dev`            | Run `ulis build` against the `example/` directory                            |
+| `bun run ulis <args>`    | Run the CLI from source (`tsx src/cli.ts …`)                                 |
+| `bun run tui`            | Launch the interactive TUI from source (Bun only)                            |
+| `bun run gen:screenshot` | Regenerate `tui.svg` from a deterministic OpenTUI frame                      |
+| `bun run test`           | Run the unit + integration suite                                             |
+| `bun run lint`           | `tsc --noEmit`                                                               |
+| `bun run format`         | Format with [oxfmt](https://oxc.rs/docs/guide/usage/formatter.html)          |
+| `bun run gen:schemas`    | Regenerate `dist/schemas/*.schema.json` and `schemas/*.schema.json` from Zod |
+| `bun run gen:reference`  | Regenerate `docs/REFERENCE.md`                                               |
 
 ### Repo layout
 
@@ -318,10 +319,10 @@ src/
   generators/              # claude, opencode, codex, cursor, forgecode
   schema/                  # Zod schemas (ulis-config, agent, mcp, …)
   scaffold/                # inline templates used by `ulis init`
-  tui/                     # TUI dashboard state/actions/render modules
+  tui/                     # TUI state/actions/view + OpenTUI app, controller, Bun launcher
   utils/                   # config-loader, resolve-source, fs, logger, …
   validators/              # cross-ref + collision checks
-  tui.ts                   # TUI entrypoint + effect runner
+  tui.ts                   # Bun-only TUI entrypoint (compiled to dist/tui.js)
   tools/                   # gen-json-schema, gen-reference
 example/                   # reference example config
 tests/

@@ -7,6 +7,7 @@ import { formatDiagnostic } from "../diagnostics.js";
 import { runPresetInstall } from "../install.js";
 import { loadExtensions } from "../parsers/extensions.js";
 import { ParseError } from "../parsers/index.js";
+import { ULIS_CLI_ENTRY_ENV } from "./launcher.js";
 import { planSource, selectedPresets, type TuiAction, type TuiState } from "./state.js";
 
 interface RuntimeDependencies {
@@ -110,7 +111,7 @@ async function runActionInChildProcess(
   presetNames: readonly string[],
   signal?: AbortSignal,
 ): Promise<void> {
-  const entryScript = process.argv[1];
+  const entryScript = process.env[ULIS_CLI_ENTRY_ENV] || process.argv[1];
   if (!entryScript) {
     throw new Error("Unable to resolve current CLI entry script.");
   }
