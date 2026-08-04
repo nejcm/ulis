@@ -278,6 +278,8 @@ describe("tui state", () => {
   });
 
   it("opens and loads a custom preset directory from the source picker", () => {
+    const cwd = createTempRoot();
+    mkdirSync(join(cwd, "team-presets"));
     const state = createInitialState();
     state.screen = "presets";
     state.flow = "presetsOnly";
@@ -288,12 +290,25 @@ describe("tui state", () => {
     expect(state.presetSourceMode as string).toBe("bundled");
 
     state.textInput = "./team-presets";
-    const { effect } = handleCustomSourceTextInputKey(state, "enter");
+    const { effect } = handleCustomSourceTextInputKey(state, "enter", cwd);
 
-    expect(effect).toEqual({ type: "loadCustomPresetSource", path: expect.stringContaining("team-presets") });
-    expect(state.customPresetSource).toContain("team-presets");
+    expect(effect).toEqual({ type: "loadCustomPresetSource", path: join(cwd, "team-presets") });
+    expect(state.customPresetSource).toBe(join(cwd, "team-presets"));
     expect(state.presetSourceMode as string).toBe("custom");
     expect(state.screen).toBe("presets");
+  });
+
+  it("keeps the custom preset editor open when the directory does not exist", () => {
+    const cwd = createTempRoot();
+    const state = createInitialState();
+    state.screen = "customPresetSource";
+    state.textInput = "missing-presets";
+
+    const result = handleCustomSourceTextInputKey(state, "enter", cwd);
+
+    expect(result.effect).toEqual({ type: "none" });
+    expect(state.screen).toBe("customPresetSource");
+    expect(state.notice).toContain("does not exist");
   });
 
   it("only switches preset locations with Space", () => {

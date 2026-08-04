@@ -394,7 +394,11 @@ export function storeCurrentFlowPreferences(state: TuiState): void {
   };
 }
 
-export function applyFlowPreferences(state: TuiState, flow: TuiFlow = state.flow): void {
+export function applyFlowPreferences(
+  state: TuiState,
+  flow: TuiFlow = state.flow,
+  customPresetSourceLoaded = false,
+): void {
   const preferences = state.flowPreferences[flow];
   if (!preferences) return;
 
@@ -413,20 +417,28 @@ export function applyFlowPreferences(state: TuiState, flow: TuiFlow = state.flow
   if (flow === "presetsOnly" && preferences.customPresetSource) {
     state.customPresetSource = preferences.customPresetSource;
   }
+  if (preferences.presetSourceMode) state.presetSourceMode = preferences.presetSourceMode;
 
   if (preferences.platforms) {
     const platforms = uniquePlatforms(preferences.platforms);
     state.platforms = platforms.length > 0 ? platforms : [...PLATFORMS];
   }
   if (preferences.selectedPresetNames) {
-    const availablePresetNames = new Set(
-      state.availablePresets.flatMap((preset) => [preset.name, presetSourceKey(preset)]),
-    );
-    state.selectedPresetNames = [...new Set(preferences.selectedPresetNames)].filter((name) =>
-      availablePresetNames.has(name),
-    );
+    const selectedPresetNames = [...new Set(preferences.selectedPresetNames)];
+    const customSourcePending =
+      flow === "presetsOnly" &&
+      state.presetSourceMode === "custom" &&
+      Boolean(state.customPresetSource) &&
+      !customPresetSourceLoaded;
+    if (customSourcePending) {
+      state.selectedPresetNames = selectedPresetNames;
+    } else {
+      const availablePresetNames = new Set(
+        state.availablePresets.flatMap((preset) => [preset.name, presetSourceKey(preset)]),
+      );
+      state.selectedPresetNames = selectedPresetNames.filter((name) => availablePresetNames.has(name));
+    }
   }
-  if (preferences.presetSourceMode) state.presetSourceMode = preferences.presetSourceMode;
   if (typeof preferences.backup === "boolean") state.backup = preferences.backup;
   if (typeof preferences.prune === "boolean") state.prune = preferences.prune;
   if (typeof preferences.rebuild === "boolean") state.rebuild = preferences.rebuild;
@@ -476,7 +488,7 @@ export function handleTuiKey(state: TuiState, key: string): TuiEffect {
     case "customSource":
       return handleCustomSourceListKey(state, key);
     case "customPresetSource":
-      return handleCustomPresetSourceListKey(state, key);
+      return { type: "none" };
     case "presets":
       return handlePresetsKey(state, key);
     case "platforms":
@@ -551,6 +563,9 @@ function handleFlowKey(state: TuiState, key: string): TuiEffect {
     applyFlowDefaults(state, "presetsOnly");
     state.screen = "presets";
     state.cursor = 0;
+    if (state.presetSourceMode === "custom" && state.customPresetSource) {
+      return { type: "loadCustomPresetSource", path: state.customPresetSource };
+    }
   } else {
     return { type: "exit", code: 0 };
   }
@@ -694,7 +709,11 @@ function handleSourceKey(state: TuiState, key: string): TuiEffect {
 }
 
 /** Called from TextInput `onKeyPress` when editing the custom path (cursor on path row). */
-export function handleCustomSourceTextInputKey(state: TuiState, key: string): CustomSourceTextInputKeyResult {
+export function handleCustomSourceTextInputKey(
+  state: TuiState,
+  key: string,
+  cwd: string = process.cwd(),
+): CustomSourceTextInputKeyResult {
   key = normalizeKey(key);
   if (!isPathInputScreen(state.screen) || state.cursor !== 0) {
     return { effect: { type: "none" }, preventDefault: false };
@@ -714,10 +733,12 @@ export function handleCustomSourceTextInputKey(state: TuiState, key: string): Cu
   }
 
   if (isConfirmKey(key)) {
-    const effect =
-      state.screen === "customPresetSource" ? commitCustomPresetSourceIfValid(state) : { type: "none" as const };
-    if (state.screen === "customSource") commitCustomSourceIfValid(state);
-    return { effect, preventDefault: true };
+    const inputScreen = state.screen;
+    if (inputScreen === "customPresetSource") {
+      return { effect: commitCustomPresetSourceIfValid(state, cwd), preventDefault: true };
+    }
+    commitCustomSourceIfValid(state);
+    return { effect: { type: "none" }, preventDefault: true };
   }
 
   return { effect: { type: "none" }, preventDefault: false };
@@ -749,13 +770,17 @@ function commitCustomSourceIfValid(state: TuiState): boolean {
   return true;
 }
 
-function commitCustomPresetSourceIfValid(state: TuiState): TuiEffect {
+function commitCustomPresetSourceIfValid(state: TuiState, cwd: string): TuiEffect {
   const rawValue = state.textInput.trim();
   if (!rawValue) {
     state.notice = "Enter a custom preset directory first.";
     return { type: "none" };
   }
-  const value = resolve(rawValue);
+  const value = resolve(cwd, rawValue);
+  if (!existsSync(value)) {
+    state.notice = `Custom preset directory does not exist: ${value}`;
+    return { type: "none" };
+  }
   state.customPresetSource = value;
   state.presetSourceMode = "custom";
   state.screen = "presets";
@@ -791,14 +816,6 @@ function handleCustomSourceListKey(state: TuiState, key: string): TuiEffect {
 
   if (isPasteKey(key)) return { type: "pasteClipboard" };
 
-  return { type: "none" };
-}
-
-function handleCustomPresetSourceListKey(state: TuiState, key: string): TuiEffect {
-  if (isAnyKey(key, "escape")) {
-    state.screen = "presets";
-    state.cursor = 0;
-  }
   return { type: "none" };
 }
 

@@ -239,7 +239,7 @@ function customPresetSourceView(state: TuiState): ScreenView {
     title: "Custom preset directory",
     subtitle: "Type a directory containing preset folders, then press Enter.",
     breadcrumbs: ["Start", "Install presets only", "Presets", "Custom directory"],
-    panes: [pane("custom-preset-source", "Source", [])],
+    panes: [],
     input: {
       value: state.textInput,
       placeholder: "Path to a presets directory",
@@ -406,7 +406,7 @@ function installReviewView(state: TuiState, cwd?: string): ScreenView {
 function presetInstallReviewView(state: TuiState, cwd?: string): ScreenView {
   const plan = planSource(state, cwd);
   const rows: ViewRow[] = [
-    field("Preset location", formatPresetSourceMode(state.presetSourceMode)),
+    field("Preset location", formatPresetSourceMode(state.presetSourceMode, state.customPresetSource)),
     field("Destination", plan.destBase),
     field("Platforms", formatPlatforms(state.platforms)),
     field("Presets", formatPresets(state)),
@@ -416,6 +416,15 @@ function presetInstallReviewView(state: TuiState, cwd?: string): ScreenView {
     option(state, 0, "Backup existing configs before install", { checked: state.backup }),
     option(state, 1, "Prune removed agents and skills", { checked: state.prune }),
     option(state, 2, "Run preset extensions", { checked: state.presetInstallExtensions }),
+    ...(state.presetSourceMode === "custom" && state.presetInstallExtensions
+      ? [
+          {
+            kind: "text" as const,
+            text: "Warning: extensions.yaml in this custom directory may run npx or bunx commands.",
+            tone: "warn" as const,
+          },
+        ]
+      : []),
     { kind: "blank" },
     option(state, 3, "Start preset install"),
     option(state, 4, "Back to presets"),

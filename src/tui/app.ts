@@ -299,7 +299,7 @@ export class TuiApp {
         this.pasteFromClipboard();
         return;
       }
-      const { effect, preventDefault } = handleCustomSourceTextInputKey(state, key);
+      const { effect, preventDefault } = handleCustomSourceTextInputKey(state, key, this.options.cwd);
       if (preventDefault) event.preventDefault();
       this.commit();
       this.options.onEffect(effect);
@@ -424,7 +424,7 @@ export class TuiApp {
       scrollY: true,
       scrollX: false,
       focusable: true,
-      contentOptions: { flexDirection: "column", paddingLeft: 1, paddingRight: 1 },
+      contentOptions: { flexDirection: "column", padding: 1 },
       scrollbarOptions: { visible: true },
     });
 
