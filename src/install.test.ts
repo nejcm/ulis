@@ -64,6 +64,32 @@ afterEach(() => {
 });
 
 describe("runInstall", () => {
+  it("installs Codex skill agent metadata from source skill directories globally", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, "source");
+    const openaiYaml = "interface:\n  display_name: Audit Skills\n";
+    write(join(sourceDir, "config.yaml"), "version: 1\nname: test\n");
+    write(
+      join(sourceDir, "skills", "audit-skills", "SKILL.md"),
+      "---\nname: audit-skills\ndescription: Audit skills\n---\nAudit skills.\n",
+    );
+    write(join(sourceDir, "skills", "audit-skills", "agents", "openai.yaml"), openaiYaml);
+
+    await runInstall({
+      sourceDir,
+      destBase: root,
+      userHome: root,
+      globalInstall: true,
+      platforms: ["codex"],
+      rebuild: true,
+      installExtensions: false,
+      installSkills: false,
+      logger: silentLogger,
+    });
+
+    expect(read(join(root, ".codex", "skills", "audit-skills", "agents", "openai.yaml"))).toBe(openaiYaml);
+  });
+
   it("overlays generated Codex values while preserving unmanaged config for project installs", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");

@@ -13,6 +13,7 @@ import { buildCodexSkillArtifacts } from "./skills.js";
 
 export function generateCodex(project: ProjectBundle): GenerationResult {
   const artifacts: FileArtifact[] = [];
+  const enabledSkills = enabledSkillsFor(project.skills, "codex");
 
   artifacts.push({ path: "config.toml", contents: buildCodexConfigToml(project) });
 
@@ -20,7 +21,7 @@ export function generateCodex(project: ProjectBundle): GenerationResult {
     artifacts.push(buildCodexAgentArtifact(agent));
   }
 
-  for (const skill of enabledSkillsFor(project.skills, "codex")) {
+  for (const skill of enabledSkills) {
     artifacts.push(...buildCodexSkillArtifacts(skill));
   }
 
@@ -43,7 +44,7 @@ export function generateCodex(project: ProjectBundle): GenerationResult {
     post: {
       rawDirs: rawDirs(project, "codex"),
       aliasFiles: [],
-      skillDirs: [],
+      skillDirs: enabledSkills.map(({ name, dir }) => ({ name, dir })),
       appendAfterRaw,
     },
   };
