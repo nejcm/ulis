@@ -56,6 +56,7 @@ describe("writeResult", () => {
         "\n",
       ),
     );
+    write(join(skillDir, "agents", "openai.yaml"), "interface:\n  display_name: Source Skill\n");
 
     writeResult(
       {
@@ -75,6 +76,9 @@ describe("writeResult", () => {
     expect(copied).toContain("model: gpt-test");
     expect(copied).not.toContain("allowImplicitInvocation");
     expect(copied).toContain("Skill body.");
+    expect(read(join(outDir, "skills", "copied-skill", "agents", "openai.yaml"))).toContain(
+      "display_name: Source Skill",
+    );
   });
 
   it("copies skill directories into a custom skills destination", () => {
@@ -98,6 +102,29 @@ describe("writeResult", () => {
     );
 
     expect(read(join(outDir, ".forge", "skills", "forge-skill", "SKILL.md"))).toBe("Skill body.\n");
+  });
+
+  it("applies generated artifacts over copied skill files", () => {
+    const root = createTempRoot("ulis-writer-");
+    const outDir = join(root, "out");
+    const skillDir = join(root, "source-skill");
+    write(join(skillDir, "SKILL.md"), "Skill body.");
+    write(join(skillDir, "agents", "openai.yaml"), "source: true\n");
+
+    writeResult(
+      {
+        artifacts: [{ path: join("skills", "copied-skill", "agents", "openai.yaml"), contents: "generated: true\n" }],
+        post: {
+          rawDirs: [],
+          aliasFiles: [],
+          skillDirs: [{ name: "copied-skill", dir: skillDir }],
+        },
+      },
+      outDir,
+      "codex",
+    );
+
+    expect(read(join(outDir, "skills", "copied-skill", "agents", "openai.yaml"))).toBe("generated: true\n");
   });
 
   it("copies existing copyDirs and skips missing ones", () => {

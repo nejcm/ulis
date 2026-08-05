@@ -10,8 +10,9 @@ import type { GenerationResult } from "./types.js";
 /**
  * Apply a pure `GenerationResult` to disk under `outDir`:
  * 1. Clear the out dir.
- * 2. Write each `FileArtifact` (path is resolved relative to `outDir`).
- * 3. Copy skill directories, merge raw source trees, and write AGENTS.md aliases.
+ * 2. Copy skill directories.
+ * 3. Write each `FileArtifact` (path is resolved relative to `outDir`).
+ * 4. Merge raw source trees and write AGENTS.md aliases.
  *
  * Pure generation (the `artifacts` array) is byte-for-byte reproducible and
  * snapshot-testable. This function owns the only filesystem side effects.
@@ -24,14 +25,14 @@ export function writeResult(
 ): void {
   cleanDir(outDir);
 
-  for (const artifact of result.artifacts) {
-    writeFile(resolveArtifactPath(outDir, artifact.path), artifact.contents as string);
-  }
-
   if (result.post.skillDirs.length > 0) {
     const skillsDest = result.post.skillsDestRelative ?? "skills";
     copySkillDirs(result.post.skillDirs, join(outDir, skillsDest));
     logger.success(`${skillsDest}/ (${result.post.skillDirs.length} copied)`);
+  }
+
+  for (const artifact of result.artifacts) {
+    writeFile(resolveArtifactPath(outDir, artifact.path), artifact.contents as string);
   }
 
   for (const copy of result.post.copyDirs ?? []) {
