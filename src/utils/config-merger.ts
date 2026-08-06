@@ -287,6 +287,18 @@ export const PRESERVED_NATIVE_CONFIGS = [
   },
   {
     platform: "claude",
+    // Machine-local overrides Claude Code owns. ULIS only contributes what a raw
+    // fragment provides, so the existing file is the base and generated values
+    // overlay on top; with no generated file the user's file is left untouched.
+    label: "settings.local.json",
+    generatedPath: (context) => join(context.outputDir, "claude", "settings.local.json"),
+    targetPath: (context) =>
+      join(platformConfigDir("claude", context.destBase, context.userHome), "settings.local.json"),
+    preservedPaths: [[]],
+    overlay: "json",
+  },
+  {
+    platform: "claude",
     label: ".claude.json / .mcp.json",
     generatedPath: (context) => join(context.outputDir, "claude", ".claude.json"),
     // Claude Code reads MCP servers from two different files depending on scope:

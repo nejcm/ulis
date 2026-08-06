@@ -111,6 +111,14 @@ describe("preserved native config registry", () => {
         overlay: "json",
       },
       {
+        label: "settings.local.json",
+        generatedPath: join("root", ".ulis", "generated", "claude", "settings.local.json"),
+        targetPath: join("root", "project", ".claude", "settings.local.json"),
+        preservedPaths: [[]],
+        ownership: "file",
+        overlay: "json",
+      },
+      {
         label: ".claude.json / .mcp.json",
         generatedPath: join("root", ".ulis", "generated", "claude", ".claude.json"),
         targetPath: join("root", "project", ".mcp.json"),

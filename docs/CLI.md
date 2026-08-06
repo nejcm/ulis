@@ -97,7 +97,7 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 
 | Platform  | Managed entries                                                              | Preserved native config                                                                |
 | --------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Claude    | generated `agents/` and `skills/` entries by name; `commands/`, `rules/`, …  | all `settings.json` and global `.claude.json` values; project `.mcp.json` `mcpServers` |
+| Claude    | generated `agents/` and `skills/` entries by name; `commands/`, `rules/`, …  | all `settings.json` / `settings.local.json` and global `.claude.json` values; project `.mcp.json` `mcpServers` |
 | OpenCode  | generated `agents/core`, `agents/specialized`, and `skills/` entries by name | `opencode.json` `mcp`                                                                  |
 | Codex     | generated `agents/` and `skills/` entries by name                            | all `config.toml` values; unrelated comments and order                                 |
 | Cursor    | generated `agents/` and `skills/` entries by name                            | `mcp.json` `mcpServers`                                                                |
@@ -105,7 +105,7 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 
 Install records generated agents and local skills in `.ulis-manifest.json` at each selected platform config root. On the first manifest-aware install, ULIS adopts the current set and removes nothing. Later installs remove previously tracked paths that are no longer generated, including platform-disabled entries, while preserving every untracked agent or skill. Manifest validation for all selected platforms completes before any destination is modified. Unselected platforms are untouched. `--no-prune` keeps stale paths but refreshes ownership to the current set. External `skills.yaml` installs are not tracked.
 
-For Codex `config.toml`, Claude `settings.json`, and global `.claude.json`, the existing file is the base: generated values overwrite only matching paths, while absent values remain. Other native configs retain their allowlisted preservation rules. Raw fragments win through the generated output because raw is merged during build. If `--backup` is set, backups include the previous manifest and managed entries before pruning.
+For Codex `config.toml`, Claude `settings.json` / `settings.local.json`, and global `.claude.json`, the existing file is the base: generated values overwrite only matching paths, while absent values remain. Other native configs retain their allowlisted preservation rules. Raw fragments win through the generated output because raw is merged during build. If `--backup` is set, backups include the previous manifest and managed entries before pruning.
 
 ---
 
