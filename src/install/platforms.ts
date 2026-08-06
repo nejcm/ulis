@@ -55,7 +55,7 @@ export async function installClaude(context: InstallContext): Promise<void> {
 
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
-    skipNames: reservedNames("settings.json", ".claude.json"),
+    skipNames: reservedNames("settings.json", "settings.local.json", ".claude.json"),
     namedDirectories: managedDirectoryRules("claude"),
   });
 }

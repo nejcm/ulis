@@ -569,6 +569,66 @@ describe("runInstall", () => {
     });
   });
 
+  it("merges Claude settings.local.json with the existing file", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "claude", "settings.json"), "{}");
+    write(
+      join(outputDir, "claude", "settings.local.json"),
+      JSON.stringify({ permissions: { allow: ["Bash(ls:*)"] } }, null, 2),
+    );
+    write(
+      join(projectDir, ".claude", "settings.local.json"),
+      JSON.stringify({ existingLocalKey: true, permissions: { deny: ["Bash(rm:*)"] } }, null, 2),
+    );
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["claude"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(JSON.parse(read(join(projectDir, ".claude", "settings.local.json")))).toEqual({
+      existingLocalKey: true,
+      permissions: { deny: ["Bash(rm:*)"], allow: ["Bash(ls:*)"] },
+    });
+  });
+
+  it("leaves an existing Claude settings.local.json untouched when nothing is generated", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "claude", "settings.json"), "{}");
+    write(join(projectDir, ".claude", "settings.local.json"), JSON.stringify({ keepMe: true }, null, 2));
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["claude"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(JSON.parse(read(join(projectDir, ".claude", "settings.local.json")))).toEqual({ keepMe: true });
+  });
+
   it("preserves OpenCode allowlisted config when generated config is absent", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
