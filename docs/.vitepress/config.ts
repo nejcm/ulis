@@ -8,6 +8,14 @@ export default defineConfig({
   base,
   cleanUrls: false,
   head: [
+    ["link", { rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: "" }],
+    [
+      "link",
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap",
+      },
+    ],
     ["link", { rel: "icon", type: "image/svg+xml", href: `${base}favicon.svg` }],
     ["link", { rel: "icon", type: "image/png", sizes: "96x96", href: `${base}favicon-96x96.png` }],
     ["link", { rel: "icon", href: `${base}favicon.ico` }],
