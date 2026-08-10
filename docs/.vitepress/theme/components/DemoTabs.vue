@@ -1,8 +1,10 @@
 <script setup>
-import { ref } from "vue";
+import { ref, defineAsyncComponent } from "vue";
 
 import CliDemo from "./CliDemo.vue";
-import TuiDemo from "./TuiDemo.vue";
+
+// Async so the ~120KB frame JSON lands in its own chunk instead of every page bundle.
+const TuiDemo = defineAsyncComponent(() => import("./TuiDemo.vue"));
 
 const TABS = [
   { id: "cli", label: "cli", title: "~/projects/acme — ulis", hint: "zsh" },
@@ -20,11 +22,14 @@ const tab = () => TABS.find((t) => t.id === active.value);
         <button
           v-for="t in TABS"
           :key="t.id"
+          :id="`ul-demo-tab-${t.id}`"
           class="ul-demo-tab"
           :class="{ 'ul-demo-tab-active': active === t.id }"
           role="tab"
           type="button"
           :aria-selected="active === t.id"
+          :aria-controls="`ul-demo-panel-${t.id}`"
+          :tabindex="active === t.id ? 0 : -1"
           @click="active = t.id"
         >
           {{ t.label }}
@@ -39,8 +44,10 @@ const tab = () => TABS.find((t) => t.id === active.value);
         <span class="ul-tl-title">{{ tab().title }}</span>
         <span class="ul-tl-shell">{{ tab().hint }}</span>
       </div>
-      <CliDemo v-if="active === 'cli'" />
-      <TuiDemo v-else />
+      <div :id="`ul-demo-panel-${active}`" role="tabpanel" :aria-labelledby="`ul-demo-tab-${active}`">
+        <CliDemo v-if="active === 'cli'" />
+        <TuiDemo v-else />
+      </div>
     </div>
   </div>
 </template>
@@ -145,15 +152,6 @@ const tab = () => TABS.find((t) => t.id === active.value);
   color: var(--ul-accent);
   background: rgba(53, 149, 184, 0.1);
 }
-.ul-demo-cmd {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0 18px;
-  font-size: 12.5px;
-  color: var(--ul-dim);
-}
 .ul-tl-title {
   flex: 1;
   text-align: center;
@@ -167,6 +165,13 @@ const tab = () => TABS.find((t) => t.id === active.value);
 
 @media (max-width: 640px) {
   .ul-tl-title {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ul-terminal-scan {
+    animation: none;
     display: none;
   }
 }

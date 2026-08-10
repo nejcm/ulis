@@ -65,7 +65,14 @@ watch(lines, () => {
   });
 });
 
-onMounted(() => run(0));
+onMounted(() => {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    // Show the finished transcript instead of typing it out.
+    lines.value = SCRIPT.map((s) => ({ kind: s.kind, mark: MARKS[s.kind], text: s.text }));
+    return;
+  }
+  run(0);
+});
 onUnmounted(() => {
   alive = false;
   clearTimeout(timer);
