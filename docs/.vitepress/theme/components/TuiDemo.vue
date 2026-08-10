@@ -26,7 +26,9 @@ function advance() {
   }, RESOLVED[index.value].hold);
 }
 
-onMounted(advance);
+onMounted(() => {
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) advance();
+});
 onUnmounted(() => clearTimeout(timer));
 </script>
 
@@ -50,12 +52,11 @@ onUnmounted(() => clearTimeout(timer));
   background: #0d1117;
   height: var(--ul-demo-h);
   display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden auto;
+  overflow: auto;
 }
 .ul-tui-screen {
-  margin: 0;
+  /* auto margins centre the frame but still let it scroll when wider than the card */
+  margin: auto;
   padding: 0;
   background: none;
   border: none;
@@ -64,7 +65,6 @@ onUnmounted(() => clearTimeout(timer));
   line-height: 1.32;
   color: #c9d1d9;
   white-space: pre;
-  overflow: hidden;
 }
 .ul-tui-row {
   display: block;
