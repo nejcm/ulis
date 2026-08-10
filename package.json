@@ -47,6 +47,7 @@
     "gen:reference": "tsx src/tools/gen-reference.ts",
     "gen:schemas": "tsx src/tools/gen-json-schema.ts",
     "gen:screenshot": "bun src/tui/gen-tui-screenshot.ts",
+    "gen:tui-frames": "bun src/tui/gen-tui-frames.ts",
     "copy:presets": "tsx src/tools/copy-presets.ts",
     "lint": "tsc --noEmit",
     "test:coverage": "bun test --coverage",

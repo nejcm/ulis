@@ -20,24 +20,7 @@ pageClass: ulis-landing-page
   </section>
 
   <section data-reveal data-delay="420" class="ul-terminal-wrapper">
-    <div class="ul-terminal">
-        <div class="ul-terminal-scan"></div>
-        <div class="ul-terminal-head">
-        <div class="ul-tl-dots"><span></span><span></span><span></span></div>
-        <span class="ul-tl-title">~/projects/acme — ulis</span>
-        <span class="ul-tl-shell">zsh</span>
-        </div>
-        <div ref="termEl" class="ul-terminal-body">
-        <div v-for="(line, i) in lines" :key="i" class="ul-line" :class="'ul-line-' + line.kind">
-            <span class="ul-mark">{{ line.mark }}</span>
-            <span class="ul-text">{{ line.text }}</span>
-        </div>
-        <div class="ul-line">
-            <span class="ul-mark ul-mark-cmd">$</span>
-            <span class="ul-text">{{ typing }}<span class="ul-caret"></span></span>
-        </div>
-        </div>
-    </div>
+    <DemoTabs />
   </section>
 
   <section class="ul-pipeline">
@@ -88,24 +71,7 @@ pageClass: ulis-landing-page
 </div>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
-
-const SCRIPT = [
-  { kind: 'cmd', text: 'bun add -g @nejcm/ulis' },
-  { kind: 'dim', text: 'installed @nejcm/ulis@0.0.30 · 12 packages · 840ms' },
-  { kind: 'cmd', text: 'ulis init' },
-  { kind: 'ok', text: 'scaffolded .ulis/ — agents, skills, mcp, permissions.yaml' },
-  { kind: 'cmd', text: 'ulis build' },
-  { kind: 'ok', text: 'claude-code   → generated/.claude/' },
-  { kind: 'ok', text: 'codex         → generated/.codex/' },
-  { kind: 'ok', text: 'cursor        → generated/.cursor/' },
-  { kind: 'ok', text: 'opencode      → generated/.opencode/' },
-  { kind: 'ok', text: 'forgecode     → generated/.forge/' },
-  { kind: 'dim', text: '5 targets · 24 files · 0 collisions · schema valid' },
-  { kind: 'cmd', text: 'ulis install --yes' },
-  { kind: 'ok', text: 'installed into every tool. one source of truth.' },
-]
-const MARKS = { cmd: '$', ok: '✓', dim: ' ' }
+import { onMounted, onUnmounted } from 'vue'
 
 const targets = [
   { name: 'Claude Code', path: '.claude/' },
@@ -121,55 +87,8 @@ const steps = [
   { cmd: 'ulis install', title: 'Deploy', body: 'Writes each output into the directory layout the tool expects. Idempotent and reversible.' },
 ]
 
-const lines = ref([])
-const typing = ref('')
-const termEl = ref(null)
-let alive = true
-let timer
-
-function wait(ms) {
-  return new Promise((r) => { timer = setTimeout(r, ms) })
-}
-
-async function run(i) {
-  if (!alive) return
-  if (i >= SCRIPT.length) {
-    await wait(2600)
-    if (!alive) return
-    lines.value = []
-    typing.value = ''
-    await wait(500)
-    return run(0)
-  }
-  const step = SCRIPT[i]
-  if (step.kind === 'cmd') {
-    for (let c = 1; c <= step.text.length; c++) {
-      if (!alive) return
-      typing.value = step.text.slice(0, c)
-      await wait(34 + Math.random() * 26)
-    }
-    await wait(320)
-    if (!alive) return
-    lines.value = [...lines.value, { kind: step.kind, mark: MARKS[step.kind], text: step.text }]
-    typing.value = ''
-    await wait(420)
-  } else {
-    lines.value = [...lines.value, { kind: step.kind, mark: MARKS[step.kind], text: step.text }]
-    await wait(step.kind === 'dim' ? 520 : 170)
-  }
-  return run(i + 1)
-}
-
-watch(lines, () => {
-  nextTick(() => {
-    if (termEl.value) termEl.value.scrollTop = termEl.value.scrollHeight
-  })
-})
-
 let io
 onMounted(() => {
-  run(0)
-
   io = new IntersectionObserver((entries) => {
     entries.forEach((e) => {
       if (!e.isIntersecting) return
@@ -182,8 +101,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  alive = false
-  clearTimeout(timer)
   if (io) io.disconnect()
 })
 </script>
@@ -365,46 +282,6 @@ body:has(.ulis-landing-page) {
 .ul-terminal-wrapper {
     padding: 0 24px;
 }
-.ul-terminal {
-  position: relative; max-width: 900px; margin: 0 auto 56px; border: 1px solid rgba(255,255,255,0.10);
-  border-radius: 14px; background: linear-gradient(180deg, #131318, #0b0b0e);
-  box-shadow: 0 40px 110px -40px rgba(0,0,0,0.95), 0 0 0 1px rgba(255,255,255,0.02) inset;
-  overflow: hidden;
-}
-.ul-terminal::before {
-  content: ''; position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(53,149,184,0.07), transparent 40%); pointer-events: none;
-}
-.ul-terminal-scan {
-  position: absolute; left: 0; right: 0; height: 60px;
-  background: linear-gradient(180deg, transparent, rgba(53,149,184,0.05), transparent);
-  animation: ulisScan 7s linear infinite; pointer-events: none;
-}
-@keyframes ulisScan { from { transform: translateY(-100%); } to { transform: translateY(1200%); } }
-.ul-terminal-head {
-  position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 16px;
-  border-bottom: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.025);
-}
-.ul-tl-dots { display: flex; gap: 7px; }
-.ul-tl-dots span { width: 11px; height: 11px; border-radius: 99px; background: #3a3a40; display: block; }
-.ul-tl-title { flex: 1; text-align: center; font-size: 12px; color: var(--ul-dim); }
-.ul-tl-shell { font-size: 11px; color: var(--ul-dim); }
-.ul-terminal-body {
-  position: relative; padding: 24px 32px 34px; font-size: 14px; line-height: 1.9;
-  height: 400px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.16) transparent;
-}
-.ul-line { display: flex; gap: 10px; white-space: pre-wrap; word-break: break-word; }
-.ul-mark { color: transparent; }
-.ul-line-cmd .ul-mark, .ul-line-ok .ul-mark, .ul-mark-cmd { color: var(--ul-accent); }
-.ul-line-cmd .ul-text { color: var(--ul-fg); }
-.ul-line-ok .ul-text { color: #b4b2ac; }
-.ul-line-dim .ul-text { color: var(--ul-dim); }
-.ul-caret {
-  display: inline-block; width: 8px; height: 15px; margin-left: 1px; transform: translateY(2px);
-  background: var(--ul-accent); animation: ulisBlink 1s steps(1) infinite;
-}
-@keyframes ulisBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
-
 .ul-pipeline { max-width: 1280px; margin: 0 auto; padding: 56px 24px 60px; }
 .ul-eyebrow { font-size: 11.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ul-dim); margin-bottom: 26px; }
 .ul-pipe-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border: 1px solid var(--ul-line); }
