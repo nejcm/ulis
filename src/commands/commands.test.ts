@@ -240,16 +240,8 @@ describe("commands", () => {
     const home = createTempRoot();
     process.chdir(createTempRoot());
     mockClone();
-    const originalHome = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
-    process.env.HOME = home;
-    process.env.USERPROFILE = home;
 
-    try {
-      await installCmd({ yes: true, target: "claude", source: "https://github.com/o/r", global: true });
-    } finally {
-      process.env.HOME = originalHome.HOME;
-      process.env.USERPROFILE = originalHome.USERPROFILE;
-    }
+    await installCmd({ yes: true, target: "claude", source: "https://github.com/o/r", global: true, homeDir: home });
 
     // A remote source resolves to mode "remote", not "global" - only the flag says where it lands.
     expect(existsSync(join(home, ".claude.json"))).toBe(true);

@@ -18,6 +18,8 @@ export interface InstallCmdOptions extends BuildCmdOptions {
   readonly runner?: "npx" | "bunx";
   readonly extensions?: boolean;
   readonly skipExternalSkills?: boolean;
+  /** Home directory override. Defaults to `os.homedir()`. Used for tests. */
+  readonly homeDir?: string;
 }
 
 /**
@@ -33,6 +35,7 @@ export async function installCmd(options: InstallCmdOptions = {}): Promise<void>
     const resolved = await guard.track(() =>
       resolveSourceOrRemote({
         global: options.global,
+        homeDir: options.homeDir,
         source: options.source,
         logger: log,
         signal: guard.signal,
@@ -74,6 +77,7 @@ export async function installCmd(options: InstallCmdOptions = {}): Promise<void>
       sourceDir,
       sourceLabel: remoteLabel,
       destBase,
+      userHome: options.homeDir,
       globalInstall,
       platforms: targets,
       backup: options.backup ?? false,

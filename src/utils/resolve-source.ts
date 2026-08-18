@@ -11,6 +11,8 @@ export interface ResolveSourceOptions {
   readonly source?: string;
   /** Use the global `~/.ulis/` instead of the project-local `.ulis/`. */
   readonly global?: boolean;
+  /** Home directory override. Defaults to `os.homedir()`. Used for tests. */
+  readonly homeDir?: string;
   /** Current working directory. Defaults to `process.cwd()`. Used for tests. */
   readonly cwd?: string;
   /** Progress logger for a remote clone. Ignored by the synchronous {@link resolveSource}. */
@@ -37,22 +39,23 @@ export interface ResolvedSource {
  */
 export function resolveSource(options: ResolveSourceOptions = {}): ResolvedSource {
   const cwd = options.cwd ?? process.cwd();
+  const home = options.homeDir ?? homedir();
 
   if (options.source) {
     const sourceDir = resolve(cwd, options.source);
     if (!existsSync(sourceDir)) {
       throw new Error(`--source path does not exist: ${sourceDir}`);
     }
-    const destBase = options.global ? homedir() : resolve(join(sourceDir, ".."));
+    const destBase = options.global ? home : resolve(join(sourceDir, ".."));
     return { sourceDir, destBase, mode: options.global ? "global" : "source" };
   }
 
   if (options.global) {
-    const sourceDir = join(homedir(), ULIS_SOURCE_DIRNAME);
+    const sourceDir = join(home, ULIS_SOURCE_DIRNAME);
     if (!existsSync(sourceDir)) {
       throw new Error(`Global ulis source not found at ${sourceDir}. Run 'ulis init --global' to scaffold it.`);
     }
-    return { sourceDir, destBase: homedir(), mode: "global" };
+    return { sourceDir, destBase: home, mode: "global" };
   }
 
   const sourceDir = join(cwd, ULIS_SOURCE_DIRNAME);
@@ -83,7 +86,7 @@ export async function resolveSourceOrRemote(
   const remote = await fetchRemoteSource(options.source, { logger: options.logger, signal: options.signal });
   return {
     sourceDir: remote.dir,
-    destBase: options.global ? homedir() : (options.cwd ?? process.cwd()),
+    destBase: options.global ? (options.homeDir ?? homedir()) : (options.cwd ?? process.cwd()),
     mode: "remote",
     cleanup: remote.cleanup,
   };
