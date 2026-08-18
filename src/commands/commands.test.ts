@@ -4,6 +4,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { __test } from "../install.js";
+import { __test as installInterrupt } from "../utils/interrupt.js";
+import { logger as log } from "../utils/logger.js";
 import { buildCmd } from "./build.js";
 import { initCmd } from "./init.js";
 import { installCmd } from "./install.js";
@@ -26,11 +29,70 @@ function copyFixtureSource(projectRoot: string, dirname = ".ulis"): string {
 }
 
 afterEach(() => {
+  __test.resetRuntimeDependencies();
   process.chdir(originalCwd);
   for (const root of tmpRoots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+/**
+ * Stub `git clone` so remote-source tests need no network. Returns the clone temp roots, which must
+ * all be gone by the end of the run.
+ */
+function mockClone(build?: (dir: string) => void): string[] {
+  const cloned: string[] = [];
+  __test.setRuntimeDependencies({
+    runCommand(_lookup, args) {
+      // `git` is on PATH, `gh` is not - so a failed clone takes no retry path.
+      return { status: args[0] === "gh" ? 1 : 0 } as never;
+    },
+    async runAsyncCommand(command, args, spawnOptions) {
+      if (command !== "git") return { status: 0, stdout: "", stderr: "" };
+      const dir = args[args.length - 1]!;
+      cloned.push(resolve(dir, ".."));
+      mkdirSync(dir, { recursive: true });
+      if (build) build(dir);
+      else cpSync(fixturesDir, dir, { recursive: true });
+      // A real spawn dies when its signal aborts.
+      if (spawnOptions?.signal?.aborted) return { status: 1, stdout: "", stderr: "aborted" };
+      return { status: 0, stdout: "", stderr: "" };
+    },
+  });
+  return cloned;
+}
+
+/** Fire the SIGINT handler installCmd registered, without raising a real signal. */
+function pressCtrlC(): void {
+  (process.listeners("SIGINT").at(-1) as ((signal: string) => void) | undefined)?.("SIGINT");
+}
+
+/**
+ * Record interrupt exits instead of stopping the process. `onExit` samples state at the moment the
+ * real process would have died - the only way to prove cleanup happened *before* the exit.
+ */
+function captureExit(options: { onExit?: () => void; halts?: boolean } = {}): {
+  exits: number[];
+  restore: () => void;
+} {
+  const original = installInterrupt.exitOnInterrupt;
+  const exits: number[] = [];
+  installInterrupt.exitOnInterrupt = () => {
+    exits.push(1);
+    options.onExit?.();
+    // The real exit ends the process; `halts` stands in for that so the run cannot continue.
+    if (options.halts) throw new Error("interrupted");
+  };
+  return { exits, restore: () => void (installInterrupt.exitOnInterrupt = original) };
+}
+
+function captureLog(lines: string[]): () => void {
+  const original = log.info;
+  log.info = (message: string) => void lines.push(message);
+  return () => {
+    log.info = original;
+  };
+}
 
 describe("commands", () => {
   it("initCmd scaffolds a project-local source tree", async () => {
@@ -91,6 +153,25 @@ describe("commands", () => {
     expect(existsSync(join(projectRoot, ".ulis", "generated"))).toBe(false);
   });
 
+  it("buildCmd rejects a remote source before doing any work", async () => {
+    const projectRoot = createTempRoot();
+    copyFixtureSource(projectRoot);
+    process.chdir(projectRoot);
+
+    await expect(buildCmd({ source: "https://github.com/o/r", target: "claude" })).rejects.toThrow(
+      "build writes generated output into the source tree, and a remote source is discarded after the run. " +
+        "Use `ulis install --source <url>` instead.",
+    );
+
+    // Rejected before any work: no clone, no generated output.
+    expect(existsSync(join(projectRoot, ".ulis", "generated"))).toBe(false);
+  });
+
+  it("buildCmd rejects an unsupported protocol instead of pointing at install", async () => {
+    // `ulis install` would refuse `git://` too, so sending the user there would waste a round trip.
+    await expect(buildCmd({ source: "git://github.com/o/r", target: "claude" })).rejects.toThrow(/HTTPS or SSH/u);
+  });
+
   it("installCmd installs generated config into the project platform directory", async () => {
     const projectRoot = createTempRoot();
     copyFixtureSource(projectRoot);
@@ -138,6 +219,170 @@ describe("commands", () => {
     expect(existsSync(join(projectRoot, ".cursor"))).toBe(false);
     expect(existsSync(join(projectRoot, ".opencode"))).toBe(false);
     expect(existsSync(join(projectRoot, ".forge"))).toBe(false);
+  });
+
+  it("installCmd clones a remote source, installs it, then removes the temp directory", async () => {
+    const projectRoot = createTempRoot();
+    process.chdir(projectRoot);
+    const cloned = mockClone();
+    const before = process.listenerCount("SIGINT");
+
+    await installCmd({ yes: true, target: "claude", source: "https://github.com/o/r" });
+
+    expect(existsSync(join(projectRoot, ".claude", "agents", "worker.md"))).toBe(true);
+    // The clone is a throwaway: nothing may survive the run.
+    expect(cloned.map(existsSync)).toEqual([false]);
+    // The interrupt handler must not outlive the command.
+    expect(process.listenerCount("SIGINT")).toBe(before);
+  });
+
+  it("installCmd treats a remote source with --global as a global install", async () => {
+    const home = createTempRoot();
+    process.chdir(createTempRoot());
+    mockClone();
+    const originalHome = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE };
+    process.env.HOME = home;
+    process.env.USERPROFILE = home;
+
+    try {
+      await installCmd({ yes: true, target: "claude", source: "https://github.com/o/r", global: true });
+    } finally {
+      process.env.HOME = originalHome.HOME;
+      process.env.USERPROFILE = originalHome.USERPROFILE;
+    }
+
+    // A remote source resolves to mode "remote", not "global" - only the flag says where it lands.
+    expect(existsSync(join(home, ".claude.json"))).toBe(true);
+    expect(existsSync(join(home, ".mcp.json"))).toBe(false);
+  });
+
+  it("installCmd leaves SIGINT alone for a local source", async () => {
+    const projectRoot = createTempRoot();
+    copyFixtureSource(projectRoot);
+    process.chdir(projectRoot);
+    const before = process.listenerCount("SIGINT");
+
+    await installCmd({ yes: true, target: "claude" });
+
+    expect(process.listenerCount("SIGINT")).toBe(before);
+  });
+
+  it("installCmd aborts the clone and removes the temp directory on Ctrl-C", async () => {
+    const projectRoot = createTempRoot();
+    process.chdir(projectRoot);
+    const before = process.listenerCount("SIGINT");
+    let duringClone = 0;
+
+    let cloned: string[] = [];
+    // Sample at the instant the real process would have died: the temp dir must already be gone.
+    const survivedAtExit: boolean[] = [];
+    const exit = captureExit({ onExit: () => survivedAtExit.push(cloned.some(existsSync)) });
+    cloned = mockClone((dir) => {
+      duringClone = process.listenerCount("SIGINT");
+      pressCtrlC();
+      cpSync(fixturesDir, dir, { recursive: true });
+    });
+
+    try {
+      await expect(installCmd({ yes: true, target: "claude", source: "https://github.com/o/r" })).rejects.toThrow(
+        /Failed to clone/u,
+      );
+    } finally {
+      exit.restore();
+    }
+
+    expect(duringClone).toBe(before + 1);
+    expect(process.listenerCount("SIGINT")).toBe(before);
+    expect(cloned.map(existsSync)).toEqual([false]);
+    expect(existsSync(join(projectRoot, ".claude"))).toBe(false);
+    // The interrupt aborts the clone and the exit is deferred until after the temp dir is gone.
+    expect(survivedAtExit).toEqual([false]);
+    expect(exit.exits).toHaveLength(1);
+  });
+
+  it("installCmd removes the temp directory when Ctrl-C is pressed twice during the clone", async () => {
+    const projectRoot = createTempRoot();
+    process.chdir(projectRoot);
+    const before = process.listenerCount("SIGINT");
+    let cloned: string[] = [];
+    // Sample at the instant the real process would have died: the temp dir must already be gone.
+    const survivedAtExit: boolean[] = [];
+    const exit = captureExit({ onExit: () => survivedAtExit.push(cloned.some(existsSync)) });
+
+    cloned = mockClone((dir) => {
+      pressCtrlC(); // aborts the clone
+      pressCtrlC(); // arrives before the clone has unwound
+      cpSync(fixturesDir, dir, { recursive: true });
+    });
+
+    try {
+      await expect(installCmd({ yes: true, target: "claude", source: "https://github.com/o/r" })).rejects.toThrow(
+        /Failed to clone/u,
+      );
+    } finally {
+      exit.restore();
+    }
+
+    // The exit must be deferred until after the clone unwound and removed its temp directory.
+    expect(survivedAtExit).toEqual([false]);
+    expect(exit.exits).toHaveLength(1);
+    expect(cloned.map(existsSync)).toEqual([false]);
+    expect(process.listenerCount("SIGINT")).toBe(before);
+  });
+
+  it("installCmd cleans up and stops the run when Ctrl-C lands after the clone", async () => {
+    const projectRoot = createTempRoot();
+    process.chdir(projectRoot);
+    const cloned = mockClone();
+    const before = process.listenerCount("SIGINT");
+    const exit = captureExit({ halts: true });
+    const restoreLog = captureLog([]);
+
+    // `Source: ...` is logged well after the clone, so it is a reliable post-clone hook.
+    log.info = (message: string) => {
+      if (message.startsWith("Source: ")) pressCtrlC();
+    };
+
+    try {
+      await installCmd({ yes: true, target: "claude", source: "https://github.com/o/r" }).catch(() => undefined);
+    } finally {
+      restoreLog();
+      exit.restore();
+    }
+
+    expect(cloned.map(existsSync)).toEqual([false]);
+    expect(exit.exits).toHaveLength(1);
+    expect(process.listenerCount("SIGINT")).toBe(before);
+  });
+
+  it("installCmd removes the cloned temp directory when the install fails", async () => {
+    const projectRoot = createTempRoot();
+    process.chdir(projectRoot);
+    // Clone succeeds but the tree is not a ULIS source, so the failure lands after the clone -
+    // the case only installCmd's own `finally` can clean up.
+    const cloned = mockClone((dir) => writeFileSync(join(dir, "config.yaml"), "version: [unclosed\n"));
+
+    await expect(installCmd({ yes: true, target: "claude", source: "https://github.com/o/r" })).rejects.toThrow();
+    expect(cloned.map(existsSync)).toEqual([false]);
+  });
+
+  it("installCmd logs the remote URL rather than the temp path, without credentials", async () => {
+    const projectRoot = createTempRoot();
+    process.chdir(projectRoot);
+    mockClone();
+    const lines: string[] = [];
+    const restore = captureLog(lines);
+
+    try {
+      await installCmd({ yes: true, target: "claude", source: "https://user:s3cret@github.com/o/r" });
+    } finally {
+      restore();
+    }
+
+    expect(lines).toContain("Source: https://github.com/o/r");
+    expect(lines.join("\n")).not.toContain("s3cret");
+    // The other log lines legitimately name temp paths (destBase, generated output), so only the
+    // Source line is asserted here.
   });
 
   it("installCmd with --yes fails fast for missing presets without prompting", async () => {

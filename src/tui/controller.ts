@@ -1,12 +1,26 @@
 import type { CliRenderer } from "@opentui/core";
 
 import type { Logger } from "../build.js";
+import { planRemoteCommands } from "../install.js";
+import { redactUserinfo } from "../utils/redact.js";
+import { resolvePresets } from "../utils/resolve-presets.js";
+import { resolveSourceOrRemote } from "../utils/resolve-source.js";
 import { initializeMissingSource, runTuiAction } from "./actions.js";
 import { TuiApp } from "./app.js";
 import { readClipboardText } from "./clipboard.js";
 import { loadTuiPreferences, saveTuiPreferences, snapshotTuiPreferences } from "./preferences.js";
 import { listTuiPresets } from "./presets.js";
-import { applyFlowPreferences, createInitialState, type TuiEffect, type TuiState } from "./state.js";
+import {
+  applyFlowPreferences,
+  createInitialState,
+  planSource,
+  remotePresetRef,
+  reviewFingerprint,
+  selectedPresets,
+  type PreparedRemoteInstall,
+  type TuiEffect,
+  type TuiState,
+} from "./state.js";
 
 const SPINNER_INTERVAL_MS = 120;
 const MAX_RETAINED_LOGS = 80;
@@ -44,6 +58,17 @@ export class TuiController {
 
   private lastSavedPreferences: string;
   private runAbortController: AbortController | undefined;
+  /** Clone backing the review screen. Reused by the install so what ran is what was shown. */
+  private preparedRemote: PreparedRemoteInstall | undefined;
+  private prepareGeneration = 0;
+  private prepareAbort: AbortController | undefined;
+  /**
+   * Every in-flight preparation, so shutdown waits for each clone to be cleaned up. Superseded
+   * preparations stay here until they settle: their `inFlightCleanups` entry is still empty while
+   * the clone is running, so exiting on the newest one alone would strand the older temp root.
+   */
+  private readonly preparePromises = new Set<Promise<void>>();
+  private readonly inFlightCleanups = new Set<() => void>();
   private spinnerTimer: ReturnType<typeof setInterval> | undefined;
 
   constructor(renderer: CliRenderer, options: TuiControllerOptions = {}) {
@@ -74,7 +99,7 @@ export class TuiController {
     if (effect.type === "none") return;
 
     if (effect.type === "exit") {
-      this.shutdown(effect.code);
+      await this.shutdown(effect.code);
       return;
     }
 
@@ -87,6 +112,17 @@ export class TuiController {
 
     if (effect.type === "pasteClipboard") {
       this.app.pasteFromClipboard();
+      return;
+    }
+
+    if (effect.type === "prepareRemoteInstall") {
+      const running = this.prepareRemoteInstall(effect.action);
+      this.preparePromises.add(running);
+      try {
+        await running;
+      } finally {
+        this.preparePromises.delete(running);
+      }
       return;
     }
 
@@ -122,11 +158,28 @@ export class TuiController {
       return;
     }
 
-    await this.runWithLogs(
-      formatActionTitle(effect.action),
-      `${formatActionTitle(effect.action)} completed successfully.`,
-      (logger, signal) => (this.options.runAction ?? runTuiAction)(this.state, effect.action, logger, { signal }),
-    );
+    // Only the start this review was made for may consume it. A prepared clone must never leak
+    // into a different action or a plan that has since been edited.
+    const prepared =
+      this.preparedRemote?.action === effect.action &&
+      this.preparedRemote.fingerprint === reviewFingerprint(this.state, this.preparedRemote.action, this.options.cwd)
+        ? this.preparedRemote
+        : undefined;
+    if (this.preparedRemote && !prepared) this.disposePreparedRemote();
+    try {
+      await this.runWithLogs(
+        formatActionTitle(effect.action),
+        `${formatActionTitle(effect.action)} completed successfully.`,
+        (logger, signal) =>
+          (this.options.runAction ?? runTuiAction)(this.state, effect.action, logger, {
+            signal,
+            prepared,
+            cwd: this.options.cwd,
+          }),
+      );
+    } finally {
+      this.disposePreparedRemote();
+    }
   }
 
   private async runWithLogs(
@@ -207,9 +260,121 @@ export class TuiController {
   }
 
   /** Tears the UI down and exits. Exposed for tests through `options.exit`. */
-  shutdown(code: number): void {
+  /**
+   * Clone the remote source (and/or preset ref) so the review screen can list the exact commands it
+   * will run. The clone is kept and handed to the install, so consent applies to what executes.
+   */
+  private async prepareRemoteInstall(action: "install" | "presetInstall"): Promise<void> {
+    // One preparation at a time: a second one must not overwrite the first's clone without
+    // disposing it, and a completion that arrives after being superseded must throw its own away.
+    this.prepareAbort?.abort();
+    this.disposePreparedRemote();
+    const generation = ++this.prepareGeneration;
+    const abort = new AbortController();
+    this.prepareAbort = abort;
+
+    // Snapshot every input the command list depends on at the same instant as the fingerprint.
+    // Reading them back after the awaits would let a change made during the clone (and reverted
+    // afterwards) produce a review that omits commands the matching fingerprint then permits.
+    const plan = planSource(this.state, this.options.cwd);
+    const remoteRef = remotePresetRef(this.state);
+    const fingerprint = reviewFingerprint(this.state, action, this.options.cwd);
+    const snapshot = {
+      platforms: [...this.state.platforms],
+      presetInstallExtensions: this.state.presetInstallExtensions,
+      skipExternalSkills: this.state.skipExternalSkills,
+      localPresets: selectedPresets(this.state),
+    };
+    const cleanups: (() => void)[] = [];
+    const disposeAll = () => {
+      while (cleanups.length > 0) cleanups.pop()!();
+    };
+    // Visible to shutdown, so an in-flight clone is never stranded on disk.
+    this.inFlightCleanups.add(disposeAll);
+
+    this.state.notice = "";
+    try {
+      const source = plan.remote
+        ? await resolveSourceOrRemote({
+            source: plan.sourceDir,
+            global: plan.globalInstall,
+            logger: this.createLogger(),
+            signal: abort.signal,
+          })
+        : undefined;
+      if (source) cleanups.push(source.cleanup);
+
+      const remote = remoteRef
+        ? await resolvePresets([remoteRef], {
+            nonInteractive: true,
+            logger: this.createLogger(),
+            signal: abort.signal,
+          })
+        : undefined;
+      if (remote) cleanups.push(remote.cleanup);
+
+      if (generation !== this.prepareGeneration) {
+        // Superseded while cloning: this result is stale, so discard it rather than publish it.
+        disposeAll();
+        return;
+      }
+
+      const presets = [...snapshot.localPresets, ...(remote?.presets ?? [])];
+      const commands = planRemoteCommands({
+        sourceDir: action === "install" ? (source?.sourceDir ?? plan.sourceDir) : undefined,
+        presets,
+        platforms: snapshot.platforms,
+        globalInstall: plan.globalInstall,
+        installExtensions: action === "presetInstall" ? snapshot.presetInstallExtensions : true,
+        installSkills: !snapshot.skipExternalSkills,
+      });
+
+      this.preparedRemote = {
+        action,
+        fingerprint,
+        sourceDir: source?.sourceDir,
+        presets,
+        commands,
+        cleanup: disposeAll,
+      };
+      this.state.remoteCommands = commands;
+      this.state.remoteCommandSource = redactUserinfo(plan.remote ? plan.sourceDir : (remoteRef ?? ""));
+      this.state.screen = action === "install" ? "installReview" : "presetInstallReview";
+      this.state.cursor = 0;
+    } catch (error) {
+      disposeAll();
+      if (generation !== this.prepareGeneration) return;
+      // A failed clone is a notice, never a crash.
+      this.state.notice = error instanceof Error ? error.message : String(error);
+      this.state.remoteCommands = [];
+      this.state.remoteCommandSource = "";
+    } finally {
+      this.inFlightCleanups.delete(disposeAll);
+      if (this.prepareAbort === abort) this.prepareAbort = undefined;
+    }
+    this.render();
+  }
+
+  private disposePreparedRemote(): void {
+    this.preparedRemote?.cleanup();
+    this.preparedRemote = undefined;
+    this.state.remoteCommands = [];
+    this.state.remoteCommandSource = "";
+  }
+
+  async shutdown(code: number): Promise<void> {
     this.runAbortController?.abort();
     this.runAbortController = undefined;
+    this.prepareAbort?.abort();
+    this.prepareAbort = undefined;
+    // Aborting only *starts* the clone's teardown, and its temp root is removed by the resolver as
+    // it unwinds. Exiting synchronously here would kill the process first and strand a partial,
+    // credential-bearing clone, so wait for preparation to finish before tearing anything down.
+    // `allSettled`: preparation reports its own failures; shutdown only needs each to have finished.
+    if (this.preparePromises.size > 0) await Promise.allSettled([...this.preparePromises]);
+    for (const cleanup of [...this.inFlightCleanups]) cleanup();
+    this.inFlightCleanups.clear();
+    this.disposePreparedRemote();
     this.clearSpinner();
     this.app.destroy();
     this.renderer.destroy();

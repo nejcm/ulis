@@ -1,12 +1,13 @@
-import { stdin as input, stdout as output } from "node:process";
-import { createInterface } from "node:readline/promises";
-
 import { runInstall } from "../install.js";
 import { detectInstallCollisions } from "../install/platforms.js";
 import { PLATFORMS } from "../platforms.js";
+import { createInterruptGuard } from "../utils/interrupt.js";
 import { logger as log } from "../utils/logger.js";
+import { confirm } from "../utils/prompt.js";
+import { redactUserinfo } from "../utils/redact.js";
+import { isRemoteSource } from "../utils/remote-source.js";
 import { parsePresetNames, resolvePresets } from "../utils/resolve-presets.js";
-import { resolveSource } from "../utils/resolve-source.js";
+import { resolveSourceOrRemote } from "../utils/resolve-source.js";
 import { parseTargets, type BuildCmdOptions } from "./build.js";
 
 export interface InstallCmdOptions extends BuildCmdOptions {
@@ -23,47 +24,74 @@ export interface InstallCmdOptions extends BuildCmdOptions {
  * Detect destination collisions, optionally confirm, then install generated configs.
  */
 export async function installCmd(options: InstallCmdOptions = {}): Promise<void> {
-  const { sourceDir, destBase, mode } = resolveSource({ global: options.global, source: options.source });
-  const targets = parseTargets(options) ?? PLATFORMS;
-  const presets = options.preset
-    ? await resolvePresets(parsePresetNames(options.preset), { nonInteractive: options.yes ?? false })
-    : [];
+  const presetNames = options.preset ? parsePresetNames(options.preset) : [];
+  const guard = createInterruptGuard(
+    (options.source != null && isRemoteSource(options.source)) || presetNames.some(isRemoteSource),
+  );
 
-  const collisions = detectInstallCollisions(destBase, targets, mode === "global");
-  if (collisions.length > 0 && !options.yes) {
-    log.warn("The following folders already exist and will be modified/overwritten:");
-    for (const path of collisions) {
-      log.dim(`  - ${path}`);
-    }
-    const confirmed = await confirm("Continue?");
-    if (!confirmed) {
-      log.info("Aborted by user.");
-      return;
-    }
-  }
-
-  await runInstall({
-    sourceDir,
-    destBase,
-    globalInstall: mode === "global",
-    platforms: targets,
-    backup: options.backup ?? false,
-    prune: options.prune ?? true,
-    rebuild: options.rebuild ?? true,
-    logger: log,
-    presets,
-    runner: options.runner,
-    installExtensions: options.extensions ?? true,
-    installSkills: !options.skipExternalSkills,
-  });
-}
-
-async function confirm(question: string): Promise<boolean> {
-  const rl = createInterface({ input, output });
   try {
-    const answer = (await rl.question(`${question} [y/N] `)).trim().toLowerCase();
-    return answer === "y" || answer === "yes";
+    const resolved = await guard.track(() =>
+      resolveSourceOrRemote({
+        global: options.global,
+        source: options.source,
+        logger: log,
+        signal: guard.signal,
+      }),
+    );
+    const { sourceDir, destBase, mode } = resolved;
+    guard.onCleanup(resolved.cleanup);
+    // The temp directory is meaningless to the user; name the repository instead - minus any
+    // credentials the URL carried.
+    const remoteLabel = mode === "remote" && options.source ? redactUserinfo(options.source) : undefined;
+
+    const targets = parseTargets(options) ?? PLATFORMS;
+    const { presets, cleanup: cleanupPresets } = await guard.track(() =>
+      resolvePresets(presetNames, {
+        nonInteractive: options.yes ?? false,
+        logger: log,
+        signal: guard.signal,
+      }),
+    );
+    guard.onCleanup(cleanupPresets);
+
+    // `--global` is the flag that decides this, not the resolved mode: a remote source resolves to
+    // mode "remote" while still installing into the home tree.
+    const globalInstall = options.global === true;
+    const collisions = detectInstallCollisions(destBase, targets, globalInstall);
+    if (collisions.length > 0 && !options.yes) {
+      log.warn("The following folders already exist and will be modified/overwritten:");
+      for (const path of collisions) {
+        log.dim(`  - ${path}`);
+      }
+      const confirmed = await confirm("Continue?");
+      if (!confirmed) {
+        log.info("Aborted by user.");
+        return;
+      }
+    }
+
+    await runInstall({
+      sourceDir,
+      sourceLabel: remoteLabel,
+      destBase,
+      globalInstall,
+      platforms: targets,
+      backup: options.backup ?? false,
+      prune: options.prune ?? true,
+      rebuild: options.rebuild ?? true,
+      logger: log,
+      presets,
+      runner: options.runner,
+      installExtensions: options.extensions ?? true,
+      installSkills: !options.skipExternalSkills,
+      remoteSources: [
+        ...(remoteLabel ? [remoteLabel] : []),
+        ...presets.flatMap((preset) => (preset.remoteUrl ? [preset.remoteUrl] : [])),
+      ],
+      nonInteractive: options.yes ?? false,
+      signal: guard.signal,
+    });
   } finally {
-    rl.close();
+    guard.release();
   }
 }

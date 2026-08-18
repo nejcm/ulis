@@ -2,7 +2,9 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
+import type { Logger } from "../build.js";
 import { ULIS_SOURCE_DIRNAME } from "../config.js";
+import { fetchRemoteSource, isRemoteSource } from "./remote-source.js";
 
 export interface ResolveSourceOptions {
   /** Explicit path override for the ulis source tree. */
@@ -11,12 +13,16 @@ export interface ResolveSourceOptions {
   readonly global?: boolean;
   /** Current working directory. Defaults to `process.cwd()`. Used for tests. */
   readonly cwd?: string;
+  /** Progress logger for a remote clone. Ignored by the synchronous {@link resolveSource}. */
+  readonly logger?: Logger;
+  /** Abort a remote clone. Ignored by the synchronous {@link resolveSource}. */
+  readonly signal?: AbortSignal;
 }
 
 export interface ResolvedSource {
   readonly sourceDir: string;
   readonly destBase: string;
-  readonly mode: "source" | "global" | "project";
+  readonly mode: "source" | "global" | "project" | "remote";
 }
 
 /**
@@ -56,4 +62,29 @@ export function resolveSource(options: ResolveSourceOptions = {}): ResolvedSourc
     );
   }
   return { sourceDir, destBase: cwd, mode: "project" };
+}
+
+/**
+ * {@link resolveSource}, plus the one case it cannot handle: a `--source` that is a git URL.
+ * Clones it to a temp directory and hands back the same shape. A temp dir has no meaningful parent,
+ * so `destBase` falls back to the cwd (or `~` with `--global`).
+ *
+ * The caller owns `cleanup` — call it in a `finally`. It is a no-op when nothing was cloned.
+ */
+export async function resolveSourceOrRemote(
+  options: ResolveSourceOptions = {},
+): Promise<ResolvedSource & { cleanup: () => void }> {
+  // A no-op rather than `undefined` when nothing was cloned, matching `resolvePresets`. Callers
+  // register it unconditionally instead of each re-deciding whether there is anything to clean up.
+  if (!options.source || !isRemoteSource(options.source)) {
+    return { ...resolveSource(options), cleanup: () => {} };
+  }
+
+  const remote = await fetchRemoteSource(options.source, { logger: options.logger, signal: options.signal });
+  return {
+    sourceDir: remote.dir,
+    destBase: options.global ? homedir() : (options.cwd ?? process.cwd()),
+    mode: "remote",
+    cleanup: remote.cleanup,
+  };
 }

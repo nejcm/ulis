@@ -1,4 +1,5 @@
 import { PLATFORM_DESCRIPTIONS, PLATFORM_LABELS, PLATFORMS, type Platform } from "../platforms.js";
+import { redactUserinfo } from "../utils/redact.js";
 import {
   FLOW_ITEMS,
   formatDestinationMode,
@@ -144,7 +145,10 @@ function planView(state: TuiState, cwd?: string): ScreenView {
   overview.push(
     state.flow === "presetsOnly"
       ? field("Base source", "none (preset-only install)")
-      : field("Base source", `${formatSourceMode(state.sourceMode, state.customSource)} -> ${plan.sourceDir}`),
+      : field(
+          "Base source",
+          `${formatSourceMode(state.sourceMode, state.customSource)} -> ${redactUserinfo(plan.sourceDir)}`,
+        ),
     { kind: "blank" },
     { kind: "heading", text: "Output" },
     field("Platforms", formatPlatforms(state.platforms)),
@@ -192,7 +196,7 @@ function sourceView(state: TuiState): ScreenView {
   const rows: ViewRow[] = [
     option(state, 0, "Project", { value: ".ulis/ (repository-local config)" }),
     option(state, 1, "Global", { value: "~/.ulis/ (home tool configs)" }),
-    option(state, 2, "Custom", { value: state.customSource || "Set a custom path" }),
+    option(state, 2, "Custom", { value: redactUserinfo(state.customSource) || "Set a custom path" }),
     option(state, 3, "Back to plan"),
   ];
 
@@ -212,8 +216,9 @@ function sourceView(state: TuiState): ScreenView {
 function customSourceView(state: TuiState): ScreenView {
   const rows: ViewRow[] = [];
   if (state.recentCustomSources.length > 0) {
+    // Recents are written redacted, but older persisted entries may not be - redact on render too.
     state.recentCustomSources.forEach((source, index) => {
-      rows.push(option(state, index + 1, source));
+      rows.push(option(state, index + 1, redactUserinfo(source)));
     });
   } else {
     rows.push({ kind: "text", text: "No recent custom sources yet.", tone: "muted" });
@@ -225,6 +230,8 @@ function customSourceView(state: TuiState): ScreenView {
     breadcrumbs: ["Start", "Custom source", "Path"],
     panes: [pane("recent", "Recent", rows)],
     input: {
+      // NOT redacted: app.ts writes this back into the live field, so redacting here would strip
+      // the credentials out of the value before the clone ever sees them.
       value: state.textInput,
       placeholder: "Path to .ulis or its parent directory",
       focused: state.cursor === 0,
@@ -349,7 +356,7 @@ function platformsView(state: TuiState): ScreenView {
 function missingSourceView(state: TuiState, cwd?: string): ScreenView {
   const plan = planSource(state, cwd);
   const rows: ViewRow[] = [
-    { kind: "text", text: `Missing source: ${plan.sourceDir}`, tone: "error" },
+    { kind: "text", text: `Missing source: ${redactUserinfo(plan.sourceDir)}`, tone: "error" },
     { kind: "blank" },
   ];
 
@@ -379,15 +386,34 @@ function missingSourceView(state: TuiState, cwd?: string): ScreenView {
   };
 }
 
+/**
+ * The trust boundary for TUI-initiated remote installs: these commands come from a repository the
+ * user did not write and will execute if they proceed. Text is pre-sanitised by the planner, so a
+ * hostile manifest cannot forge or hide a line. Renders nothing when there is nothing remote to run.
+ */
+function remoteCommandRows(state: TuiState): ViewRow[] {
+  if (state.remoteCommands.length === 0) return [];
+  return [
+    { kind: "blank" },
+    {
+      kind: "text",
+      text: `These commands come from ${state.remoteCommandSource} and WILL RUN if you continue:`,
+      tone: "error",
+    },
+    ...state.remoteCommands.map((command): ViewRow => ({ kind: "text", text: `  ${command}`, tone: "muted" })),
+  ];
+}
+
 function installReviewView(state: TuiState, cwd?: string): ScreenView {
   const plan = planSource(state, cwd);
   const rows: ViewRow[] = [
-    field("Source", plan.sourceDir),
+    field("Source", redactUserinfo(plan.sourceDir)),
     field("Destination", plan.destBase),
     field("Platforms", formatPlatforms(state.platforms)),
     field("Presets", formatPresets(state)),
     { kind: "blank" },
     { kind: "text", text: formatInstallCommand(state, cwd), tone: "muted" },
+    ...remoteCommandRows(state),
     { kind: "blank" },
     option(state, 0, "Start install"),
     option(state, 1, "Back to plan"),
@@ -412,6 +438,7 @@ function presetInstallReviewView(state: TuiState, cwd?: string): ScreenView {
     field("Presets", formatPresets(state)),
     { kind: "blank" },
     { kind: "text", text: "Action: install the selected preset directories resolved by the TUI.", tone: "muted" },
+    ...remoteCommandRows(state),
     { kind: "blank" },
     option(state, 0, "Backup existing configs before install", { checked: state.backup }),
     option(state, 1, "Prune removed agents and skills", { checked: state.prune }),
@@ -523,7 +550,16 @@ function formatPlatforms(platforms: readonly Platform[]): string {
 
 function formatInstallCommand(state: TuiState, cwd?: string): string {
   const plan = planSource(state, cwd);
-  const args = ["ulis", "install", "--source", plan.sourceDir, "--target", state.platforms.join(","), "--yes"];
+  // Redacted, so a copied command may need its credentials re-added - better than showing them.
+  const args = [
+    "ulis",
+    "install",
+    "--source",
+    redactUserinfo(plan.sourceDir),
+    "--target",
+    state.platforms.join(","),
+    "--yes",
+  ];
   if (state.destinationMode === "global") args.push("--global");
   if (state.selectedPresetNames.length > 0) args.push("--preset", state.selectedPresetNames.join(","));
   if (!state.rebuild) args.push("--skip-rebuild");

@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { createTestRenderer, type TestRendererSetup } from "@opentui/core/testing";
 
+import { __test as installTest } from "../install.js";
 import { TuiController, type TuiControllerOptions } from "./controller.js";
+import { reviewFingerprint } from "./state.js";
 import { MIN_COLUMNS, MIN_ROWS, SPLIT_COLUMNS } from "./view.js";
 
 /** Comfortably above `state.ts`'s 35 ms duplicate-key window. */
@@ -399,5 +401,274 @@ describe("TUI workflow runs", () => {
     expect(calls).toEqual(["init", "build"]);
     expect(harness.controller.state.pendingAction).toBeUndefined();
     expect(harness.controller.state.resultTitle).toContain("Complete");
+  });
+});
+
+describe("remote install consent", () => {
+  const url = "https://github.com/o/r";
+
+  /** Clone stub that materialises a source tree with a real extensions manifest. */
+  function mockClone(): string[] {
+    const cloned: string[] = [];
+    installTest.setRuntimeDependencies({
+      runCommand(_lookup: string, args: readonly string[]) {
+        return { status: args[0] === "gh" ? 1 : 0 } as never;
+      },
+      async runAsyncCommand(command: string, args: readonly string[]) {
+        if (command !== "git") return { status: 0, stdout: "", stderr: "" };
+        const dir = args[args.length - 1]!;
+        cloned.push(join(dir, ".."));
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, "config.yaml"), "version: 1\nname: remote\n", "utf-8");
+        writeFileSync(join(dir, "extensions.yaml"), '"*":\n  extensions:\n    - name: evil-package\n', "utf-8");
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    } as never);
+    return cloned;
+  }
+
+  afterEach(() => {
+    installTest.resetRuntimeDependencies();
+  });
+
+  it("lists the remote source's real commands on the review screen", async () => {
+    const cloned = mockClone();
+    const harness = await createHarness();
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+
+    await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+
+    // Read out of the cloned manifest, not invented by the TUI.
+    expect(state.remoteCommands.join(" ")).toContain("evil-package");
+    expect(state.remoteCommandSource).toBe(url);
+    expect(state.screen).toBe("installReview");
+    // The clone is kept for the install that follows, so consent matches what runs.
+    expect(cloned.map(existsSync)).toEqual([true]);
+
+    await harness.controller.shutdown(0);
+    expect(cloned.map(existsSync)).toEqual([false]);
+  });
+
+  it("disposes the previous clone when preparation runs again", async () => {
+    const cloned = mockClone();
+    const harness = await createHarness();
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+
+    await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    // Editing the plan and reviewing again must not strand the first clone.
+    state.platforms = ["claude", "cursor"];
+    await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+
+    expect(cloned).toHaveLength(2);
+    expect(existsSync(cloned[0]!)).toBe(false);
+    expect(existsSync(cloned[1]!)).toBe(true);
+
+    await harness.controller.shutdown(0);
+    expect(cloned.map(existsSync)).toEqual([false, false]);
+  });
+
+  it("keeps only the newest clone when two preparations overlap", async () => {
+    const cloned = mockClone();
+    const harness = await createHarness();
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+
+    // Overlapping preparations: the superseded one must throw its own clone away.
+    await Promise.all([
+      harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" }),
+      harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" }),
+    ]);
+
+    expect(cloned.filter(existsSync)).toHaveLength(1);
+    await harness.controller.shutdown(0);
+    expect(cloned.filter(existsSync)).toHaveLength(0);
+  });
+
+  it("waits for a superseded preparation before exiting", async () => {
+    const cloned: string[] = [];
+    let release: (() => void) | undefined;
+    installTest.setRuntimeDependencies({
+      runCommand(_lookup: string, args: readonly string[]) {
+        return { status: args[0] === "gh" ? 1 : 0 } as never;
+      },
+      async runAsyncCommand(command: string, args: readonly string[]) {
+        if (command !== "git") return { status: 0, stdout: "", stderr: "" };
+        const dir = args[args.length - 1]!;
+        cloned.push(join(dir, ".."));
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, "config.yaml"), "version: 1\n", "utf-8");
+        // Only the first (soon superseded) clone hangs; the second finishes straight away.
+        if (cloned.length === 1) {
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        }
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    } as never);
+    const harness = await createHarness();
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+
+    const preparingFirst = harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    await Bun.sleep(10);
+    state.platforms = ["claude", "cursor"];
+    await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+
+    // Shutdown must await the first preparation too, not just the newest one.
+    const shutting = harness.controller.shutdown(0);
+    setTimeout(() => release?.(), 5);
+    await shutting;
+
+    expect(cloned).toHaveLength(2);
+    expect(cloned.filter(existsSync)).toHaveLength(0);
+    await preparingFirst;
+  });
+
+  it("binds the review to the settings it was generated for", async () => {
+    mockClone();
+    const harness = await createHarness();
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+
+    await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    const reviewed = reviewFingerprint(state, "install");
+
+    state.skipExternalSkills = !state.skipExternalSkills;
+    expect(reviewFingerprint(state, "install")).not.toBe(reviewed);
+  });
+
+  it("does not hand a remote review to a later local start", async () => {
+    const cloned = mockClone();
+    const runCalls: { sourceDir: string; prepared: unknown }[] = [];
+    const harness = await createHarness(100, 30, {
+      runAction: ((
+        state: { customSource: string },
+        _action: string,
+        _logger: unknown,
+        opts: { prepared?: unknown },
+      ) => {
+        runCalls.push({ sourceDir: state.customSource, prepared: opts.prepared });
+        return Promise.resolve();
+      }) as never,
+    });
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+
+    await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    expect(cloned.map(existsSync)).toEqual([true]);
+
+    // Back out of the review and switch to a purely local source.
+    state.sourceMode = "project";
+    state.customSource = "";
+    await harness.controller.handleEffect({ type: "start", action: "install" });
+
+    // The stale remote clone must neither be passed along nor left on disk.
+    expect(runCalls[0]!.prepared).toBeUndefined();
+    expect(cloned.map(existsSync)).toEqual([false]);
+    await harness.controller.shutdown(0);
+  });
+
+  it("plans from a snapshot taken with the fingerprint, not from live state", async () => {
+    const harness = await createHarness();
+    const state = harness.controller.state;
+    // Toggled off mid-clone and back on afterwards: the review must reflect the settings it was
+    // fingerprinted for, not the value that happened to be live when planning ran.
+    installTest.setRuntimeDependencies({
+      runCommand(_lookup: string, args: readonly string[]) {
+        return { status: args[0] === "gh" ? 1 : 0 } as never;
+      },
+      async runAsyncCommand(command: string, args: readonly string[]) {
+        if (command !== "git") return { status: 0, stdout: "", stderr: "" };
+        state.skipExternalSkills = true;
+        const dir = args[args.length - 1]!;
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, "config.yaml"), "version: 1\nname: remote\n", "utf-8");
+        writeFileSync(join(dir, "extensions.yaml"), '"*":\n  extensions:\n    - name: evil-package\n', "utf-8");
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    } as never);
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+    state.skipExternalSkills = false;
+
+    await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    state.skipExternalSkills = false;
+
+    expect(state.remoteCommands.join(" ")).toContain("evil-package");
+    await harness.controller.shutdown(0);
+  });
+
+  it("removes an in-flight clone before exiting", async () => {
+    const cloned: string[] = [];
+    let release: (() => void) | undefined;
+    installTest.setRuntimeDependencies({
+      runCommand(_lookup: string, args: readonly string[]) {
+        return { status: args[0] === "gh" ? 1 : 0 } as never;
+      },
+      async runAsyncCommand(command: string, args: readonly string[]) {
+        if (command !== "git") return { status: 0, stdout: "", stderr: "" };
+        const dir = args[args.length - 1]!;
+        cloned.push(join(dir, ".."));
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, "config.yaml"), "version: 1\n", "utf-8");
+        // Hold the clone open so shutdown lands while it is still in flight.
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    } as never);
+    const harness = await createHarness();
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+
+    const preparing = harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    await Bun.sleep(10);
+    const shutting = harness.controller.shutdown(0);
+    release?.();
+    await Promise.all([preparing, shutting]);
+
+    expect(cloned).toHaveLength(1);
+    expect(cloned.map(existsSync)).toEqual([false]);
+  });
+
+  it("surfaces a failed clone as a notice instead of crashing", async () => {
+    installTest.setRuntimeDependencies({
+      runCommand(_lookup: string, args: readonly string[]) {
+        return { status: args[0] === "gh" ? 1 : 0 } as never;
+      },
+      async runAsyncCommand() {
+        return { status: 1, stdout: "", stderr: "fatal: repository not found" };
+      },
+    } as never);
+    const harness = await createHarness();
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+
+    await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+
+    expect(state.notice).toContain("Failed to clone");
+    expect(state.remoteCommands).toEqual([]);
+    expect(state.screen).not.toBe("installReview");
   });
 });

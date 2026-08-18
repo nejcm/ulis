@@ -42,7 +42,7 @@ or
 bun add -g @nejcm/ulis
 ```
 
-Requires Node 20+. Works with both Node and Bun runtimes. `ulis tui` additionally requires [Bun](https://bun.sh) — its renderer runs through Bun's FFI; every other command runs on Node.
+Requires Node 20.3+. Works with both Node and Bun runtimes. `ulis tui` additionally requires [Bun](https://bun.sh) — its renderer runs through Bun's FFI; every other command runs on Node.
 
 ## Installable skills
 

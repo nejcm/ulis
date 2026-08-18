@@ -2,12 +2,13 @@
 
 ## Glossary
 
-- **Source**: The canonical ULIS config tree read by build, validate, install, and the TUI. It can be project-local (`./.ulis/`), global (`~/.ulis/`), or an explicit custom path.
+- **Source**: The canonical ULIS config tree read by build, validate, install, and the TUI. It can be project-local (`./.ulis/`), global (`~/.ulis/`), an explicit custom path, or a remote source.
 - **Destination**: The base directory where generated platform configs are installed. A project destination writes under the current project; a global destination writes under the user's home directory.
 - **Platform**: A supported AI tool target: Claude Code, Codex, Cursor, OpenCode, or ForgeCode.
-- **Preset**: A reusable ULIS source tree resolved from user-global or bundled preset directories. A preset can be layered before a base source, where the base source wins conflicts, or installed by itself as a preset-only source.
+- **Preset**: A reusable ULIS source tree resolved from user-global or bundled preset directories, or from a remote source. A preset can be layered before a base source, where the base source wins conflicts, or installed by itself as a preset-only source.
 - **Preset Layer**: A preset merged before a base source in a validate, build, or install plan.
 - **Preset Source**: One or more presets used as the whole input for preset-only install, without reading a base source.
+- **Remote Source**: A source tree shallow-cloned from a git repository into a temporary directory for the duration of a single run. It is discarded afterwards and is never cached.
 - **Preset Order**: The user-selected order in which presets are merged; earlier presets are merged first, later presets can override earlier presets, and the base source wins after all preset layers.
 - **Diagnostic**: A parse or validation message with source label, source-relative file, absolute path, field path, target platform, optional line/column, and suggested fix.
 - **Build**: Parse, validate, and generate native platform config files under `<source>/generated/<platform>/`.
