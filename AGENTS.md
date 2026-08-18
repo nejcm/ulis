@@ -10,11 +10,7 @@ This repo has no `CLAUDE.md`, and should not get one. `AGENTS.md` is the single 
 
 - [`CONTEXT.md`](CONTEXT.md) — glossary. Use these terms when describing changes back to me: source vs destination, preset layer vs preset source, raw fragment, ownership manifest, managed vs unmanaged entry, prune, preserved native config.
 - [`.agents/add-platform/`](.agents/add-platform/) — the checklist for adding a platform target. Read it before touching `src/platforms.ts`.
-- [`docs/SPEC.md`](docs/SPEC.md) architecture, [`docs/CLI.md`](docs/CLI.md) CLI surface, [`docs/REFERENCE.md`](docs/REFERENCE.md) field-level schema docs, [`docs/TESTING.md`](docs/TESTING.md) what the suite covers and what it deliberately omits.
-
-## How to work here
-
-These are good defaults, not laws. A direct instruction from me wins — say which rule you're breaking and why, then do it. Match ceremony to the task: one-pass changes get one pass.
+- [`docs/SPEC.md`](docs/SPEC.md) architecture, [`docs/CLI.md`](docs/CLI.md) CLI surface, [`docs/TESTING.md`](docs/TESTING.md) what the suite covers and what it deliberately omits. `docs/REFERENCE.md` is meant to be the field-level schema reference but currently generates empty — read `src/schema/` directly instead.
 
 ## Blast radius
 
@@ -38,7 +34,9 @@ So:
 
 ## Key conventions
 
-- **Zod v4.** Two JSON Schema paths exist on purpose — don't unify them without checking the output. `src/tools/gen-json-schema.ts` uses `z.toJSONSchema(schema, { target: "draft-7" })` for the publishable schemas. `src/tools/gen-reference.ts` still uses `zod-to-json-schema` with `$refStrategy: "none"` for the docs tables only. Never reach for `zod-to-json-schema` in `src/schema/` or in anything that ships under `schemas/` — it is v3-shaped and emits empty schemas for v4 constructs.
+- **Zod v4.** Use `z.toJSONSchema(schema, { target: "draft-7" })`, as `src/tools/gen-json-schema.ts` does for the publishable schemas. Never reach for `zod-to-json-schema` — it is v3-shaped and emits empty schemas for v4 constructs.
+
+  `src/tools/gen-reference.ts` still imports it, and is **currently broken because of it**: `docs/REFERENCE.md` regenerates to five empty headings with no fields. Porting that tool to `z.toJSONSchema` is the fix; until then, treat `docs/REFERENCE.md` as unavailable rather than as an empty schema, and don't cite it as evidence a field doesn't exist.
 - **Bundler scope.** `tsup.config.ts` emits `dist/cli.js` (Node) and `dist/tui.js` (Bun-only). Keep `@opentui/core` in `external` for both so Bun resolves the platform-native package. CJS deps such as `gray-matter` rely on dynamic `require` and break if forced into the ESM bundle.
 - **The TUI needs Bun.** OpenTUI's renderer initializes through Bun's FFI and throws under Node. `ulis tui` runs in-process under Bun; under Node it re-launches `dist/tui.js` with a discovered `bun` binary (`src/tui/launcher.ts`) and mirrors the child's exit code. Keep `@opentui/core` imports confined to `src/tui.ts` and `src/tui/` — `src/tui/launcher.test.ts` enforces this.
 - **Source resolution precedence:** `--source <path>` → `--global` (`~/.ulis/`) → `./.ulis/` (CWD only, no walk-up). Errors hint at the right `ulis init` variant.

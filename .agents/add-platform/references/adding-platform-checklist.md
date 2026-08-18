@@ -16,14 +16,14 @@ Why it matters: platform ordering and labels are reused across build, install, w
 
 ## 2. Add Build Support
 
-Add the generator implementation under `src/generators/<target>.ts`, then register it in `src/build.ts`.
+Add the generator implementation under `src/generators/platforms/<target>/`, then register it in the `GENERATORS` map in `src/generators/index.ts`.
 
 Audit:
 
 - generator imports
-- `switch (target)` handling
+- `GENERATORS` map entry
 - generator argument shape
-- whether the target should receive permissions, rules, plugins, or unsupported-platform settings
+- whether the target should receive permissions, rules, extensions, or unsupported-platform settings
 
 Compare against the closest existing generator instead of treating all generators as equivalent. The current build wiring is intentionally asymmetric.
 
@@ -37,7 +37,7 @@ Audit:
 - merge vs copy behavior
 - destination directory logic through `platformConfigDir()`
 - global skill installer support in `SKILL_PLATFORM_AGENT_NAMES`
-- platform-specific side effects like plugin installation or top-level file placement
+- platform-specific side effects like extension installation or top-level file placement
 
 Why it matters: some targets install into a single config directory, while others also merge files like `settings.json`, `mcp.json`, or root-level artifacts.
 
@@ -46,7 +46,7 @@ Why it matters: some targets install into a single config directory, while other
 Search for hardcoded platform names and explicit unions. At minimum inspect:
 
 - `src/schema/skill.ts`
-- `src/schema/plugins.ts`
+- `src/schema/extensions.ts`
 - `src/schema/permissions.ts`
 - `src/schema/mcp.ts`
 - `src/parsers/skill.ts`
@@ -78,7 +78,7 @@ Usually relevant:
 - `example/raw/all/`
 - `example/raw/<platform>/`
 - `example/skills.yaml`
-- `example/plugins.yaml`
+- `example/extensions.yaml`
 
 Questions to answer:
 
@@ -103,7 +103,7 @@ Important detail from `AGENTS.md`: if you changed Zod schemas, run `bun run gen:
 
 Inspect nearby tests before writing new ones:
 
-- `src/workflow.test.ts` for canonical ordering and platform parsing
+- `src/workflow.test.ts` and `src/platforms.test.ts` for canonical ordering and platform parsing
 - `src/schema.test.ts` for schema coverage
 - `tests/integration.test.ts` and other integration fixtures for end-to-end generation behavior
 
@@ -133,9 +133,9 @@ Do not commit `dist/` or `example/generated/`.
 
 ## Common Failure Modes
 
-- Added the target to `PLATFORMS` but not to `src/build.ts` or `src/install.ts`
+- Added the target to `PLATFORMS` but not to `src/generators/index.ts` or `src/install.ts`
 - Added a generator but forgot parser/schema unions with explicit platform strings
-- Treated plugins or permissions as universal even though existing platforms are asymmetric
+- Treated extensions or permissions as universal even though existing platforms are asymmetric
 - Forgot env-var translation or tool-name mapping helpers
 - Updated schemas without regenerating reference docs
 - Added example output instead of source example config

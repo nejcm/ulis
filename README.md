@@ -89,6 +89,7 @@ This creates:
 ├── agents/              # agent definitions (.md with frontmatter)
 ├── skills/              # skill definitions (SKILL.md per skill)
 ├── commands/            # slash commands
+├── rules/               # shared rule documents
 └── raw/                 # platform-specific fragments copied verbatim
 ```
 

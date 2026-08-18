@@ -14,11 +14,11 @@ ULIS is a CLI (`ulis`) that lets you define AI agent configurations **once** and
 
 ```
 .ulis/                        .ulis/generated/
-├── agents/*.md       ─────►  ├── claude/   (agents/, commands/, rules/, settings.json, .claude.json)
-├── skills/*/         ─────►  ├── opencode/ (opencode.json, agents/, skills/)
-│   SKILL.md                  ├── codex/    (config.toml, agents/*.toml, AGENTS.md)
-├── mcp.yaml          ─────►  ├── cursor/   (agents/*.mdc, skills/, mcp.json)
-│                             └── forgecode/ (AGENTS.md, .forge/agents, .forge/skills, .forge/.mcp.json)
+├── agents/*.md       ─────►  ├── claude/   (agents/, commands/, rules/, skills/, settings.json, .claude.json)
+├── skills/*/         ─────►  ├── opencode/ (opencode.json, agents/, commands/, rules/, skills/, settings.json)
+│   SKILL.md                  ├── codex/    (config.toml, agents/*.toml, rules/, skills/, AGENTS.md)
+├── mcp.yaml          ─────►  ├── cursor/   (agents/*.mdc, rules/, skills/, mcp.json, permissions.json)
+│                             └── forgecode/ (AGENTS.md, .forge/agents, .forge/rules, .forge/skills, .forge/.mcp.json)
 ├── skills.yaml          (external skill installs)
 ├── extensions.yaml      (third-party CLI extension installs via npx/bunx)
 ├── permissions.yaml
@@ -61,7 +61,7 @@ Provider adapters own their own parsing-to-native behavior, generated file layou
 
 Between parsing and generation the orchestrator runs **validators** (`src/validators/`):
 
-- `validateCrossRefs(agents, skills, mcp)` — agent → skill (warn), agent → mcp (**error**), agent → subagent allowlist (warn)
+- `validateCrossRefs(agents, skills, mcp)` — agent → skill (warn), agent → mcp (**error**)
 - `validateCollisions(agents, skills)` — duplicate agent or skill names (**error**)
 
 Errors abort the build (exit code 1, no files written). Warnings print and the build proceeds.
@@ -162,7 +162,7 @@ Run the following checks...
 
 Skills become:
 
-- **Claude**: slash commands in `generated/claude/commands/`
+- **Claude**: skill directories in `generated/claude/skills/`
 - **OpenCode**: skill directories in `generated/opencode/skills/`
 - **Codex**: skill directories in `generated/codex/skills/`
 - **Cursor**: skill directories in `generated/cursor/skills/`
@@ -298,11 +298,11 @@ Hooks are native to Claude Code only. On other targets they are silently dropped
 | Native skills/commands               |        ✓        |          ✓           |       ✓       |    ✓    |     ✓      |
 | Hooks (PreToolUse/PostToolUse/Stop)  |        ✓        |          —           |       —       |    —    |     —      |
 | Subagent spawning                    |        ✓        |          ✓           |    comment    |    —    |     —      |
-| Background execution                 |        ✓        |          —           |       —       |    —    |     —      |
+| Background execution                 |        ✓        |          —           |       —       |    ✓    |     —      |
 | Git worktree isolation               |        ✓        |          —           |       —       |    —    |     —      |
 | Local MCP servers                    |        ✓        |          ✓           |       ✓       |    ✓    |     ✓      |
 | Remote MCP servers                   |        ✓        |          ✓           | localFallback |    ✓    |     ✓      |
-| Fine-grained tool permissions        |        ✓        |          ✓           |       —       |    —    | tools list |
+| Fine-grained tool permissions        |        ✓        |          ✓           |       —       | allowlists | tools list |
 | `contextHints` enforcement           |     comment     |       comment        |    comment    | comment |  comment   |
 | `toolPolicy.avoid`                   | disallowedTools |       comment        |    comment    | comment |  comment   |
 | `toolPolicy.requireConfirmation`     | permissionMode  | permission.edit/bash |    comment    | comment |  comment   |
@@ -327,16 +327,15 @@ ulis install --global --yes    # build + deploy from ~/.ulis/
 **Internal flow** (`src/build.ts`): `sourceDir` is resolved per invocation (see `src/utils/resolve-source.ts`).
 
 ```typescript
-const agents = parseAgents(join(sourceDir, "agents"));
-const skills = parseSkills(join(sourceDir, "skills"));
-const mcp = loadMcp(sourceDir);
+const analysis = analyzeProject({ sourceDir, logger, presets });
 
-generateClaude(agents, skills, mcp, sourceDir, join(generatedDir, "claude"));
-generateOpencode(agents, skills, mcp, sourceDir, join(generatedDir, "opencode"));
-generateCodex(agents, skills, mcp, sourceDir, join(generatedDir, "codex"));
-generateCursor(agents, skills, mcp, sourceDir, join(generatedDir, "cursor"));
-generateForgecode(agents, skills, mcp, sourceDir, join(generatedDir, "forgecode"));
+for (const target of activeTargets) {
+  const result = generate(target, analysis.project);
+  writeResult(result, join(outputDir, target), target, logger);
+}
 ```
+
+`generate()` (`src/generators/index.ts`) dispatches through the `GENERATORS` map to `generateClaude`, `generateOpencode`, `generateCodex`, `generateCursor`, and `generateForgecode`. Each returns a pure `GenerationResult`; `writeResult` (`src/generators/writer.ts`) owns the filesystem side effects.
 
 Parsing validates against Zod schemas and reports localized diagnostics for broken Markdown frontmatter, YAML/JSON config syntax, and schema failures. Semantic validators reuse the same diagnostic shape for cross-reference and collision failures.
 
@@ -344,7 +343,7 @@ Parsing validates against Zod schemas and reports localized diagnostics for brok
 
 ## 6. Versioning
 
-`ULIS_VERSION = "1.0.0"` is defined in `src/schema.ts`. This is the specification version, not the npm package version.
+The ULIS specification version is `1.0.0`. This is the specification version, not the npm package version.
 
 Migration policy:
 
@@ -356,33 +355,24 @@ Migration policy:
 
 ## 7. Extending ULIS — Adding a New Adapter
 
-1. Create `src/generators/{target}.ts`:
+1. Create `src/generators/platforms/{target}/index.ts`:
 
    ```typescript
-   export function generate{Target}(
-     agents: readonly ParsedAgent[],
-     skills: readonly ParsedSkill[],
-     mcp: McpConfig,
-     // ...other inputs...
-     outDir: string,
-   ): void { /* ... */ }
+   export function generate{Target}(project: ProjectBundle): GenerationResult { /* ... */ }
    ```
 
-2. Register it in `src/index.ts`:
+2. Register it in the `GENERATORS` map in `src/generators/index.ts`:
 
    ```typescript
-   import { generateTarget } from "./generators/target.js";
+   import { generateTarget } from "./platforms/target/index.js";
    // ...
-   case "target":
-     generateTarget(agents, skills, mcp, outDir);
-     break;
+   const GENERATORS = {
+     // ...
+     target: generateTarget,
+   };
    ```
 
-3. Add scripts to `package.json`:
-
-   ```json
-   "build:target": "tsx src/index.ts --target target"
-   ```
+3. Add `"target"` to `PLATFORMS`, `PLATFORM_LABELS`, `PLATFORM_DESCRIPTIONS`, and `PLATFORM_DIRS` in `src/platforms.ts`, and wire the install branch in `src/install.ts`.
 
 4. Add `"target"` to `McpServerSchema.targets` values if needed.
 
