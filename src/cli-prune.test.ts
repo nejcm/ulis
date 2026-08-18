@@ -68,6 +68,22 @@ function write(path: string, contents: string): void {
   writeFileSync(path, contents, "utf8");
 }
 
+describe("CLI remote sources", () => {
+  it("rejects build --source <url> with a message pointing at install", () => {
+    const root = createTempRoot();
+    const result = spawnSync(process.execPath, [cliPath, "build", "--source", "https://github.com/o/r"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toContain(
+      "build writes generated output into the source tree, and a remote source is discarded after the run. " +
+        "Use `ulis install --source <url>` instead.",
+    );
+  });
+});
+
 function runCli(cwd: string, args: readonly string[], userHome?: string): void {
   const result = spawnSync(process.execPath, [cliPath, ...args], {
     cwd,

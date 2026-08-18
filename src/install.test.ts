@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import type { Logger } from "./build.js";
-import { __test, resolveRunner, runInstall, runPresetInstall } from "./install.js";
+import { __test, loadDotEnv, resolveRunner, runInstall, runPresetInstall } from "./install.js";
 import { readMergeableConfig } from "./utils/config-merger.js";
 
 const tmpRoots: string[] = [];
@@ -63,6 +63,22 @@ afterEach(() => {
   }
 });
 
+describe("loadDotEnv", () => {
+  it("drops loader-hijacking keys from an untrusted source, keeps them for a local one", () => {
+    const root = createTempRoot();
+    write(join(root, ".env"), "NODE_OPTIONS=--require ./evil.js\nPATH=/evil\nGIT_SSH_COMMAND=evil\nTEAM_TOKEN=t\n");
+
+    // The remote `.env` is read before the trust gate, so it must not steer the approved npx run.
+    const untrusted: NodeJS.ProcessEnv = {};
+    loadDotEnv(root, untrusted, { untrusted: true });
+    expect(untrusted).toEqual({ TEAM_TOKEN: "t" });
+
+    const local: NodeJS.ProcessEnv = {};
+    loadDotEnv(root, local);
+    expect(local.NODE_OPTIONS).toBe("--require ./evil.js");
+  });
+});
+
 describe("runInstall", () => {
   it("installs Codex skill agent metadata from source skill directories globally", async () => {
     const root = createTempRoot();
@@ -88,6 +104,33 @@ describe("runInstall", () => {
     });
 
     expect(read(join(root, ".codex", "skills", "audit-skills", "agents", "openai.yaml"))).toBe(openaiYaml);
+  });
+
+  it("restores process.env after loading the source .env", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, "source");
+    write(join(sourceDir, "config.yaml"), "version: 1\nname: test\n");
+    write(join(sourceDir, ".env"), "ULIS_TEST_REMOTE_ENV=from-source\nULIS_TEST_PREEXISTING=overwritten\n");
+    process.env.ULIS_TEST_PREEXISTING = "kept";
+
+    try {
+      await runInstall({
+        sourceDir,
+        destBase: root,
+        userHome: root,
+        globalInstall: true,
+        platforms: ["codex"],
+        rebuild: true,
+        installExtensions: false,
+        installSkills: false,
+        logger: silentLogger,
+      });
+
+      expect(process.env.ULIS_TEST_REMOTE_ENV).toBeUndefined();
+      expect(process.env.ULIS_TEST_PREEXISTING).toBe("kept");
+    } finally {
+      delete process.env.ULIS_TEST_PREEXISTING;
+    }
   });
 
   it("overlays generated Codex values while preserving unmanaged config for project installs", async () => {
@@ -1963,6 +2006,202 @@ describe("runInstall", () => {
   });
 });
 
+describe("remote trust gate", () => {
+  const BACKSLASH = String.fromCharCode(92);
+  interface GateRun {
+    readonly commands: Array<{ command: string; args: readonly string[] }>;
+    readonly logs: string[];
+    readonly questions: string[];
+  }
+
+  async function runWithRemote(
+    overrides: {
+      remoteSources?: readonly string[];
+      nonInteractive?: boolean;
+      answer?: boolean;
+      extensionArgs?: readonly string[];
+      approvedCommands?: readonly string[];
+    } = {},
+  ): Promise<GateRun> {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "codex", "AGENTS.md"), "Codex instructions.\n");
+    write(join(sourceDir, "skills.yaml"), ['"*":', "  skills:", "    - name: test/skill", ""].join("\n"));
+    const extensionArgLines = (overrides.extensionArgs ?? []).map((arg) => `        - ${JSON.stringify(arg)}`);
+    write(
+      join(sourceDir, "extensions.yaml"),
+      [
+        "codex:",
+        "  extensions:",
+        "    - name: some-extension@latest",
+        ...(extensionArgLines.length > 0 ? ["      args:", ...extensionArgLines] : []),
+        "",
+      ].join("\n"),
+    );
+
+    const commands: Array<{ command: string; args: readonly string[] }> = [];
+    const logs: string[] = [];
+    const questions: string[] = [];
+    __test.setRuntimeDependencies({
+      runCommand(command, args) {
+        commands.push({ command, args });
+        return { status: 0, stdout: "", stderr: "" } as never;
+      },
+      async runAsyncCommand(command, args) {
+        commands.push({ command, args });
+        return { status: 0, stdout: "", stderr: "" };
+      },
+      async confirm(question) {
+        questions.push(question);
+        return overrides.answer ?? false;
+      },
+    });
+
+    const recordingLogger: Logger = {
+      info(msg) {
+        logs.push(msg);
+      },
+      success(msg) {
+        logs.push(msg);
+      },
+      warn(msg) {
+        logs.push(msg);
+      },
+      error(msg) {
+        logs.push(msg);
+      },
+      dim(msg) {
+        logs.push(msg);
+      },
+      header(msg) {
+        logs.push(msg);
+      },
+    };
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["codex"],
+      rebuild: false,
+      logger: recordingLogger,
+      remoteSources: overrides.remoteSources,
+      nonInteractive: overrides.nonInteractive,
+      approvedCommands: overrides.approvedCommands,
+    });
+
+    return { commands, logs, questions, projectDir } as GateRun & { projectDir: string };
+  }
+
+  it("does not prompt for a purely local source", async () => {
+    const run = await runWithRemote();
+    expect(run.questions).toHaveLength(0);
+    expect(run.commands.some((call) => call.command === "npx")).toBe(true);
+  });
+
+  it("declining skips external skills and extensions but still writes config files", async () => {
+    const run = (await runWithRemote({
+      remoteSources: ["https://github.com/o/r"],
+      answer: false,
+    })) as GateRun & { projectDir: string };
+    expect(run.questions).toEqual(["Run these commands?"]);
+    expect(run.commands.filter((call) => call.command === "npx")).toHaveLength(0);
+    expect(existsSync(join(run.projectDir, ".codex", "AGENTS.md"))).toBe(true);
+    expect(run.logs.some((line) => line.includes("Generated config files were still installed"))).toBe(true);
+  });
+
+  it("accepting runs the commands", async () => {
+    const run = await runWithRemote({ remoteSources: ["https://github.com/o/r"], answer: true });
+    expect(run.questions).toHaveLength(1);
+    expect(run.commands.some((call) => call.command === "npx")).toBe(true);
+  });
+
+  it("-y runs the commands without prompting", async () => {
+    const run = await runWithRemote({ remoteSources: ["https://github.com/o/r"], nonInteractive: true });
+    expect(run.questions).toHaveLength(0);
+    expect(run.commands.some((call) => call.command === "npx")).toBe(true);
+  });
+
+  // The TUI cannot answer a stdin prompt, so it reviews the commands on screen and passes the list
+  // it displayed. These two cases are what make that consent mean something at the point of
+  // execution rather than only at the screen.
+  it("runs without prompting when the approved list matches what is planned", async () => {
+    const planned = await runWithRemote({ remoteSources: ["https://github.com/o/r"], answer: false });
+    const shown = planned.logs.filter((line) => line.startsWith("  ")).map((line) => line.slice(2));
+    expect(shown.length).toBeGreaterThan(0);
+
+    const run = await runWithRemote({ remoteSources: ["https://github.com/o/r"], approvedCommands: shown });
+    expect(run.questions).toHaveLength(0);
+    expect(run.commands.some((call) => call.command === "npx")).toBe(true);
+  });
+
+  it("refuses to run when the planned commands differ from the approved list", async () => {
+    await expect(
+      runWithRemote({
+        remoteSources: ["https://github.com/o/r"],
+        approvedCommands: ["npx skills@latest add something-else --yes"],
+      }),
+    ).rejects.toThrow(/differ from the ones reviewed/u);
+  });
+
+  it("neutralises control characters and quotes multi-word arguments in the preview", async () => {
+    const run = await runWithRemote({
+      remoteSources: ["https://github.com/o/r"],
+      answer: false,
+      extensionArgs: ["--flag", "two words", String.fromCharCode(27) + "[1mbold", "carriage" + String.fromCharCode(13)],
+    });
+    const line = run.logs.find((entry) => entry.includes("some-extension@latest"));
+    expect(line).toBeDefined();
+    // The raw control characters must not survive into the terminal, and the quoted argument must
+    // still read as one argument.
+    expect(line).not.toContain(String.fromCharCode(27));
+    expect(line).not.toContain(String.fromCharCode(13));
+    expect(line).toContain(BACKSLASH + "u001b");
+    expect(line).toContain(BACKSLASH + "u000d");
+    expect(line).toContain('"two words"');
+  });
+
+  it("shows empty and backslash arguments unambiguously", async () => {
+    const run = await runWithRemote({
+      remoteSources: ["https://github.com/o/r"],
+      answer: false,
+      extensionArgs: ["", "trailing" + BACKSLASH, "--flag"],
+    });
+    const line = run.logs.find((entry) => entry.includes("some-extension@latest"));
+    expect(line).toBeDefined();
+    expect(line).toContain('""');
+    expect(line).not.toContain("trailing" + BACKSLASH + " --flag");
+  });
+
+  it("redacts credentials that a package argument carries", async () => {
+    const run = await runWithRemote({
+      remoteSources: ["https://github.com/o/r"],
+      answer: false,
+      extensionArgs: ["https://user:SUPERSECRET@registry.example/pkg.tgz"],
+    });
+    const line = run.logs.find((entry) => entry.includes("some-extension@latest"));
+    expect(line).toBeDefined();
+    expect(line).not.toContain("SUPERSECRET");
+    expect(line).toContain("https://registry.example/pkg.tgz");
+  });
+
+  it("lists the remote URL and every command verbatim", async () => {
+    const run = await runWithRemote({ remoteSources: ["https://github.com/o/r"], answer: false });
+    expect(run.logs.some((line) => line.includes("https://github.com/o/r"))).toBe(true);
+    expect(run.logs.some((line) => line.includes("npx skills@latest add test/skill -a codex --project --yes"))).toBe(
+      true,
+    );
+    expect(run.logs.some((line) => line.trim().endsWith("some-extension@latest"))).toBe(true);
+  });
+});
+
 describe("runPresetInstall", () => {
   it("installs selected presets without a base source or persistent generated output", async () => {
     const root = createTempRoot();
@@ -2148,7 +2387,7 @@ describe("runPresetInstall", () => {
         logger: silentLogger,
         signal: controller.signal,
       }),
-    ).rejects.toThrow("Preset install stopped by user.");
+    ).rejects.toThrow("Install stopped by user.");
     expect(existsSync(join(projectDir, ".claude"))).toBe(false);
   });
 });

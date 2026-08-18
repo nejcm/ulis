@@ -1,12 +1,13 @@
 import { homedir } from "node:os";
-import { stdin as input, stdout as output } from "node:process";
-import { createInterface } from "node:readline/promises";
 
 import { runPresetInstall } from "../install.js";
 import { detectInstallCollisions } from "../install/platforms.js";
 import { PLATFORMS } from "../platforms.js";
 import { listPresets } from "../presets.js";
+import { createInterruptGuard } from "../utils/interrupt.js";
 import { logger as log } from "../utils/logger.js";
+import { confirm } from "../utils/prompt.js";
+import { isRemoteSource } from "../utils/remote-source.js";
 import { parsePresetNames, resolvePresets, userPresetsRoot } from "../utils/resolve-presets.js";
 import { parseTargets } from "./build.js";
 
@@ -64,46 +65,50 @@ export async function presetInstallCmd(
   const targets = parseTargets(options) ?? PLATFORMS;
   const userHome = options.userHome ?? homedir();
   const destBase = options.global ? userHome : process.cwd();
-  const presets = await resolvePresets(presetNames, {
-    nonInteractive: options.yes ?? false,
-    presetsRoot: options.presetsRoot,
-    bundledPresetsRoot: options.bundledPresetsRoot,
-  });
+  const guard = createInterruptGuard(presetNames.some(isRemoteSource));
 
-  const collisions = detectInstallCollisions(destBase, targets, Boolean(options.global), userHome);
-  if (collisions.length > 0 && !options.yes) {
-    log.warn("The following folders already exist and will be modified/overwritten:");
-    for (const path of collisions) {
-      log.dim(`  - ${path}`);
-    }
-    const confirmed = await confirm("Continue?");
-    if (!confirmed) {
-      log.info("Aborted by user.");
-      return;
-    }
-  }
-
-  await runPresetInstall({
-    destBase,
-    globalInstall: Boolean(options.global),
-    platforms: targets,
-    backup: options.backup ?? false,
-    prune: options.prune ?? true,
-    logger: log,
-    presets,
-    runner: options.runner,
-    installExtensions: options.extensions ?? true,
-    installSkills: !options.skipExternalSkills,
-    userHome,
-  });
-}
-
-async function confirm(question: string): Promise<boolean> {
-  const rl = createInterface({ input, output });
   try {
-    const answer = (await rl.question(`${question} [y/N] `)).trim().toLowerCase();
-    return answer === "y" || answer === "yes";
+    const { presets, cleanup } = await guard.track(() =>
+      resolvePresets(presetNames, {
+        nonInteractive: options.yes ?? false,
+        presetsRoot: options.presetsRoot,
+        bundledPresetsRoot: options.bundledPresetsRoot,
+        logger: log,
+        signal: guard.signal,
+      }),
+    );
+    guard.onCleanup(cleanup);
+
+    const collisions = detectInstallCollisions(destBase, targets, Boolean(options.global), userHome);
+    if (collisions.length > 0 && !options.yes) {
+      log.warn("The following folders already exist and will be modified/overwritten:");
+      for (const path of collisions) {
+        log.dim(`  - ${path}`);
+      }
+      const confirmed = await confirm("Continue?");
+      if (!confirmed) {
+        log.info("Aborted by user.");
+        return;
+      }
+    }
+
+    await runPresetInstall({
+      destBase,
+      globalInstall: Boolean(options.global),
+      platforms: targets,
+      backup: options.backup ?? false,
+      prune: options.prune ?? true,
+      logger: log,
+      presets,
+      runner: options.runner,
+      installExtensions: options.extensions ?? true,
+      installSkills: !options.skipExternalSkills,
+      userHome,
+      remoteSources: presets.flatMap((preset) => (preset.remoteUrl ? [preset.remoteUrl] : [])),
+      nonInteractive: options.yes ?? false,
+      signal: guard.signal,
+    });
   } finally {
-    rl.close();
+    guard.release();
   }
 }

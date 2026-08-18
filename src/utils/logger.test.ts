@@ -21,6 +21,17 @@ describe("formatLogMessage", () => {
     expect(failure.replace(ANSI_REGEX, "")).toBe("Failed to install codex skill: microsoft/playwright-cli (exit 1)");
   });
 
+  // Remote-derived names reach this sink from paths that do not sanitize (the build path, the
+  // generator writer), long before the trust gate runs - so escaping happens here, once.
+  it("escapes terminal control sequences in untrusted text", () => {
+    const ESC = String.fromCharCode(27);
+
+    expect(formatLogMessage("dim", `  copied: ${ESC}[2Kagents`, false)).toBe("  copied: \\u001b[2Kagents");
+    expect(formatLogMessage("info", "Cloning https://user:pw@github.com/o/r", false)).toBe(
+      "Cloning https://github.com/o/r",
+    );
+  });
+
   it("returns plain text when color is disabled", () => {
     expect(formatLogMessage("info", "Installing External Skills", false)).toBe("Installing External Skills");
   });

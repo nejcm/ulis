@@ -1,3 +1,5 @@
+import { sanitizeLogText } from "./redact.js";
+
 const RESET = "\x1b[0m";
 const BOLD = "\x1b[1m";
 const GREEN = "\x1b[32m";
@@ -19,7 +21,15 @@ function supportsColor(stream: NodeJS.WriteStream): boolean {
   return process.env.FORCE_COLOR !== undefined || stream.isTTY === true;
 }
 
-export function formatLogMessage(level: LogLevel, message: string, enabled = supportsColor(process.stdout)): string {
+/**
+ * Sanitized here, at the single sink every log line passes through. Much of what gets logged is
+ * remote-controlled - preset names, copied file names, alias names, child process output - and a
+ * wrapper that must be remembered at each call site is one forgotten call away from letting a
+ * remote source forge or erase the trust preview. Idempotent, so text already sanitized upstream
+ * passes through unchanged.
+ */
+export function formatLogMessage(level: LogLevel, raw: string, enabled = supportsColor(process.stdout)): string {
+  const message = sanitizeLogText(raw);
   if (level === "dim") return paint(DIM, message, enabled);
 
   const installMatch = message.match(/^(Installing) (.+?) (skill|extension): (.+)$/u);

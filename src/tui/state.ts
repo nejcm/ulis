@@ -5,6 +5,8 @@ import { basename, dirname, join, resolve } from "node:path";
 import { ULIS_SOURCE_DIRNAME } from "../config.js";
 import { PLATFORMS, uniquePlatforms, type Platform } from "../platforms.js";
 import type { PresetListEntry } from "../presets.js";
+import { redactUserinfo } from "../utils/redact.js";
+import { isRemoteSource } from "../utils/remote-source.js";
 import type { ResolvedPreset } from "../utils/resolve-presets.js";
 
 export type TuiScreen =
@@ -35,6 +37,8 @@ export interface PlannedSource {
   readonly destinationMode: DestinationMode;
   readonly sourceExists: boolean;
   readonly globalInstall: boolean;
+  /** True when `sourceDir` is a git URL to clone rather than a path on disk. */
+  readonly remote: boolean;
 }
 
 export interface TuiFlowPreferences {
@@ -61,6 +65,10 @@ export interface TuiState {
   destinationMode: DestinationMode;
   customSource: string;
   customPresetSource: string;
+  /** Commands a remote source will execute, shown on the review screen as the consent boundary. */
+  remoteCommands: readonly string[];
+  /** Redacted URL the remoteCommands came from. Empty when the run is purely local. */
+  remoteCommandSource: string;
   recentCustomSources: string[];
   textInput: string;
   platforms: Platform[];
@@ -84,6 +92,26 @@ type MutableFlowPreferences = {
   -readonly [Key in keyof TuiFlowPreferences]?: TuiFlowPreferences[Key];
 };
 
+/**
+ * A clone made for the review screen and reused by the install that follows, so the commands the
+ * user consented to are the commands that run.
+ */
+export interface PreparedRemoteInstall {
+  /** The action this review was generated for; it may not be consumed by any other. */
+  readonly action: "install" | "presetInstall";
+  /** {@link reviewFingerprint} of the settings the commands were displayed for. */
+  readonly fingerprint: string;
+  /** Local path of the cloned base source, when the source itself was remote. */
+  readonly sourceDir?: string;
+  /**
+   * The exact command list the review screen displayed. Handed to the installer, which re-plans
+   * from the real install options and refuses to run anything that does not match.
+   */
+  readonly commands: readonly string[];
+  readonly presets: readonly ResolvedPreset[];
+  readonly cleanup: () => void;
+}
+
 export type TuiEffect =
   | { readonly type: "none" }
   | { readonly type: "exit"; readonly code: number }
@@ -91,7 +119,8 @@ export type TuiEffect =
   | { readonly type: "start"; readonly action: Exclude<TuiAction, "init"> }
   | { readonly type: "initSource" }
   | { readonly type: "loadCustomPresetSource"; readonly path: string }
-  | { readonly type: "pasteClipboard" };
+  | { readonly type: "pasteClipboard" }
+  | { readonly type: "prepareRemoteInstall"; readonly action: "install" | "presetInstall" };
 
 type NavigationDirection = "up" | "down";
 
@@ -149,6 +178,8 @@ export function createInitialState(availablePresets: readonly PresetListEntry[] 
     destinationMode: "project",
     customSource: "",
     customPresetSource: "",
+    remoteCommands: [],
+    remoteCommandSource: "",
     recentCustomSources: [],
     textInput: "",
     platforms: [...PLATFORMS],
@@ -169,23 +200,33 @@ export function createInitialState(availablePresets: readonly PresetListEntry[] 
 }
 
 export function planSource(state: TuiState, cwd: string = process.cwd(), userHome: string = homedir()): PlannedSource {
-  const sourceDir =
-    state.sourceMode === "global"
+  // A remote custom source stays a URL: resolving it as a path would mangle it, and whether it
+  // exists is only knowable by cloning, which planning must not do.
+  const remote = state.sourceMode === "custom" && isRemoteSource(state.customSource);
+  const sourceDir = remote
+    ? state.customSource
+    : state.sourceMode === "global"
       ? join(userHome, ULIS_SOURCE_DIRNAME)
       : state.sourceMode === "custom"
         ? resolve(cwd, state.customSource)
         : join(cwd, ULIS_SOURCE_DIRNAME);
 
   const destBase =
-    state.destinationMode === "global" ? userHome : state.sourceMode === "custom" ? dirname(sourceDir) : cwd;
+    state.destinationMode === "global"
+      ? userHome
+      : // A clone lives in a temp dir with no meaningful parent, so a remote source installs to cwd.
+        state.sourceMode === "custom" && !remote
+        ? dirname(sourceDir)
+        : cwd;
 
   return {
     sourceDir,
     destBase,
     sourceMode: state.sourceMode,
     destinationMode: state.destinationMode,
-    sourceExists: existsSync(sourceDir),
+    sourceExists: remote || existsSync(sourceDir),
     globalInstall: state.destinationMode === "global",
+    remote,
   };
 }
 
@@ -201,10 +242,57 @@ export function selectedPresets(state: TuiState): readonly ResolvedPreset[] {
   });
 }
 
+/**
+ * The preset ref to clone at action time, when the custom preset location is a URL rather than a
+ * directory to scan. Resolution goes through `resolvePresets`, same as the CLI.
+ */
+export function remotePresetRef(state: TuiState): string | undefined {
+  // Scoped to the flow it was entered in: a ref left over from the presets-only flow must not
+  // silently attach itself to an unrelated custom-base install.
+  return state.flow === "presetsOnly" && state.presetSourceMode === "custom" && isRemoteSource(state.customPresetSource)
+    ? state.customPresetSource
+    : undefined;
+}
+
+/**
+ * Identity of everything that determines which remote commands will run. A review is only valid
+ * for the exact settings it was generated from; if any of these change, the displayed commands may
+ * no longer match what would execute, so the run must be refused until it is reviewed again.
+ */
+export function reviewFingerprint(state: TuiState, action: "install" | "presetInstall", cwd?: string): string {
+  const plan = planSource(state, cwd);
+  return JSON.stringify([
+    action,
+    state.flow,
+    plan.sourceDir,
+    plan.destBase,
+    plan.globalInstall,
+    remotePresetRef(state) ?? "",
+    // Order is part of the identity: presets merge in selection order, so the same set toggled in a
+    // different order can run different extension commands.
+    selectedPresets(state).map((preset) => preset.dir),
+    [...state.platforms].sort(),
+    state.presetInstallExtensions,
+    state.skipExternalSkills,
+    state.rebuild,
+    state.prune,
+    state.backup,
+  ]);
+}
+
+/**
+ * True when the run has something to install: a locally selected preset, or a remote ref that will
+ * become one once cloned. A remote ref has no `PresetListEntry` until it is fetched, so guards that
+ * only count `selectedPresets` would reject it as "nothing selected".
+ */
+export function hasPresetSelection(state: TuiState): boolean {
+  return selectedPresets(state).length > 0 || remotePresetRef(state) != null;
+}
+
 export function formatSourceMode(mode: SourceMode, customSource?: string): string {
   if (mode === "project") return `Project ./${ULIS_SOURCE_DIRNAME}`;
   if (mode === "global") return `Global ~/${ULIS_SOURCE_DIRNAME}`;
-  return customSource ? `Custom ${customSource}` : "Custom path";
+  return customSource ? `Custom ${redactUserinfo(customSource)}` : "Custom path";
 }
 
 export function formatDestinationMode(mode: DestinationMode): string {
@@ -220,7 +308,9 @@ export function formatPresetSourceMode(mode: PresetSourceMode, customPresetSourc
   if (mode === "project") return "Project ./.ulis/presets";
   if (mode === "global") return "Global ~/.ulis/presets";
   if (mode === "bundled") return "Bundled presets";
-  if (mode === "custom") return customPresetSource ? `Custom ${customPresetSource}` : "Custom preset directory";
+  if (mode === "custom") {
+    return customPresetSource ? `Custom ${redactUserinfo(customPresetSource)}` : "Custom preset directory";
+  }
   return "Auto project -> global -> bundled";
 }
 
@@ -262,13 +352,18 @@ export function appendTextInput(state: TuiState, text: string): boolean {
 }
 
 export function rememberCustomSource(recent: readonly string[], value: string): string[] {
-  const normalized = value.trim();
+  // Recents are persisted and rendered, so a pasted password must never enter this list. The
+  // credentialed value stays only in `state.customSource`, where the clone reads it.
+  const normalized = redactUserinfo(value.trim());
   if (!normalized) return [...recent];
   return [normalized, ...recent.filter((entry) => entry !== normalized)].slice(0, 3);
 }
 
 export function normalizeCustomSourceInput(value: string, cwd: string = process.cwd()): string {
-  const source = resolve(cwd, value.trim());
+  const trimmed = value.trim();
+  // A URL is not a path: no resolve(), and no `.ulis/` child probe.
+  if (isRemoteSource(trimmed)) return trimmed;
+  const source = resolve(cwd, trimmed);
   if (basename(source) === ULIS_SOURCE_DIRNAME) return source;
 
   const childSource = join(source, ULIS_SOURCE_DIRNAME);
@@ -379,9 +474,12 @@ export function flowPreferencesFromState(state: TuiState): TuiFlowPreferences {
     skipExternalSkills: state.skipExternalSkills,
   };
 
-  if (state.flow === "custom" && state.customSource) preferences.customSource = state.customSource;
+  // Redacted on the way to disk: preferences outlive the session, a credential should not.
+  if (state.flow === "custom" && state.customSource) {
+    preferences.customSource = redactUserinfo(state.customSource);
+  }
   if (state.flow === "presetsOnly" && state.customPresetSource) {
-    preferences.customPresetSource = state.customPresetSource;
+    preferences.customPresetSource = redactUserinfo(state.customPresetSource);
   }
 
   return preferences;
@@ -681,6 +779,11 @@ function applyFlowDefaults(state: TuiState, flow: TuiFlow): void {
     state.sourceMode = "project";
     state.destinationMode = "project";
   }
+  if (flow !== "presetsOnly") {
+    // Drop a preset location chosen for the presets-only flow so it cannot leak into this one.
+    state.presetSourceMode = "auto";
+    state.customPresetSource = "";
+  }
   applyFlowPreferences(state, flow);
 }
 
@@ -774,6 +877,16 @@ function commitCustomPresetSourceIfValid(state: TuiState, cwd: string): TuiEffec
   const rawValue = state.textInput.trim();
   if (!rawValue) {
     state.notice = "Enter a custom preset directory first.";
+    return { type: "none" };
+  }
+  if (isRemoteSource(rawValue)) {
+    // A remote preset ref is a ref, not a root to scan: there is nothing to list until it is
+    // cloned, so it is resolved at action time instead of here.
+    state.customPresetSource = rawValue;
+    state.presetSourceMode = "custom";
+    state.screen = "presets";
+    state.cursor = 0;
+    state.notice = "";
     return { type: "none" };
   }
   const value = resolve(cwd, rawValue);
@@ -945,7 +1058,7 @@ function handleResultKey(state: TuiState, key: string): TuiEffect {
 }
 
 function startPresetOnlyAction(state: TuiState, action: "presetValidate"): TuiEffect {
-  if (selectedPresets(state).length === 0) {
+  if (!hasPresetSelection(state)) {
     state.notice = "Select at least one preset first.";
     return { type: "none" };
   }
@@ -959,7 +1072,7 @@ function startPresetOnlyAction(state: TuiState, action: "presetValidate"): TuiEf
 }
 
 function openPresetInstallReview(state: TuiState): TuiEffect {
-  if (selectedPresets(state).length === 0) {
+  if (!hasPresetSelection(state)) {
     state.notice = "Select at least one preset first.";
     return { type: "none" };
   }
@@ -969,13 +1082,17 @@ function openPresetInstallReview(state: TuiState): TuiEffect {
     return { type: "none" };
   }
 
+  if (remotePresetRef(state)) {
+    return { type: "prepareRemoteInstall", action: "presetInstall" };
+  }
+
   state.screen = "presetInstallReview";
   state.cursor = 0;
   return { type: "none" };
 }
 
 function continuePresetOnlyFlow(state: TuiState): TuiEffect {
-  if (selectedPresets(state).length === 0) {
+  if (!hasPresetSelection(state)) {
     state.notice = "Select at least one preset first.";
     return { type: "none" };
   }
@@ -1000,6 +1117,11 @@ function startOrMissingSource(state: TuiState, action: Exclude<TuiAction, "init"
   }
 
   if (action === "install") {
+    // A remote source must show what it will run before it runs it, and that list only exists once
+    // the tree is cloned - so the clone happens on the way into the review screen.
+    if (planSource(state).remote || remotePresetRef(state)) {
+      return { type: "prepareRemoteInstall", action: "install" };
+    }
     state.screen = "installReview";
     state.cursor = 0;
     return { type: "none" };

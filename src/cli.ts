@@ -46,12 +46,12 @@ async function main(): Promise<void> {
     .command("install", "Build configs from the ulis source tree and install them")
     .option("-g, --global", "Read ~/.ulis/ and install to ~/.claude/, ~/.codex/, ~/.forge/, etc.")
     .option("-y, --yes", "Skip confirmation prompts (useful for CI)")
-    .option("--source <path>", "Override the ulis source directory")
+    .option("--source <path|url>", "Override the ulis source directory, or a git repository URL to clone")
     .option("--target <platforms>", "Only build/install the given platform(s) (comma-separated)")
     .option("--skip-rebuild", "Skip the build step and install existing generated output")
     .option("--backup", "Back up existing platform dirs before overwriting")
     .option("--no-prune", "Keep agents and local skills previously installed by ULIS")
-    .option("--preset <names>", "Apply user-global or bundled preset(s) (comma-separated)")
+    .option("--preset <names>", "Apply preset(s): user-global, bundled, or a git repository URL (comma-separated)")
     .option("--runner <npx|bunx>", "Package runner used for extension installs (npx | bunx)")
     .option("--skip-extensions", "Skip running entries from extensions.yaml")
     .option("--skip-external-skills", "Skip installing external skills from skills.yaml")
@@ -76,7 +76,7 @@ async function main(): Promise<void> {
     .option("-g, --global", "Build from ~/.ulis/")
     .option("--source <path>", "Override the ulis source directory")
     .option("--target <platforms>", "Only build the given platform(s) (comma-separated)")
-    .option("--preset <names>", "Apply user-global or bundled preset(s) (comma-separated)")
+    .option("--preset <names>", "Apply preset(s): user-global, bundled, or a git repository URL (comma-separated)")
     .action((options) =>
       buildCmd({
         global: Boolean(options.global),
@@ -87,7 +87,7 @@ async function main(): Promise<void> {
     );
 
   cli
-    .command("preset [...args]", "Manage presets (actions: list, install)")
+    .command("preset [...args]", "Manage presets (actions: list, install; a name may be a git repository URL)")
     .option("-l, --list", "List user-global and bundled presets")
     .option("-g, --global", "Install presets to ~/.claude/, ~/.codex/, ~/.forge/, etc.")
     .option("-y, --yes", "Skip preset install confirmation prompts (useful for CI)")

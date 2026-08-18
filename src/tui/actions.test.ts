@@ -1,14 +1,48 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { EventEmitter } from "node:events";
+import { cpSync, existsSync, mkdirSync } from "node:fs";
+import { resolve } from "node:path";
 
-import { createInitialState } from "./state.js";
+import { __test as installTest } from "../install.js";
+import { createInitialState, reviewFingerprint } from "./state.js";
+
+const fixturesDir = resolve(import.meta.dirname, "../../tests/fixtures");
+
+/** Stub `git clone` so the TUI remote paths need no network or `git`. */
+function mockClone(): string[] {
+  const cloned: string[] = [];
+  installTest.setRuntimeDependencies({
+    runCommand(_lookup: string, args: readonly string[]) {
+      return { status: args[0] === "gh" ? 1 : 0 } as never;
+    },
+    async runAsyncCommand(command: string, args: readonly string[]) {
+      if (command !== "git") return { status: 0, stdout: "", stderr: "" };
+      const dir = args[args.length - 1]!;
+      cloned.push(resolve(dir, ".."));
+      mkdirSync(dir, { recursive: true });
+      cpSync(fixturesDir, dir, { recursive: true });
+      return { status: 0, stdout: "", stderr: "" };
+    },
+  } as never);
+  return cloned;
+}
 
 const actionsModule = (await import(`./actions.ts?real=${Date.now()}`)) as {
   runTuiAction: (
     state: ReturnType<typeof createInitialState>,
     action: "validate" | "presetValidate" | "build" | "install" | "presetInstall",
     logger: ReturnType<typeof createLogger>,
-    options?: { signal?: AbortSignal },
+    options?: {
+      signal?: AbortSignal;
+      prepared?: {
+        action?: "install" | "presetInstall";
+        fingerprint: string;
+        sourceDir?: string;
+        presets: { name: string; dir: string }[];
+        commands: readonly string[];
+        cleanup: () => void;
+      };
+    },
   ) => Promise<void>;
   __test: {
     setRuntimeDependencies: (overrides: Record<string, unknown>) => void;
@@ -37,6 +71,7 @@ const spawnedChildren: Array<{
   stdout: EventEmitter;
   stderr: EventEmitter;
   killed: () => boolean;
+  killSignals: () => string[];
   emitClose: (code: number | null) => void;
   emitError: (error: Error) => void;
 }> = [];
@@ -53,11 +88,13 @@ function installRuntimeFakes(): void {
       const stdout = new EventEmitter();
       const stderr = new EventEmitter();
       let killed = false;
+      const killSignals: string[] = [];
       const child = Object.assign(emitter, {
         stdout,
         stderr,
-        kill: () => {
+        kill: (signal?: string) => {
           killed = true;
+          killSignals.push(signal ?? "default");
           return true;
         },
       });
@@ -65,6 +102,7 @@ function installRuntimeFakes(): void {
         stdout,
         stderr,
         killed: () => killed,
+        killSignals: () => killSignals,
         emitClose: (code: number | null) => emitter.emit("close", code),
         emitError: (error: Error) => emitter.emit("error", error),
       });
@@ -347,9 +385,13 @@ describe("tui actions child process flow", () => {
     const run = runTuiAction(state, "install", logger, { signal: controller.signal });
     const child = spawnedChildren[0]!;
     controller.abort();
+    // A real child exits after SIGINT, once its own cleanup has run.
+    child.emitClose(130);
 
     await expect(run).rejects.toThrow("install stopped by user");
     expect(child.killed()).toBe(true);
+    // SIGINT rather than a plain kill, so the child can remove anything it cloned.
+    expect(child.killSignals()).toEqual(["SIGINT"]);
   });
 
   it("throws when CLI entry script cannot be resolved", async () => {
@@ -364,5 +406,202 @@ describe("tui actions child process flow", () => {
     } finally {
       process.argv.splice(0, process.argv.length, ...originalArgv);
     }
+  });
+});
+
+describe("tui remote sources", () => {
+  const url = "https://github.com/o/r";
+
+  afterEach(() => {
+    __test.resetRuntimeDependencies();
+    installTest.resetRuntimeDependencies();
+  });
+
+  it("validate clones a remote source, reads it, and removes the clone", async () => {
+    const cloned = mockClone();
+    const state = createInitialState();
+    state.sourceMode = "custom";
+    state.customSource = url;
+    const logger = createLogger();
+
+    await runTuiAction(state, "validate", logger);
+
+    expect(logger.successLogs.join("\n")).toContain("Validated");
+    // The URL is logged, never the temp path.
+    expect(logger.infoLogs).toContain(`Source: ${url}`);
+    expect(cloned).toHaveLength(1);
+    expect(cloned.map(existsSync)).toEqual([false]);
+  });
+
+  it("validate removes the clone when analysis throws", async () => {
+    const cloned = mockClone();
+    const state = createInitialState();
+    state.sourceMode = "custom";
+    state.customSource = `${url}/tree/main/does-not-exist`;
+    const logger = createLogger();
+
+    await expect(runTuiAction(state, "validate", logger)).rejects.toThrow();
+    expect(cloned.map(existsSync)).toEqual([false]);
+  });
+
+  it("never logs credentials from a pasted URL", async () => {
+    mockClone();
+    const state = createInitialState();
+    state.sourceMode = "custom";
+    state.customSource = "https://user:s3cret@github.com/o/r";
+    const logger = createLogger();
+
+    await runTuiAction(state, "validate", logger);
+
+    const everything = [...logger.infoLogs, ...logger.successLogs, ...logger.warnLogs, ...logger.errorLogs].join("\n");
+    expect(everything).not.toContain("s3cret");
+    expect(everything).toContain("https://github.com/o/r");
+  });
+
+  it("preset install uses the review screen's clone and declares the remote source", async () => {
+    const calls: Record<string, unknown>[] = [];
+    __test.setRuntimeDependencies({
+      runPresetInstall: ((opts: Record<string, unknown>) => {
+        calls.push(opts);
+        return Promise.resolve([]);
+      }) as never,
+    });
+    const state = createInitialState();
+    state.flow = "presetsOnly";
+    state.presetSourceMode = "custom";
+    state.customPresetSource = url;
+    const prepared = {
+      action: "presetInstall" as const,
+      fingerprint: reviewFingerprint(state, "presetInstall"),
+      presets: [{ name: "r", dir: "/tmp/clone/repo" }],
+      commands: ["npx skills@latest add demo -a claude --project --yes"],
+      cleanup: () => {},
+    };
+
+    await runTuiAction(state, "presetInstall", createLogger(), { prepared });
+
+    // The clone reviewed on screen is the one installed.
+    expect(calls[0]!.presets).toEqual(prepared.presets);
+    // Declared remote so the gate sees it, and the reviewed list rides along so the installer can
+    // check it against what it actually plans rather than being told to skip the prompt.
+    expect(calls[0]!.remoteSources).toEqual([url]);
+    expect(calls[0]!.approvedCommands).toEqual(prepared.commands);
+    expect(calls[0]!.nonInteractive).toBeUndefined();
+  });
+
+  it("installs a reviewed remote source to the reviewed destination, not next to the clone", async () => {
+    const calls: Record<string, unknown>[] = [];
+    __test.setRuntimeDependencies({
+      runInstall: ((opts: Record<string, unknown>) => {
+        calls.push(opts);
+        return Promise.resolve([]);
+      }) as never,
+    });
+    const state = createInitialState();
+    state.flow = "custom";
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+    const prepared = {
+      action: "install" as const,
+      fingerprint: reviewFingerprint(state, "install"),
+      sourceDir: "/tmp/ulis-remote-xyz/repo",
+      presets: [],
+      commands: ["npx skills@latest add demo -a claude --project --yes"],
+      cleanup: () => {},
+    };
+
+    await runTuiAction(state, "install", createLogger(), { prepared });
+
+    // Reads the clone...
+    expect(calls[0]!.sourceDir).toBe("/tmp/ulis-remote-xyz/repo");
+    // ...but writes to the reviewed project directory, NOT the clone's parent.
+    expect(calls[0]!.destBase).toBe(process.cwd());
+    expect(calls[0]!.destBase).not.toContain("ulis-remote-xyz");
+    // The URL is logged, never the temp path, and consent came from the review screen.
+    expect(calls[0]!.sourceLabel).toBe(url);
+    expect(calls[0]!.remoteSources).toEqual([url]);
+    expect(calls[0]!.approvedCommands).toEqual(prepared.commands);
+    expect(calls[0]!.nonInteractive).toBeUndefined();
+  });
+
+  it("refuses a remote source install that skipped the review screen", async () => {
+    installRuntimeFakes();
+    spawnCalls.length = 0;
+    const state = createInitialState();
+    state.sourceMode = "custom";
+    state.customSource = url;
+
+    // The child runs with --yes, so this is the last gate: it must fail closed.
+    await expect(runTuiAction(state, "install", createLogger())).rejects.toThrow(/review screen/u);
+    expect(spawnCalls).toHaveLength(0);
+  });
+
+  it("refuses an install whose settings changed after the review", async () => {
+    installRuntimeFakes();
+    spawnCalls.length = 0;
+    const state = createInitialState();
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+    const prepared = {
+      fingerprint: reviewFingerprint(state, "install"),
+      presets: [],
+      commands: [],
+      cleanup: () => {},
+    };
+
+    // Reviewed for claude, started for claude+cursor: the displayed commands no longer match.
+    state.platforms = ["claude", "cursor"];
+
+    await expect(runTuiAction(state, "install", createLogger(), { prepared })).rejects.toThrow(/Settings changed/u);
+    expect(spawnCalls).toHaveLength(0);
+  });
+
+  it("refuses a preset install whose extension toggle changed after the review", async () => {
+    const calls: Record<string, unknown>[] = [];
+    __test.setRuntimeDependencies({
+      runPresetInstall: ((opts: Record<string, unknown>) => {
+        calls.push(opts);
+        return Promise.resolve([]);
+      }) as never,
+    });
+    const state = createInitialState();
+    state.flow = "presetsOnly";
+    state.presetSourceMode = "custom";
+    state.customPresetSource = url;
+    state.presetInstallExtensions = false;
+    const prepared = {
+      fingerprint: reviewFingerprint(state, "presetInstall"),
+      presets: [{ name: "r", dir: "/tmp/clone/repo" }],
+      commands: [],
+      cleanup: () => {},
+    };
+
+    // Extension commands were omitted from the review; turning them back on must invalidate it.
+    state.presetInstallExtensions = true;
+
+    await expect(runTuiAction(state, "presetInstall", createLogger(), { prepared })).rejects.toThrow(
+      /Settings changed/u,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  it("refuses a remote preset install that skipped the review screen", async () => {
+    const calls: Record<string, unknown>[] = [];
+    __test.setRuntimeDependencies({
+      runPresetInstall: ((opts: Record<string, unknown>) => {
+        calls.push(opts);
+        return Promise.resolve([]);
+      }) as never,
+    });
+    const state = createInitialState();
+    state.flow = "presetsOnly";
+    state.presetSourceMode = "custom";
+    state.customPresetSource = url;
+
+    // Fail closed: nothing has shown the user what this would run.
+    await expect(runTuiAction(state, "presetInstall", createLogger())).rejects.toThrow(/review screen/u);
+    expect(calls).toHaveLength(0);
   });
 });

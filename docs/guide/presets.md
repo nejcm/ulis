@@ -22,6 +22,8 @@ For merge mechanics in the architecture doc, see [Specification §2.2](/SPEC#pre
 
 The preset **identifier** is always the **directory name** `<name>`, not the optional `name` field inside `preset.yaml`.
 
+A preset name may also be a **git repository URL**, which is cloned for the run — see [Remote Sources](/guide/remote-sources).
+
 Run this for the list on your machine (folder names, `user` vs `bundled`, descriptions):
 
 ```bash

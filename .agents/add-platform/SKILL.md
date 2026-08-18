@@ -26,7 +26,7 @@ Confirm the new platform's expected behavior before implementing:
 
 - What files should ULIS generate for this platform?
 - Should it install into a project-local directory, a home directory, or both?
-- Which existing features map cleanly: agents, skills, rules, MCP, permissions, plugins, raw fragments?
+- Which existing features map cleanly: agents, skills, rules, MCP, permissions, extensions, raw fragments?
 - Which features do **not** map cleanly and need omission or policy-comment behavior?
 
 If those answers are unclear, ask first. The repo already supports asymmetric platforms, so "not supported" is a valid answer as long as it is handled deliberately.
@@ -36,8 +36,8 @@ If those answers are unclear, ask first. The repo already supports asymmetric pl
 Work in this order so the platform is defined once and then wired through the system:
 
 1. Extend the platform registry in `src/platforms.ts`.
-2. Add the generator module in `src/generators/`.
-3. Register build orchestration in `src/build.ts`.
+2. Add the generator module in `src/generators/platforms/<target>/`.
+3. Register the generator in the `GENERATORS` map in `src/generators/index.ts`.
 4. Register installation behavior in `src/install.ts`.
 5. Audit schema and parser surfaces that hardcode platform keys or unions.
 6. Audit helper utilities that switch on platform names.
@@ -55,7 +55,7 @@ Do not stop after `src/platforms.ts` and a new generator. Check whether the new 
 - `src/utils/env-var.ts`
 - `src/utils/tool-mapper.ts`
 - `example/raw/`
-- `example/skills.yaml`, `example/plugins.yaml`, and permissions config shapes
+- `example/skills.yaml`, `example/extensions.yaml`, and permissions config shapes
 - tests under `src/*.test.ts` and `tests/`
 
 Missing one of those is the most common reason a new platform is only half-integrated.

@@ -120,3 +120,53 @@ describe("buildScreenView", () => {
     expect(view.title).toContain("Build Failed");
   });
 });
+
+describe("remote command consent", () => {
+  function rowText(state: ReturnType<typeof createInitialState>): string {
+    return buildScreenView(state)
+      .panes.flatMap((pane) => pane.rows)
+      .map((row) => ("text" in row ? row.text : "label" in row ? `${row.label} ${row.value ?? ""}` : ""))
+      .join("\n");
+  }
+
+  it("lists the commands a remote source will run, with provenance", () => {
+    const state = createInitialState();
+    state.screen = "installReview";
+    state.remoteCommandSource = "https://github.com/o/r";
+    state.remoteCommands = ["npx skills@latest add acme/skill", "npx some-extension --flag"];
+
+    const text = rowText(state);
+
+    expect(text).toContain("https://github.com/o/r");
+    expect(text).toContain("WILL RUN");
+    expect(text).toContain("npx skills@latest add acme/skill");
+    expect(text).toContain("npx some-extension --flag");
+  });
+
+  it("shows the same section on the preset install review screen", () => {
+    const state = createInitialState();
+    state.screen = "presetInstallReview";
+    state.remoteCommandSource = "https://github.com/o/r";
+    state.remoteCommands = ["npx some-extension"];
+
+    expect(rowText(state)).toContain("npx some-extension");
+  });
+
+  it("shows no command section when nothing remote will run", () => {
+    const state = createInitialState();
+    state.screen = "installReview";
+
+    expect(rowText(state)).not.toContain("WILL RUN");
+  });
+
+  it("redacts credentials in the source picker and recents list", () => {
+    const state = createInitialState();
+    state.screen = "source";
+    state.customSource = "https://user:s3cret@github.com/o/r";
+    expect(rowText(state)).not.toContain("s3cret");
+
+    state.screen = "customSource";
+    state.recentCustomSources = ["https://user:s3cret@github.com/o/r"];
+    expect(rowText(state)).not.toContain("s3cret");
+  });
+});

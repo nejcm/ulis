@@ -38,6 +38,7 @@ export default defineConfig({
           { text: "Project vs Global Mode", link: "/guide/project-vs-global" },
           { text: "Source Layout", link: "/guide/source-layout" },
           { text: "Presets", link: "/guide/presets" },
+          { text: "Remote Sources", link: "/guide/remote-sources" },
           { text: "Examples", link: "/guide/examples" },
         ],
       },

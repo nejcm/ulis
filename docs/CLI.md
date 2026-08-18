@@ -24,7 +24,7 @@ ulis init [-g | --global]
 
 **Project mode:**
 
-1. Creates `./.ulis/` with `config.yaml`, `mcp.yaml`, `permissions.yaml`, `skills.yaml`, `extensions.yaml`, and empty `agents/`, `skills/`, `commands/`, `raw/` subfolders.
+1. Creates `./.ulis/` with `config.yaml`, `mcp.yaml`, `permissions.yaml`, `skills.yaml`, `extensions.yaml`, and empty `agents/`, `skills/`, `commands/`, `rules/`, `raw/` subfolders.
 2. Reads the project name from `./package.json` (falls back to the directory name).
 3. Appends `/.ulis/generated/` to `.gitignore` (creating the file if missing).
 4. Prints a hint suggesting you also gitignore `./.claude/`, `./.cursor/`, `./.codex/`, `./.opencode/`, and `./.forge/` if you don't want to commit generated configs.
@@ -44,7 +44,7 @@ ulis build [-g | --global] [--source <path>] [--target <platforms>] [--preset <n
 | Flag                   | Effect                                                                                                                                              |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `-g`, `--global`       | Read from `~/.ulis/` instead of `./.ulis/`.                                                                                                         |
-| `--source <path>`      | Explicit source path. Takes precedence over `--global`.                                                                                             |
+| `--source <path>`      | Explicit source path. Takes precedence over `--global`. A git URL is refused here — see [Remote Sources](/guide/remote-sources).                    |
 | `--target <platforms>` | Comma-separated subset of `claude,codex,cursor,opencode,forgecode`. Default: all.                                                                   |
 | `--preset <names>`     | Apply preset(s) before the base source (comma-separated). Resolved from `~/.ulis/presets/<name>/` first, then bundled presets shipped with the CLI. |
 
@@ -80,13 +80,13 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 | Flag                     | Effect                                                                                                                                                     |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `-g`, `--global`         | Read `~/.ulis/` and write to `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.config/opencode/` (Windows: `%USERPROFILE%\.config\opencode\`), and `~/.forge/`. |
-| `--source <path>`        | Override source (still writes to CWD or home depending on `--global`).                                                                                     |
+| `--source <path>`        | Override source (still writes to CWD or home depending on `--global`). Accepts a git URL — see [Remote Sources](/guide/remote-sources).                    |
 | `--target <platforms>`   | Only build/install the listed platforms.                                                                                                                   |
-| `-y`, `--yes`            | Skip the "about to overwrite" confirmation prompt.                                                                                                         |
+| `-y`, `--yes`            | Skip the "about to overwrite" confirmation prompt — **and the remote-source trust gate**. See [Remote Sources](/guide/remote-sources#the-trust-gate).      |
 | `--skip-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`.                                                                                   |
 | `--backup`               | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.                                                                          |
 | `--no-prune`             | Keep agents and local skills from the previous ULIS install; retained stale entries become unmanaged.                                                      |
-| `--preset <names>`       | Same resolution as `ulis build --preset` (user-global directory, then bundled).                                                                            |
+| `--preset <names>`       | Same resolution as `ulis build --preset` (user-global directory, then bundled), or a git URL.                                                              |
 | `--runner <npx\|bunx>`   | Package runner used for `extensions.yaml` entries. `npx` or `bunx`. Overrides `runner` in `config.yaml`. Default: auto-detect (`bunx` if present).         |
 | `--skip-extensions`      | Skip running entries from `extensions.yaml`. Useful in CI where network installs are not desired.                                                          |
 | `--skip-external-skills` | Skip installing external skills declared in `skills.yaml`. Useful in CI where network installs are not desired.                                            |
@@ -95,13 +95,13 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 
 **Install strategy per platform:**
 
-| Platform  | Managed entries                                                              | Preserved native config                                                                |
-| --------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Platform  | Managed entries                                                              | Preserved native config                                                                                        |
+| --------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | Claude    | generated `agents/` and `skills/` entries by name; `commands/`, `rules/`, …  | all `settings.json` / `settings.local.json` and global `.claude.json` values; project `.mcp.json` `mcpServers` |
-| OpenCode  | generated `agents/core`, `agents/specialized`, and `skills/` entries by name | `opencode.json` `mcp`                                                                  |
-| Codex     | generated `agents/` and `skills/` entries by name                            | all `config.toml` values; unrelated comments and order                                 |
-| Cursor    | generated `agents/` and `skills/` entries by name                            | `mcp.json` `mcpServers`                                                                |
-| ForgeCode | generated `.forge/agents` and `.forge/skills` entries by name; `AGENTS.md`   | `.forge/.mcp.json` `mcpServers`, `.forge.toml`                                         |
+| OpenCode  | generated `agents/core`, `agents/specialized`, and `skills/` entries by name | `opencode.json` `mcp`                                                                                          |
+| Codex     | generated `agents/` and `skills/` entries by name                            | all `config.toml` values; unrelated comments and order                                                         |
+| Cursor    | generated `agents/` and `skills/` entries by name                            | `mcp.json` `mcpServers`                                                                                        |
+| ForgeCode | generated `.forge/agents` and `.forge/skills` entries by name; `AGENTS.md`   | `.forge/.mcp.json` `mcpServers`, `.forge.toml`                                                                 |
 
 Install records generated agents and local skills in `.ulis-manifest.json` at each selected platform config root. On the first manifest-aware install, ULIS adopts the current set and removes nothing. Later installs remove previously tracked paths that are no longer generated, including platform-disabled entries, while preserving every untracked agent or skill. Manifest validation for all selected platforms completes before any destination is modified. Unselected platforms are untouched. `--no-prune` keeps stale paths but refreshes ownership to the current set. External `skills.yaml` installs are not tracked.
 
@@ -166,7 +166,7 @@ ulis preset install <names...> [-g | --global] [--target <platforms>]
 | ------------------------ | -------------------------------------------------------------------------------------------- |
 | `-g`, `--global`         | Install to home-level platform config directories instead of the current project.            |
 | `--target <platforms>`   | Only install the listed platforms.                                                           |
-| `-y`, `--yes`            | Skip overwrite confirmation prompts and fail fast for missing presets.                       |
+| `-y`, `--yes`            | Skip overwrite prompts **and the remote-source trust gate**; fail fast for missing presets.  |
 | `--backup`               | Copy existing platform dirs/configs before writing.                                          |
 | `--no-prune`             | Keep stale agents and local skills and relinquish their previous ULIS ownership.             |
 | `--runner <npx\|bunx>`   | Package runner for preset `extensions.yaml` entries. `npx` or `bunx`; default: auto-detect.  |
@@ -220,4 +220,10 @@ Build with reusable presets:
 ulis preset list
 ulis build --preset team-default,typescript
 ulis install --preset team-default --yes
+```
+
+Install a config straight from a repository (prompts before running any remote command):
+
+```bash
+ulis install --source https://github.com/acme/ulis-config#main
 ```
