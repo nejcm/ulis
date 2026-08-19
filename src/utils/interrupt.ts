@@ -19,8 +19,9 @@ const TERMINATION_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
 /**
  * Ctrl-C would otherwise kill the process before a `finally` runs and leak a clone. When `active`,
  * take over the termination signals: abort an in-flight clone and exit only once it has unwound, or
- * clean up and stop the run immediately when nothing is in flight. Local-only runs register nothing
- * and keep the default behaviour.
+ * clean up and stop the run immediately when nothing is in flight. A second signal arriving while
+ * that abort is still unwinding force-quits, so the process is never unstoppable. Local-only runs
+ * register nothing and keep the default behaviour.
  */
 export function createInterruptGuard(active: boolean): InterruptGuard {
   const controller = active ? new AbortController() : undefined;
@@ -29,7 +30,17 @@ export function createInterruptGuard(active: boolean): InterruptGuard {
   let interrupted = false;
 
   const runCleanups = () => {
-    while (cleanups.length > 0) cleanups.pop()!();
+    while (cleanups.length > 0) {
+      try {
+        cleanups.pop()!();
+      } catch {
+        // Best effort. Removing a temp tree can throw (EBUSY/EPERM on Windows, ENOTEMPTY on a
+        // network mount), and one such throw must not strand the cleanups still on the stack, skip
+        // the signal deregistration in `release`, mask the error already in flight, or - inside a
+        // signal handler - surface as an uncaught exception. A wedged directory under the OS temp
+        // root is the smaller loss.
+      }
+    }
   };
 
   const offInterrupt = () => {
@@ -37,14 +48,18 @@ export function createInterruptGuard(active: boolean): InterruptGuard {
   };
 
   const onInterrupt = () => {
-    if (controller && inFlight > 0) {
+    if (controller && inFlight > 0 && !controller.signal.aborted) {
       // A clone is running and still owns a temp directory nobody else can see. Aborting kills git
       // and lets fetchRemoteSource remove it; exiting now would kill the process first.
-      if (!controller.signal.aborted) controller.abort();
+      controller.abort();
       interrupted = true;
       return;
     }
-    // Nothing in flight: nothing downstream listens to the abort, so stop the run here.
+    // Nothing in flight, or the abort is already out and this is the user asking again. Either way
+    // stop here: these handlers cover SIGINT, SIGTERM and SIGHUP, so ignoring a repeat would leave
+    // the process unstoppable short of SIGKILL while a wedged clone times out. A temp directory the
+    // clone has not released yet is the accepted cost of the second press.
+    interrupted = false; // The exit happens here, so `release` must not repeat it.
     runCleanups();
     offInterrupt();
     __test.exitOnInterrupt();
@@ -66,11 +81,16 @@ export function createInterruptGuard(active: boolean): InterruptGuard {
     },
     release() {
       // Delete first, deregister second: a Ctrl-C landing in between must still reach our handler
-      // rather than the default one, which would kill the process with a temp root on disk.
-      runCleanups();
-      if (controller) offInterrupt();
-      // A Ctrl-C that landed mid-clone deferred its exit to here, so cleanup has already run.
-      if (interrupted) __test.exitOnInterrupt();
+      // rather than the default one, which would kill the process with a temp root on disk. The
+      // `finally` keeps that ordering true even if a cleanup ever escapes `runCleanups`, so a
+      // deferred interrupt is never silently dropped and the handlers are never left registered.
+      try {
+        runCleanups();
+      } finally {
+        if (controller) offInterrupt();
+        // A Ctrl-C that landed mid-clone deferred its exit to here, so cleanup has already run.
+        if (interrupted) __test.exitOnInterrupt();
+      }
     },
   };
 }

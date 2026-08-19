@@ -77,9 +77,10 @@ async resolve(work) {
 }
 ```
 
-Push directly onto `cleanups` rather than calling `this.onCleanup` — the object literal is not yet bound
-when it is constructed, and `cleanups` is already in scope. (If `track` is likewise called via a local
-helper rather than `this`, extract it to a named function above the return.)
+Push directly onto `cleanups` rather than calling `this.onCleanup` — `cleanups` is already in scope, so the
+indirection buys nothing. (`this` would in fact resolve fine: it is bound at call time, not when the object
+literal is constructed. The reason to avoid `this` here is that a caller who destructures the guard loses
+it, not that it is unbound.)
 
 ### 3.2 Call sites
 
@@ -136,8 +137,10 @@ bun run ulis install --source https://github.com/<user>/<repo> --yes
 1. Full run to completion → no `ulis-` directory survives.
 2. Second run, Ctrl-C **during** the clone → the abort unwinds, the exit is deferred, no directory survives.
 3. Third run, Ctrl-C **after** the clone but during install → cleanup runs from `release()`, no directory survives.
-4. A purely local run (`bun run ulis install`) registers no signal handlers and prompts nothing — confirms
-   the guard's inactive path is untouched.
+4. A purely local run (`bun run ulis install`) registers no signal handlers — confirms the guard's inactive
+   path is untouched. It may still prompt: a local install whose destination directories already exist asks
+   for overwrite confirmation unless `-y` is passed (`src/commands/install.ts`). Only the trust gate is
+   remote-only.
 
 ### 4.3 Exit checks
 
