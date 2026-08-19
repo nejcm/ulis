@@ -208,8 +208,9 @@ belongs — one place, both paths, no duplicated logic.
   of `installSkillsEnabled` / `installExtensionsEnabled` is true, and there is at least one entry to run,
   print the remote URL(s) and every command that will execute — `npx skills@latest add <name> …` and
   `<runner> <extension> …`, exactly as they will be spawned — then `confirm("Run these commands?")`.
-  Declining skips extensions and external skills but **still installs the generated config files**; say
-  so in the log line, since a half-install the user did not expect is worse than either extreme.
+  The gate sits above every write, not just above `npx`/`bunx`: declining installs nothing at all —
+  not the commands, and not the generated config files either; say so in the log line, since a
+  half-install the user did not expect is worse than either extreme.
 - `nonInteractive` (`-y`) skips the prompt entirely.
 
 `confirm()` is currently duplicated in [`src/commands/preset.ts:101`](../src/commands/preset.ts) and
@@ -319,7 +320,7 @@ Split by concern: real git for behaviour, mocked spawn for argv. **New prerequis
 
 **Extended — `src/install.test.ts`**
 
-- Remote source + declined prompt → **no** `npx`/`bunx` spawn, generated config files still written.
+- Remote source + declined prompt → **no** `npx`/`bunx` spawn, nothing written.
 - Remote source + accepted prompt → commands spawned as listed.
 - Remote source + `-y` → no prompt, commands spawned.
 - Purely local source → no prompt at all (regression guard: the gate must not fire for local runs).
@@ -346,7 +347,8 @@ Run from a scratch directory, not the repo. These URLs work because this repo ke
    branch name containing `/` via the fragment form (`…/ulis.git#feature/x`) and confirm the greedy-ref
    caveat from §3.1 holds.
 4. **Trust gate** — point at a source whose `extensions.yaml` is non-empty; decline → no `npx` runs,
-   config files still land, log states extensions were skipped. Re-run with `-y` → no prompt.
+   nothing lands at all, log reads "Declined. Nothing from the remote source was installed." Re-run
+   with `-y` → no prompt.
 5. **Global install** — add `--global`; verify writes go to `~/.claude` etc., not the temp parent.
 6. **Build rejection** — `ulis build --source https://…` → clear error naming `install`.
 7. **Non-GitHub host** — any reachable GitLab or self-hosted repo, with and without `#<ref>`. Confirm no
