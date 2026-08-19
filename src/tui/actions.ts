@@ -198,7 +198,10 @@ export async function runTuiAction(
     // Run in-process rather than through the CLI: handing the child the clone as `--source` would
     // make it derive destBase from the clone's parent, writing the install next to the temp dir
     // (and deleting it with the clone). In-process keeps the reviewed destination explicit.
-    const label = redactUserinfo(planned.sourceDir);
+    // Same expression as `controller.ts`'s `remoteCommandSource`: when only the preset ref is
+    // remote (`planned.remote` false), the base source is not what the trust gate should attribute
+    // this to - `planned.sourceDir` would be a local path there, not the remote source in play.
+    const label = redactUserinfo(planned.remote ? planned.sourceDir : (remoteRef ?? ""));
     await runtimeDependencies.runInstall({
       sourceDir: prepared.sourceDir ?? planned.sourceDir,
       sourceLabel: label,

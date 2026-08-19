@@ -703,6 +703,9 @@ function handlePlanKey(state: TuiState, key: string): TuiEffect {
   const items = planItems(state);
   moveCursor(state, key, items.length - 1);
   const item = items[state.cursor];
+  // Defensive, not redundant: `moveCursor` returns without touching the cursor for any
+  // non-navigation key, so a cursor left over from a previous, longer flow can still be
+  // out of range here.
   if (!item) return { type: "none" };
 
   if (item.id === "backup" && isToggleKey(key)) {

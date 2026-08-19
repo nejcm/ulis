@@ -1120,3 +1120,22 @@ describe("credential persistence", () => {
     expect(planSource(state, "/project", "/home/u").sourceDir).toBe(credentialed);
   });
 });
+
+// 3.2: nothing checked that plan item ids are unique within a flow. `planItemCursor` (state.ts:1085)
+// takes the first match on a duplicate, and the exhaustive `assertNeverPlanItemId` switch stays
+// happy either way, so a duplicate id would silently misroute cursor navigation with no type error.
+describe("planItems", () => {
+  it("has unique ids for the dashboard flow", () => {
+    const state = createInitialState();
+    state.flow = "project";
+    const items = planItems(state);
+    expect(new Set(items.map((item) => item.id)).size).toBe(items.length);
+  });
+
+  it("has unique ids for the presets-only flow", () => {
+    const state = createInitialState();
+    state.flow = "presetsOnly";
+    const items = planItems(state);
+    expect(new Set(items.map((item) => item.id)).size).toBe(items.length);
+  });
+});

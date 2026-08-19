@@ -196,7 +196,11 @@ describe("remote command consent", () => {
     expect(text).toContain("https://github.com/o/r");
     // Framed by when an entry executes, not by what kind of entry it is: the planner adds classes
     // (config files a host agent runs later, not only commands) and the wording must stay true.
-    expect(text).toContain("contributes the execution surface below");
+    // Urgent, not jargon: "contributes the commands below", not "contributes the execution surface".
+    expect(text).toContain("contributes the commands below");
+    // The header must carry the warning, not just a neutral timing statement - this is the most
+    // safety-critical screen in the product.
+    expect(text).toContain("WILL RUN");
     expect(text).toContain("run later by the agent");
     expect(text).toContain("npx skills@latest add acme/skill");
     expect(text).toContain("npx some-extension --flag");

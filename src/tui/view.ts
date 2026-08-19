@@ -165,7 +165,9 @@ function planView(state: TuiState, cwd?: string): ScreenView {
 
   const actions: ViewRow[] = planItems(state).flatMap((item, index) => {
     const value = planItemValue(state, item);
-    const row = option(state, index, item.label, value ? { value } : {});
+    // Not a truthiness test: `value` is `string | undefined`, and an empty string is a value the
+    // row should still show, not treat as absent.
+    const row = option(state, index, item.label, value !== undefined ? { value } : {});
     return item.breakAfter ? [row, { kind: "blank" } as ViewRow] : [row];
   });
 
@@ -417,7 +419,7 @@ function remoteCommandRows(state: TuiState): ViewRow[] {
     { kind: "blank" },
     {
       kind: "text",
-      text: `${state.remoteCommandSource} contributes the execution surface below. Review it before continuing:`,
+      text: `${state.remoteCommandSource} contributes the commands below, and they WILL RUN if you continue. Review them first:`,
       tone: "error",
     },
     {

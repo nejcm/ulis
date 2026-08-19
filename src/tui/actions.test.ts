@@ -567,10 +567,12 @@ describe("tui remote sources", () => {
     expect(calls[0]!.nonInteractive).toBeUndefined();
   });
 
-  // 1.2's exact scenario: the "install" branch also fires when only a presets-only remote ref is
-  // set (`remoteRef`), with the base source itself local. `sourceIsRemote` must follow the base
-  // source's own identity (`planned.remote`, false here) rather than the enclosing branch's remote
-  // condition - passing `true` here would drop that local source's own `.env` for no reason.
+  // Defensive branch, not reachable through the UI today (see the comment in `actions.ts` above
+  // this branch: `remoteRef` cannot be set for action "install"). Locks in correctness anyway:
+  // `sourceIsRemote` must follow the base source's own identity (`planned.remote`, false here)
+  // rather than the enclosing branch's remote condition - passing `true` here would drop that local
+  // source's own `.env` for no reason, and the trust-gate label must name the preset ref, not the
+  // local base path.
   it("keeps the local base source's identity when only a presets-only ref is remote", async () => {
     const calls: Record<string, unknown>[] = [];
     __test.setRuntimeDependencies({
@@ -596,6 +598,11 @@ describe("tui remote sources", () => {
     await runTuiAction(state, "install", createLogger(), { prepared });
 
     expect(calls[0]!.sourceIsRemote).toBe(false);
+    // The trust gate must attribute this run to the remote preset ref, not the local base source -
+    // `planned.sourceDir` is a local path here, and printing it as "the remote source" would be
+    // simply wrong, even though the gate itself still fires either way.
+    expect(calls[0]!.sourceLabel).toBe(url);
+    expect(calls[0]!.remoteSources).toEqual([url]);
   });
 
   it("refuses a remote source install that skipped the review screen", async () => {

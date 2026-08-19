@@ -76,6 +76,14 @@ const MAX_WALK_DEPTH = 64;
 /** Nothing is copied file-by-file at this size; reading further only risks a preview no one reads. */
 const MAX_SCANNED_BYTES = 512 * 1024;
 
+/**
+ * Deliberately a second parse-and-generate pass, not a shortcut over `runBuild`'s output. This
+ * calls `mergedProject` (the same parse/merge the build performs) and `generate` again, entirely in
+ * memory, so what is previewed is exactly what `generate()` would produce for the same inputs -
+ * never what a `generated/` tree on disk happens to hold, which a remote source could have written
+ * to directly. Do not "optimise" this into reading the build's output back off disk; that reopens
+ * the gap between what is shown and what gets installed that this preview exists to close.
+ */
 export function previewInstalledExecution(inputs: PreviewInputs): string[] {
   const project = mergedProject(inputs);
   const previews: string[] = [];

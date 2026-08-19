@@ -180,14 +180,16 @@ const defaultRuntimeDependencies: RuntimeDependencies = {
     // The trust gate is a security boundary: a piped `y` must not answer it. Without a terminal the
     // question cannot be put at all, and that is a failure rather than a decision - a cron job or a
     // wrapper script that silently installed nothing and exited 0 would read as a successful run.
-    // An interactive "no" is the opposite: a choice, and it exits 0.
+    // An interactive "no" is the opposite: a choice, and it exits 0. This throw is what enforces
+    // that, so `requireTty` below would only ever re-check what is already known to be true here -
+    // dropped, so the actionable message above is the only thing a caller ever sees.
     if (!stdin.isTTY) {
       throw new InstallError(
         "Remote source commands need confirmation, but stdin is not a terminal. " +
           "Re-run in a terminal to review them, or pass -y to accept them up front.",
       );
     }
-    return confirm(question, { requireTty: true });
+    return confirm(question);
   },
 };
 
