@@ -28,7 +28,7 @@ interface RuntimeDependencies {
   runInstall: typeof runInstall;
 }
 
-interface RunTuiActionOptions {
+export interface RunTuiActionOptions {
   readonly signal?: AbortSignal;
   /** Clone already made for the review screen; reused so consent matches what runs. */
   readonly prepared?: PreparedRemoteInstall;
@@ -50,6 +50,9 @@ function requireReviewedRemote(
   const prepared = options.prepared;
   if (!prepared) {
     throw new Error("A remote source must be confirmed on the review screen before installing.");
+  }
+  if (prepared.action !== action) {
+    throw new Error("A remote review may only start the action it was generated for.");
   }
   if (prepared.fingerprint !== reviewFingerprint(state, action, options.cwd)) {
     throw new Error("Settings changed since the remote commands were reviewed. Review them again before installing.");
@@ -176,8 +179,19 @@ export async function runTuiAction(
     return;
   }
 
+  if (action === "build" && planned.remote) {
+    // Never build a child command line out of a remote source: the URL carries any credentials the
+    // user pasted, and `ulis build` rejects a remote source anyway.
+    throw new Error(
+      "Build writes generated output into the source tree, so it cannot run against a remote source. Use Install instead.",
+    );
+  }
+
   if (action === "install" && (planned.remote || remoteRef)) {
     // Nothing downstream can gate this, so it is the last point an unreviewed remote install stops.
+    // `remoteRef` is presets-only and so cannot be set for `install` today; it stays because
+    // dropping it would let a future presets-only install fall through to the child process, which
+    // silently ignores a remote ref rather than refusing it.
     requireReviewedRemote(state, action, options);
     const prepared = options.prepared!;
 
@@ -213,6 +227,7 @@ export async function runTuiAction(
     logger,
     localPresets.map((preset) => preset.name),
     options.signal,
+    options.cwd,
   );
 }
 
@@ -258,19 +273,22 @@ async function runActionInChildProcess(
   logger: Logger,
   presetNames: readonly string[],
   signal?: AbortSignal,
+  cwd?: string,
 ): Promise<void> {
   const entryScript = process.env[ULIS_CLI_ENTRY_ENV] || process.argv[1];
   if (!entryScript) {
     throw new Error("Unable to resolve current CLI entry script.");
   }
 
-  const args = [...process.execArgv, entryScript, action, "--source", planSource(state).sourceDir];
+  // Same cwd the plan was resolved with, or the child would install somewhere the plan never showed.
+  const planned = planSource(state, cwd);
+  const args = [...process.execArgv, entryScript, action, "--source", planned.sourceDir];
   args.push("--target", state.platforms.join(","));
   if (presetNames.length > 0) args.push("--preset", presetNames.join(","));
 
   if (action === "install") {
     args.push("--yes");
-    if (planSource(state).globalInstall) args.push("--global");
+    if (planned.globalInstall) args.push("--global");
     if (!state.rebuild) args.push("--skip-rebuild");
     if (state.backup) args.push("--backup");
     if (!state.prune) args.push("--no-prune");
@@ -278,13 +296,20 @@ async function runActionInChildProcess(
   }
 
   await new Promise<void>((resolve, reject) => {
+    const stopped = () => new Error(`${action} stopped by user.`);
+    // Already cancelled: settle now. Spawning would arm the grace timer with no `close` handler to
+    // clear it, stalling the run for the full grace period on a child nobody is reading from.
+    if (signal?.aborted) {
+      reject(stopped());
+      return;
+    }
+
     const child = runtimeDependencies.spawn(process.execPath, args, {
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, ULIS_NON_INTERACTIVE: "1" },
     });
     let cancelling = false;
     let graceTimer: ReturnType<typeof setTimeout> | undefined;
-    const stopped = () => new Error(`${action} stopped by user.`);
     const abort = () => {
       if (cancelling) return;
       cancelling = true;
@@ -298,10 +323,6 @@ async function runActionInChildProcess(
       }, CHILD_CANCEL_GRACE_MS);
       graceTimer.unref?.();
     };
-    if (signal?.aborted) {
-      abort();
-      return;
-    }
     signal?.addEventListener("abort", abort, { once: true });
 
     const stdout = runtimeDependencies.createInterface({ input: child.stdout });

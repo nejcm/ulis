@@ -96,6 +96,15 @@ type MutableFlowPreferences = {
  * A clone made for the review screen and reused by the install that follows, so the commands the
  * user consented to are the commands that run.
  */
+/**
+ * Row of "Start preset install" on the preset install review screen. Entering the screen lands
+ * here rather than on the first toggle, so a confirming Enter never flips an option instead.
+ */
+export const PRESET_INSTALL_REVIEW_START_ROW = 3;
+
+/** Last row of the preset install review screen ("Back to presets"), and so the cursor's bound. */
+export const PRESET_INSTALL_REVIEW_BACK_ROW = PRESET_INSTALL_REVIEW_START_ROW + 1;
+
 export interface PreparedRemoteInstall {
   /** The action this review was generated for; it may not be consumed by any other. */
   readonly action: "install" | "presetInstall";
@@ -127,37 +136,60 @@ type NavigationDirection = "up" | "down";
 const KEY_DUPLICATE_WINDOW_MS = 35;
 let lastKeyEvent: { readonly id: string; readonly at: number } | undefined;
 
-export const DASHBOARD_ITEMS = [
-  "Preset layers",
-  "Base source",
-  "Platforms",
-  "Install destination",
-  "Skip external skills",
-  "Prune removed agents and skills",
-  "Use latest build output",
-  "Backup",
-  "Validate",
-  "Build only",
-  "Install",
-  "Back to start",
-] as const;
-const DASHBOARD_BREAKS = [3, 7, 10];
+export type PlanItemId =
+  | "presets"
+  | "source"
+  | "platforms"
+  | "destination"
+  | "presetExtensions"
+  | "skipExternalSkills"
+  | "prune"
+  | "rebuild"
+  | "backup"
+  | "validate"
+  | "build"
+  | "install"
+  | "back";
 
-const PRESET_ONLY_PLAN_ITEMS = [
-  "Preset sources",
-  "Platforms",
-  "Install destination",
-  "Run preset extensions",
-  "Skip external skills",
-  "Prune removed agents and skills",
-  "Backup",
-  "Validate",
-  "Install",
-  "Back to start",
-] as const;
-const PRESET_ONLY_BREAKS = [2, 6, 8];
+export interface PlanItem {
+  readonly id: PlanItemId;
+  readonly label: string;
+  /** Render a blank row after this item. Replaces the positional BREAKS arrays. */
+  readonly breakAfter?: true;
+}
 
-export type TuiPlanItem = (typeof DASHBOARD_ITEMS)[number] | (typeof PRESET_ONLY_PLAN_ITEMS)[number];
+/** Forces exhaustive handling of {@link PlanItemId}: a new id that nobody handled fails the build. */
+export function assertNeverPlanItemId(id: never): never {
+  throw new Error(`Unhandled plan item id: ${id as string}`);
+}
+
+export const DASHBOARD_ITEMS: readonly PlanItem[] = [
+  { id: "presets", label: "Preset layers" },
+  { id: "source", label: "Base source" },
+  { id: "platforms", label: "Platforms" },
+  { id: "destination", label: "Install destination", breakAfter: true },
+  { id: "skipExternalSkills", label: "Skip external skills" },
+  { id: "prune", label: "Prune removed agents and skills" },
+  { id: "rebuild", label: "Use latest build output" },
+  { id: "backup", label: "Backup", breakAfter: true },
+  { id: "validate", label: "Validate" },
+  { id: "build", label: "Build only" },
+  { id: "install", label: "Install", breakAfter: true },
+  { id: "back", label: "Back to start" },
+];
+
+const PRESET_ONLY_PLAN_ITEMS: readonly PlanItem[] = [
+  { id: "presets", label: "Preset sources" },
+  { id: "platforms", label: "Platforms" },
+  { id: "destination", label: "Install destination", breakAfter: true },
+  { id: "presetExtensions", label: "Run preset extensions" },
+  { id: "skipExternalSkills", label: "Skip external skills" },
+  { id: "prune", label: "Prune removed agents and skills" },
+  { id: "backup", label: "Backup", breakAfter: true },
+  { id: "validate", label: "Validate" },
+  { id: "install", label: "Install", breakAfter: true },
+  { id: "back", label: "Back to start" },
+];
 
 export const FLOW_ITEMS = [
   "Update this project",
@@ -452,12 +484,8 @@ function nextPresetSourceMode(mode: PresetSourceMode): PresetSourceMode {
   return "auto";
 }
 
-export function planItems(state: TuiState): readonly TuiPlanItem[] {
+export function planItems(state: TuiState): readonly PlanItem[] {
   return state.flow === "presetsOnly" ? PRESET_ONLY_PLAN_ITEMS : DASHBOARD_ITEMS;
-}
-
-export function planItemsBreaks(state: TuiState): readonly number[] {
-  return state.flow === "presetsOnly" ? PRESET_ONLY_BREAKS : DASHBOARD_BREAKS;
 }
 
 export function flowPreferencesFromState(state: TuiState): TuiFlowPreferences {
@@ -618,14 +646,14 @@ function navigateBack(state: TuiState): TuiEffect {
 
   if (state.screen === "installReview") {
     state.screen = "plan";
-    state.cursor = planItemCursor(state, "Install");
+    state.cursor = planItemCursor(state, "install");
     state.notice = "";
     return { type: "none" };
   }
 
   if (state.screen === "presetInstallReview") {
     state.screen = "plan";
-    state.cursor = planItemCursor(state, "Install");
+    state.cursor = planItemCursor(state, "install");
     state.notice = "";
     return { type: "none" };
   }
@@ -675,38 +703,39 @@ function handlePlanKey(state: TuiState, key: string): TuiEffect {
   const items = planItems(state);
   moveCursor(state, key, items.length - 1);
   const item = items[state.cursor];
+  if (!item) return { type: "none" };
 
-  if (item === "Backup" && isToggleKey(key)) {
+  if (item.id === "backup" && isToggleKey(key)) {
     state.backup = !state.backup;
     state.notice = "";
     return { type: "none" };
   }
 
-  if (item === "Prune removed agents and skills" && isToggleKey(key)) {
+  if (item.id === "prune" && isToggleKey(key)) {
     state.prune = !state.prune;
     state.notice = "";
     return { type: "none" };
   }
 
-  if (item === "Use latest build output" && isToggleKey(key)) {
+  if (item.id === "rebuild" && isToggleKey(key)) {
     state.rebuild = !state.rebuild;
     state.notice = "";
     return { type: "none" };
   }
 
-  if (item === "Run preset extensions" && isToggleKey(key)) {
+  if (item.id === "presetExtensions" && isToggleKey(key)) {
     state.presetInstallExtensions = !state.presetInstallExtensions;
     state.notice = "";
     return { type: "none" };
   }
 
-  if (item === "Skip external skills" && isToggleKey(key)) {
+  if (item.id === "skipExternalSkills" && isToggleKey(key)) {
     state.skipExternalSkills = !state.skipExternalSkills;
     state.notice = "";
     return { type: "none" };
   }
 
-  if (item === "Install destination" && isToggleKey(key)) {
+  if (item.id === "destination" && isToggleKey(key)) {
     state.destinationMode = state.destinationMode === "global" ? "project" : "global";
     state.notice = "";
     return { type: "none" };
@@ -715,50 +744,51 @@ function handlePlanKey(state: TuiState, key: string): TuiEffect {
   if (!isConfirmKey(key)) return { type: "none" };
 
   state.notice = "";
-  switch (item) {
-    case "Preset layers":
-    case "Preset sources":
+  switch (item.id) {
+    case "presets":
       state.screen = "presets";
       state.cursor = 0;
       break;
-    case "Base source":
+    case "source":
       state.screen = "source";
       state.cursor = 0;
       break;
-    case "Platforms":
+    case "platforms":
       state.screen = "platforms";
       state.cursor = 0;
       break;
-    case "Install destination":
+    case "destination":
       state.destinationMode = state.destinationMode === "global" ? "project" : "global";
       break;
-    case "Backup":
+    case "backup":
       state.backup = !state.backup;
       break;
-    case "Prune removed agents and skills":
+    case "prune":
       state.prune = !state.prune;
       break;
-    case "Use latest build output":
+    case "rebuild":
       state.rebuild = !state.rebuild;
       break;
-    case "Run preset extensions":
+    case "presetExtensions":
       state.presetInstallExtensions = !state.presetInstallExtensions;
       break;
-    case "Skip external skills":
+    case "skipExternalSkills":
       state.skipExternalSkills = !state.skipExternalSkills;
       break;
-    case "Validate":
+    case "validate":
       if (state.flow === "presetsOnly") return startPresetOnlyAction(state, "presetValidate");
       return startOrMissingSource(state, "validate");
-    case "Build only":
+    case "build":
       return startOrMissingSource(state, "build");
-    case "Install":
+    case "install":
       if (state.flow === "presetsOnly") return openPresetInstallReview(state);
       return startOrMissingSource(state, "install");
-    case "Back to start":
+    case "back":
       state.screen = "flow";
       state.cursor = 0;
       break;
+    default:
+      assertNeverPlanItemId(item.id);
   }
   return { type: "none" };
 }
@@ -1014,22 +1044,32 @@ function handleInstallReviewKey(state: TuiState, key: string): TuiEffect {
     return { type: "start", action: "install" };
   } else {
     state.screen = "plan";
-    state.cursor = planItemCursor(state, "Install");
+    state.cursor = planItemCursor(state, "install");
   }
   return { type: "none" };
 }
 
 function handlePresetInstallReviewKey(state: TuiState, key: string): TuiEffect {
-  moveCursor(state, key, 4);
+  moveCursor(state, key, PRESET_INSTALL_REVIEW_BACK_ROW);
   if (!isConfirmKey(key) && !isToggleKey(key)) return { type: "none" };
+
+  // Every toggle on this screen is part of {@link reviewFingerprint}, so flipping one would
+  // invalidate the very review it is displayed on. Re-preparing regenerates the command list from
+  // the clone already on disk, so the screen keeps showing what the install will actually run.
+  const reprepare: TuiEffect = remotePresetRef(state)
+    ? { type: "prepareRemoteInstall", action: "presetInstall" }
+    : { type: "none" };
 
   if (state.cursor === 0) {
     state.backup = !state.backup;
+    return reprepare;
   } else if (state.cursor === 1) {
     state.prune = !state.prune;
+    return reprepare;
   } else if (state.cursor === 2) {
     state.presetInstallExtensions = !state.presetInstallExtensions;
-  } else if (state.cursor === 3) {
+    return reprepare;
+  } else if (state.cursor === PRESET_INSTALL_REVIEW_START_ROW) {
     if (state.platforms.length === 0) {
       state.notice = "Select at least one platform first.";
       return { type: "none" };
@@ -1037,13 +1077,13 @@ function handlePresetInstallReviewKey(state: TuiState, key: string): TuiEffect {
     return { type: "start", action: "presetInstall" };
   } else {
     state.screen = "plan";
-    state.cursor = planItemCursor(state, "Install");
+    state.cursor = planItemCursor(state, "install");
   }
   return { type: "none" };
 }
 
-function planItemCursor(state: TuiState, item: TuiPlanItem): number {
-  const index = planItems(state).indexOf(item);
+function planItemCursor(state: TuiState, id: PlanItemId): number {
+  const index = planItems(state).findIndex((item) => item.id === id);
   return index === -1 ? 0 : index;
 }
 
@@ -1087,7 +1127,7 @@ function openPresetInstallReview(state: TuiState): TuiEffect {
   }
 
   state.screen = "presetInstallReview";
-  state.cursor = 0;
+  state.cursor = PRESET_INSTALL_REVIEW_START_ROW;
   return { type: "none" };
 }
 
@@ -1109,6 +1149,14 @@ function startOrMissingSource(state: TuiState, action: Exclude<TuiAction, "init"
     return { type: "none" };
   }
 
+  if (action === "build" && planSource(state).remote) {
+    // `ulis build` refuses a remote source, so running it would only leak the URL - credentials
+    // included - into the child's argv on the way to a guaranteed error.
+    state.notice =
+      "Build writes generated output into the source tree, so it cannot run against a remote source. Use Install instead.";
+    return { type: "none" };
+  }
+
   if (!planSource(state).sourceExists) {
     state.pendingAction = action;
     state.screen = "missingSource";
@@ -1119,6 +1167,8 @@ function startOrMissingSource(state: TuiState, action: Exclude<TuiAction, "init"
   if (action === "install") {
     // A remote source must show what it will run before it runs it, and that list only exists once
     // the tree is cloned - so the clone happens on the way into the review screen.
+    // `remotePresetRef` is presets-only, which `handlePlanKey` routes to `openPresetInstallReview`
+    // before it reaches here; it stays as the single "is anything remote?" test at this gate.
     if (planSource(state).remote || remotePresetRef(state)) {
       return { type: "prepareRemoteInstall", action: "install" };
     }

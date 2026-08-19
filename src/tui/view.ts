@@ -1,6 +1,7 @@
 import { PLATFORM_DESCRIPTIONS, PLATFORM_LABELS, PLATFORMS, type Platform } from "../platforms.js";
 import { redactUserinfo } from "../utils/redact.js";
 import {
+  assertNeverPlanItemId,
   FLOW_ITEMS,
   formatDestinationMode,
   formatFlow,
@@ -9,12 +10,13 @@ import {
   formatSourceMode,
   isEditedPlan,
   planItems,
-  planItemsBreaks,
   planSource,
   presetSelectionKey,
+  PRESET_INSTALL_REVIEW_BACK_ROW,
+  PRESET_INSTALL_REVIEW_START_ROW,
   showsPresetSourcePicker,
   visiblePresetChoices,
-  type TuiPlanItem,
+  type PlanItem,
   type TuiState,
 } from "./state.js";
 
@@ -161,12 +163,10 @@ function planView(state: TuiState, cwd?: string): ScreenView {
     field("Skip external skills", onOff(state.skipExternalSkills)),
   );
 
-  const items = planItems(state);
-  const breaks = planItemsBreaks(state);
-  const actions: ViewRow[] = items.flatMap((label, index) => {
-    const value = planItemValue(state, label);
-    const row = option(state, index, label, value === label ? {} : { value });
-    return breaks.includes(index) ? [row, { kind: "blank" } as ViewRow] : [row];
+  const actions: ViewRow[] = planItems(state).flatMap((item, index) => {
+    const value = planItemValue(state, item);
+    const row = option(state, index, item.label, value ? { value } : {});
+    return item.breakAfter ? [row, { kind: "blank" } as ViewRow] : [row];
   });
 
   return {
@@ -179,17 +179,34 @@ function planView(state: TuiState, cwd?: string): ScreenView {
   };
 }
 
-function planItemValue(state: TuiState, label: TuiPlanItem): string {
-  if (label === "Base source") return formatSourceMode(state.sourceMode, state.customSource);
-  if (label === "Install destination") return formatDestinationMode(state.destinationMode);
-  if (label === "Preset layers" || label === "Preset sources") return `${selectedPresetCount(state)} selected`;
-  if (label === "Platforms") return `${state.platforms.length} selected`;
-  if (label === "Backup") return onOff(state.backup);
-  if (label === "Prune removed agents and skills") return onOff(state.prune);
-  if (label === "Use latest build output") return onOff(state.rebuild);
-  if (label === "Run preset extensions") return onOff(state.presetInstallExtensions);
-  if (label === "Skip external skills") return onOff(state.skipExternalSkills);
-  return label;
+function planItemValue(state: TuiState, item: PlanItem): string | undefined {
+  switch (item.id) {
+    case "source":
+      return formatSourceMode(state.sourceMode, state.customSource);
+    case "destination":
+      return formatDestinationMode(state.destinationMode);
+    case "presets":
+      return `${selectedPresetCount(state)} selected`;
+    case "platforms":
+      return `${state.platforms.length} selected`;
+    case "backup":
+      return onOff(state.backup);
+    case "prune":
+      return onOff(state.prune);
+    case "rebuild":
+      return onOff(state.rebuild);
+    case "presetExtensions":
+      return onOff(state.presetInstallExtensions);
+    case "skipExternalSkills":
+      return onOff(state.skipExternalSkills);
+    case "validate":
+    case "build":
+    case "install":
+    case "back":
+      return undefined;
+    default:
+      return assertNeverPlanItemId(item.id);
+  }
 }
 
 function sourceView(state: TuiState): ScreenView {
@@ -387,9 +404,12 @@ function missingSourceView(state: TuiState, cwd?: string): ScreenView {
 }
 
 /**
- * The trust boundary for TUI-initiated remote installs: these commands come from a repository the
- * user did not write and will execute if they proceed. Text is pre-sanitised by the planner, so a
- * hostile manifest cannot forge or hide a line. Renders nothing when there is nothing remote to run.
+ * The trust boundary for TUI-initiated remote installs: every entry here is code from a repository
+ * the user did not write. The planner decides what qualifies and adds classes over time - some
+ * entries run during the install, others are files a host agent executes on its own afterwards -
+ * so the framing stays deliberately general rather than naming the classes it happens to list
+ * today. Text is pre-sanitised by the planner, so a hostile manifest cannot forge or hide a line.
+ * Renders nothing when there is nothing remote to install.
  */
 function remoteCommandRows(state: TuiState): ViewRow[] {
   if (state.remoteCommands.length === 0) return [];
@@ -397,8 +417,13 @@ function remoteCommandRows(state: TuiState): ViewRow[] {
     { kind: "blank" },
     {
       kind: "text",
-      text: `These commands come from ${state.remoteCommandSource} and WILL RUN if you continue:`,
+      text: `${state.remoteCommandSource} contributes the execution surface below. Review it before continuing:`,
       tone: "error",
+    },
+    {
+      kind: "text",
+      text: "Each entry runs during the install, or is installed now and run later by the agent.",
+      tone: "warn",
     },
     ...state.remoteCommands.map((command): ViewRow => ({ kind: "text", text: `  ${command}`, tone: "muted" })),
   ];
@@ -453,8 +478,8 @@ function presetInstallReviewView(state: TuiState, cwd?: string): ScreenView {
         ]
       : []),
     { kind: "blank" },
-    option(state, 3, "Start preset install"),
-    option(state, 4, "Back to presets"),
+    option(state, PRESET_INSTALL_REVIEW_START_ROW, "Start preset install"),
+    option(state, PRESET_INSTALL_REVIEW_BACK_ROW, "Back to presets"),
   ];
 
   return {

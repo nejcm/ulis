@@ -7,7 +7,7 @@ import { createTestRenderer, type TestRendererSetup } from "@opentui/core/testin
 
 import { __test as installTest } from "../install.js";
 import { TuiController, type TuiControllerOptions } from "./controller.js";
-import { reviewFingerprint } from "./state.js";
+import { handleTuiKey, planItems, reviewFingerprint, PRESET_INSTALL_REVIEW_START_ROW, type TuiState } from "./state.js";
 import { MIN_COLUMNS, MIN_ROWS, SPLIT_COLUMNS } from "./view.js";
 
 /** Comfortably above `state.ts`'s 35 ms duplicate-key window. */
@@ -386,12 +386,15 @@ describe("TUI workflow runs", () => {
 
   it("initializes a missing source before resuming the pending action", async () => {
     const calls: string[] = [];
+    const resumeOptions: { cwd?: string; signal?: AbortSignal }[] = [];
     const harness = await createHarness(100, 30, {
+      cwd: "/tmp/ulis-injected-cwd",
       initializeSource: async () => {
         calls.push("init");
       },
-      runAction: async (_state, action) => {
+      runAction: async (_state, action, _logger, options) => {
         calls.push(action);
+        resumeOptions.push({ cwd: options?.cwd, signal: options?.signal });
       },
     });
     harness.controller.state.pendingAction = "build";
@@ -399,6 +402,10 @@ describe("TUI workflow runs", () => {
     await harness.controller.handleEffect({ type: "initSource" });
 
     expect(calls).toEqual(["init", "build"]);
+    // Same cwd the plan screen resolved with: without it the resumed action plans against
+    // `process.cwd()` and can install somewhere the user was never shown.
+    expect(resumeOptions[0]!.cwd).toBe("/tmp/ulis-injected-cwd");
+    expect(resumeOptions[0]!.signal).toBeDefined();
     expect(harness.controller.state.pendingAction).toBeUndefined();
     expect(harness.controller.state.resultTitle).toContain("Complete");
   });
@@ -461,8 +468,13 @@ describe("remote install consent", () => {
     state.platforms = ["claude"];
 
     await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
-    // Editing the plan and reviewing again must not strand the first clone.
+    // Options change the command list, not the tree it is read from: no second fetch.
     state.platforms = ["claude", "cursor"];
+    await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    expect(cloned).toHaveLength(1);
+
+    // A different remote is a different tree, and reviewing it must not strand the first clone.
+    state.customSource = "https://github.com/o/other";
     await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
 
     expect(cloned).toHaveLength(2);
@@ -536,18 +548,31 @@ describe("remote install consent", () => {
   });
 
   it("binds the review to the settings it was generated for", async () => {
-    mockClone();
-    const harness = await createHarness();
+    const cloned = mockClone();
+    const runCalls: { prepared: unknown }[] = [];
+    const harness = await createHarness(100, 30, {
+      runAction: ((_state: TuiState, _action: string, _logger: unknown, opts: { prepared?: unknown }) => {
+        runCalls.push({ prepared: opts.prepared });
+        return Promise.resolve();
+      }) as never,
+    });
     const state = harness.controller.state;
     state.sourceMode = "custom";
     state.customSource = url;
     state.platforms = ["claude"];
 
     await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
-    const reviewed = reviewFingerprint(state, "install");
+    expect(reviewFingerprint(state, "install")).toBe(reviewFingerprint(state, "install"));
 
+    // A setting the review was generated for changes without going back through the review screen.
     state.skipExternalSkills = !state.skipExternalSkills;
-    expect(reviewFingerprint(state, "install")).not.toBe(reviewed);
+    await harness.controller.handleEffect({ type: "start", action: "install" });
+
+    // The controller must not hand the stale review to the run, and must drop its clone.
+    expect(runCalls).toHaveLength(1);
+    expect(runCalls[0]!.prepared).toBeUndefined();
+    expect(cloned.map(existsSync)).toEqual([false]);
+    await harness.controller.shutdown(0);
   });
 
   it("does not hand a remote review to a later local start", async () => {
@@ -599,6 +624,9 @@ describe("remote install consent", () => {
         mkdirSync(dir, { recursive: true });
         writeFileSync(join(dir, "config.yaml"), "version: 1\nname: remote\n", "utf-8");
         writeFileSync(join(dir, "extensions.yaml"), '"*":\n  extensions:\n    - name: evil-package\n', "utf-8");
+        // The skills command is the one `skipExternalSkills` gates, so it is what proves the plan
+        // came from the snapshot rather than from the value live when planning ran.
+        writeFileSync(join(dir, "skills.yaml"), '"*":\n  skills:\n    - name: test/skill\n', "utf-8");
         return { status: 0, stdout: "", stderr: "" };
       },
     } as never);
@@ -611,6 +639,8 @@ describe("remote install consent", () => {
     state.skipExternalSkills = false;
 
     expect(state.remoteCommands.join(" ")).toContain("evil-package");
+    // Planned with skills enabled, as fingerprinted - not with the value set during the clone.
+    expect(state.remoteCommands.join(" ")).toContain("test/skill");
     await harness.controller.shutdown(0);
   });
 
@@ -648,6 +678,100 @@ describe("remote install consent", () => {
 
     expect(cloned).toHaveLength(1);
     expect(cloned.map(existsSync)).toEqual([false]);
+  });
+
+  /** Puts the plan screen's cursor on Install, so a real `enter` starts the remote flow. */
+  function focusInstall(state: TuiState): void {
+    state.screen = "plan";
+    state.cursor = planItems(state).findIndex((item) => item.id === "install");
+  }
+
+  it("keeps the remote preset review valid when its own toggles are used", async () => {
+    const cloned = mockClone();
+    const runCalls: { prepared: unknown }[] = [];
+    const harness = await createHarness(100, 30, {
+      runAction: ((_state: TuiState, _action: string, _logger: unknown, opts: { prepared?: unknown }) => {
+        runCalls.push({ prepared: opts.prepared });
+        return Promise.resolve();
+      }) as never,
+    });
+    const state = harness.controller.state;
+    state.flow = "presetsOnly";
+    state.presetSourceMode = "custom";
+    state.customPresetSource = url;
+    state.platforms = ["claude"];
+    focusInstall(state);
+
+    // Real keys through the real handler, the way the screen is actually used.
+    await harness.controller.handleEffect(handleTuiKey(state, "enter"));
+    expect(state.screen).toBe("presetInstallReview");
+    // Land on "Start preset install", never on a toggle a confirming Enter would flip instead.
+    expect(state.cursor).toBe(PRESET_INSTALL_REVIEW_START_ROW);
+
+    // Every toggle on this screen is part of the review fingerprint.
+    state.cursor = 0;
+    await harness.controller.handleEffect(handleTuiKey(state, "x"));
+    expect(state.backup).toBe(false);
+    expect(state.screen).toBe("presetInstallReview");
+    // Regenerated from the clone already on disk: using the screen must not re-fetch the remote.
+    expect(cloned).toHaveLength(1);
+
+    state.cursor = PRESET_INSTALL_REVIEW_START_ROW;
+    await harness.controller.handleEffect(handleTuiKey(state, "enter"));
+
+    // The review the user just used is still the one that runs.
+    expect(runCalls).toHaveLength(1);
+    expect(runCalls[0]!.prepared).toBeDefined();
+    expect(state.resultTitle).toContain("Complete");
+    await harness.controller.shutdown(0);
+  });
+
+  it("shows the fetch on the running screen and ignores plan edits while it runs", async () => {
+    let release: (() => void) | undefined;
+    installTest.setRuntimeDependencies({
+      runCommand(_lookup: string, args: readonly string[]) {
+        return { status: args[0] === "gh" ? 1 : 0 } as never;
+      },
+      async runAsyncCommand(command: string, args: readonly string[]) {
+        if (command !== "git") return { status: 0, stdout: "", stderr: "" };
+        const dir = args[args.length - 1]!;
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, "config.yaml"), "version: 1\n", "utf-8");
+        // Hold the clone open so the assertions land while it is still in flight.
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    } as never);
+    const harness = await createHarness();
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+    focusInstall(state);
+
+    const preparing = harness.controller.handleEffect(handleTuiKey(state, "enter"));
+    await Bun.sleep(10);
+
+    // Announced, not silent: the same running screen every other long operation uses.
+    expect(state.screen).toBe("running");
+    expect(await harness.frame()).toContain("Fetch remote source");
+
+    // And inert: a keypress that would edit the plan cannot invalidate the review being prepared.
+    handleTuiKey(state, "x");
+    expect(state.backup).toBe(true);
+
+    // `q` cancels the fetch rather than quitting the whole TUI.
+    await harness.controller.handleEffect(handleTuiKey(state, "q"));
+    expect(harness.exitCodes).toEqual([]);
+
+    release?.();
+    await preparing;
+    expect(state.screen).toBe("plan");
+    expect(state.notice).toContain("stopped by user");
+
+    await harness.controller.shutdown(0);
   });
 
   it("surfaces a failed clone as a notice instead of crashing", async () => {

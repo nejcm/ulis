@@ -21,8 +21,11 @@ import {
   selectedPresets,
   togglePresetSelection,
   visiblePresetChoices,
+  type PlanItemId,
   type TuiState,
 } from "./state.js";
+
+const planCursor = (state: TuiState, id: PlanItemId) => planItems(state).findIndex((item) => item.id === id);
 
 const tmpRoots: string[] = [];
 
@@ -89,7 +92,7 @@ describe("tui state", () => {
     try {
       const state = createInitialState();
       state.screen = "plan";
-      state.cursor = planItems(state).indexOf("Validate");
+      state.cursor = planCursor(state, "validate");
 
       expect(handleTuiKey(state, "enter")).toEqual({ type: "start", action: "validate" });
     } finally {
@@ -105,7 +108,7 @@ describe("tui state", () => {
     try {
       const state = createInitialState();
       state.screen = "plan";
-      state.cursor = planItems(state).indexOf("Install");
+      state.cursor = planCursor(state, "install");
 
       expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
       expect(state.screen as string).toBe("installReview");
@@ -121,7 +124,7 @@ describe("tui state", () => {
     try {
       const state = createInitialState();
       state.screen = "plan";
-      state.cursor = planItems(state).indexOf("Build only");
+      state.cursor = planCursor(state, "build");
 
       expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
       expect(state.screen as string).toBe("missingSource");
@@ -212,18 +215,18 @@ describe("tui state", () => {
     state.screen = "plan";
     state.selectedPresetNames = ["user:team"];
 
-    expect(planItems(state)).not.toContain("Build only");
+    expect(planItems(state).map((item) => item.id)).not.toContain("build");
 
     const originalNow = Date.now;
     let now = 5_000;
     Date.now = () => now;
 
     try {
-      state.cursor = planItems(state).indexOf("Validate");
+      state.cursor = planCursor(state, "validate");
       expect(handleTuiKey(state, "enter")).toEqual({ type: "start", action: "presetValidate" });
 
       now += 45;
-      state.cursor = planItems(state).indexOf("Install");
+      state.cursor = planCursor(state, "install");
       expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
       expect(state.screen as string).toBe("presetInstallReview");
     } finally {
@@ -443,7 +446,7 @@ describe("tui state", () => {
     handleTuiKey(state, "enter");
 
     expect(state.screen as string).toBe("plan");
-    expect(state.cursor).toBe(planItems(state).indexOf("Install"));
+    expect(state.cursor).toBe(planCursor(state, "install"));
   });
 
   it("presetInstallReview toggles extension installs with space", () => {
@@ -455,6 +458,41 @@ describe("tui state", () => {
     handleTuiKey(state, " ");
 
     expect(state.presetInstallExtensions).toBe(false);
+  });
+
+  it("presetInstallReview toggles re-prepare a remote review instead of invalidating it", () => {
+    const state = createInitialState();
+    state.flow = "presetsOnly";
+    state.presetSourceMode = "custom";
+    state.customPresetSource = "https://github.com/o/r";
+    state.screen = "presetInstallReview";
+    state.cursor = 0;
+
+    // Backup is part of the review fingerprint, so the review has to be regenerated with it.
+    expect(handleTuiKey(state, " ")).toEqual({ type: "prepareRemoteInstall", action: "presetInstall" });
+    expect(state.backup).toBe(false);
+  });
+
+  it("presetInstallReview toggles stay local when nothing is remote", () => {
+    const state = createInitialState();
+    state.screen = "presetInstallReview";
+    state.cursor = 0;
+
+    expect(handleTuiKey(state, " ")).toEqual({ type: "none" });
+    expect(state.backup).toBe(false);
+  });
+
+  it("refuses a build against a remote source instead of spawning one", () => {
+    const state = createInitialState();
+    state.screen = "plan";
+    state.sourceMode = "custom";
+    state.customSource = "https://user:s3cret@github.com/o/r";
+    state.cursor = planCursor(state, "build");
+
+    // The child would only ever receive the credentialed URL and print `build`'s own refusal.
+    expect(handleTuiKey(state, "enter")).toEqual({ type: "none" });
+    expect(state.notice).toContain("remote source");
+    expect(state.screen).toBe("plan");
   });
 
   it("presetInstallReview start returns preset install effect", () => {
@@ -485,7 +523,7 @@ describe("tui state", () => {
     handleTuiKey(state, "enter");
 
     expect(state.screen as string).toBe("plan");
-    expect(state.cursor).toBe(planItems(state).indexOf("Install"));
+    expect(state.cursor).toBe(planCursor(state, "install"));
   });
 
   it("presetInstallReview back navigates to the preset-only install row", () => {
@@ -499,7 +537,7 @@ describe("tui state", () => {
     handleTuiKey(state, "enter");
 
     expect(state.screen as string).toBe("plan");
-    expect(state.cursor).toBe(planItems(state).indexOf("Install"));
+    expect(state.cursor).toBe(planCursor(state, "install"));
   });
 
   it("customSource path value syncs like TextInput onChange", () => {
@@ -921,7 +959,7 @@ describe("tui state", () => {
     handleTuiKey(state, "backspace");
 
     expect(state.screen as string).toBe("plan");
-    expect(state.cursor).toBe(planItems(state).indexOf("Install"));
+    expect(state.cursor).toBe(planCursor(state, "install"));
   });
 
   it("pendingAction is cleared when navigating away from result screen", () => {

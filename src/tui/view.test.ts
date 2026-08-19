@@ -1,6 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
-import { createInitialState } from "./state.js";
+import {
+  createInitialState,
+  planItems,
+  PRESET_INSTALL_REVIEW_BACK_ROW,
+  PRESET_INSTALL_REVIEW_START_ROW,
+  type PlanItemId,
+} from "./state.js";
 import { buildScreenView, MIN_COLUMNS, MIN_ROWS, SPLIT_COLUMNS, splitLogTag } from "./view.js";
 
 describe("splitLogTag", () => {
@@ -63,6 +69,39 @@ describe("buildScreenView", () => {
     expect(view.panes.map((pane) => pane.title)).toContain("Actions");
   });
 
+  it("renders a blank row directly after every plan item marked breakAfter, for every flow", () => {
+    // Ids that end a visual section of the plan screen. Identity-based (compiler-checked via
+    // PlanItemId), unlike the old positional BREAKS index arrays this replaces -- reordering or
+    // inserting rows can't silently desync this from the render. Shared across both flows: both
+    // item arrays currently break after the same three sections.
+    const expectedBreakAfterIds = new Set<PlanItemId>(["destination", "backup", "install"]);
+
+    for (const flow of ["project", "presetsOnly"] as const) {
+      const state = createInitialState();
+      state.screen = "plan";
+      state.flow = flow;
+
+      const view = buildScreenView(state);
+      const actionsPane = view.panes.find((pane) => pane.title === "Actions");
+      expect(actionsPane).toBeDefined();
+
+      // Walk items and rendered rows together: each item consumes one "option" row, plus a
+      // trailing "blank" row exactly when its id is expected to end a section. This asserts
+      // adjacency (blank directly follows its item), not fixed row numbers.
+      const items = planItems(state);
+      let rowIndex = 0;
+      for (const item of items) {
+        expect(actionsPane!.rows[rowIndex]).toMatchObject({ kind: "option", label: item.label });
+        rowIndex += 1;
+        if (expectedBreakAfterIds.has(item.id)) {
+          expect(actionsPane!.rows[rowIndex]).toEqual({ kind: "blank" });
+          rowIndex += 1;
+        }
+      }
+      expect(rowIndex).toBe(actionsPane!.rows.length);
+    }
+  });
+
   it("exposes the editable path input on the custom source screen", () => {
     const state = createInitialState();
     state.screen = "customSource";
@@ -121,6 +160,23 @@ describe("buildScreenView", () => {
   });
 });
 
+describe("preset install review rows", () => {
+  it("renders the option rows the cursor constants name", () => {
+    const state = createInitialState();
+    state.screen = "presetInstallReview";
+
+    const options = buildScreenView(state)
+      .panes.flatMap((pane) => pane.rows)
+      .filter((row): row is Extract<typeof row, { kind: "option" }> => row.kind === "option");
+
+    // The key handler and the controller both aim the cursor with these constants; if the render
+    // ever moves a row, the constants must move with it rather than silently pointing at a toggle.
+    expect(options.find((row) => row.index === PRESET_INSTALL_REVIEW_START_ROW)?.label).toBe("Start preset install");
+    expect(options.find((row) => row.index === PRESET_INSTALL_REVIEW_BACK_ROW)?.label).toBe("Back to presets");
+    expect(Math.max(...options.map((row) => row.index))).toBe(PRESET_INSTALL_REVIEW_BACK_ROW);
+  });
+});
+
 describe("remote command consent", () => {
   function rowText(state: ReturnType<typeof createInitialState>): string {
     return buildScreenView(state)
@@ -138,7 +194,10 @@ describe("remote command consent", () => {
     const text = rowText(state);
 
     expect(text).toContain("https://github.com/o/r");
-    expect(text).toContain("WILL RUN");
+    // Framed by when an entry executes, not by what kind of entry it is: the planner adds classes
+    // (config files a host agent runs later, not only commands) and the wording must stay true.
+    expect(text).toContain("contributes the execution surface below");
+    expect(text).toContain("run later by the agent");
     expect(text).toContain("npx skills@latest add acme/skill");
     expect(text).toContain("npx some-extension --flag");
   });
@@ -156,7 +215,7 @@ describe("remote command consent", () => {
     const state = createInitialState();
     state.screen = "installReview";
 
-    expect(rowText(state)).not.toContain("WILL RUN");
+    expect(rowText(state)).not.toContain("execution surface");
   });
 
   it("redacts credentials in the source picker and recents list", () => {

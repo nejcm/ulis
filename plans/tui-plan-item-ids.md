@@ -1,6 +1,6 @@
 # Stable identity for TUI plan items
 
-Status: approved, not started
+Status: implemented and reviewed (`src/tui/state.ts`, `src/tui/view.ts`)
 Design date: 2026-08-18
 Origin: architecture review candidate #3, narrowed after external triage
 
@@ -71,8 +71,8 @@ export interface PlanItem {
 export const DASHBOARD_ITEMS: readonly PlanItem[] = [
   { id: "presets", label: "Preset layers" },
   { id: "source", label: "Base source" },
-  { id: "platforms", label: "Platforms", breakAfter: true },
-  { id: "destination", label: "Install destination" },
+  { id: "platforms", label: "Platforms" },
+  { id: "destination", label: "Install destination", breakAfter: true },
   ...
 ];
 ```
@@ -138,8 +138,9 @@ bun run lint
 bun test src/tui
 ```
 
-`tsc --noEmit` is doing real work here: the exhaustive `switch (item.id)` means an unhandled row fails
-the build.
+`tsc --noEmit` is doing real work here — but only because the `switch (item.id)` ends in a
+`assertNeverPlanItemId(item.id)` call taking a `never`. A `default`-less switch alone does not fail the
+build on an unhandled row; the `never` parameter is what turns a missed id into a type error.
 
 ### 4.2 Manual
 

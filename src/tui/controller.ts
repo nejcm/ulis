@@ -2,8 +2,9 @@ import type { CliRenderer } from "@opentui/core";
 
 import type { Logger } from "../build.js";
 import { planRemoteCommands } from "../install.js";
+import type { Platform } from "../platforms.js";
 import { redactUserinfo } from "../utils/redact.js";
-import { resolvePresets } from "../utils/resolve-presets.js";
+import { resolvePresets, type ResolvedPreset } from "../utils/resolve-presets.js";
 import { resolveSourceOrRemote } from "../utils/resolve-source.js";
 import { initializeMissingSource, runTuiAction } from "./actions.js";
 import { TuiApp } from "./app.js";
@@ -17,8 +18,11 @@ import {
   remotePresetRef,
   reviewFingerprint,
   selectedPresets,
+  PRESET_INSTALL_REVIEW_START_ROW,
+  type PlannedSource,
   type PreparedRemoteInstall,
   type TuiEffect,
+  type TuiScreen,
   type TuiState,
 } from "./state.js";
 
@@ -45,6 +49,25 @@ export interface TuiControllerOptions {
 type ActionTitleKey = Exclude<TuiEffect & { type: "start" }, never>["action"];
 
 /**
+ * A prepared review plus the bookkeeping only the controller needs: what was fetched, so a review
+ * regenerated for the same remote can reuse the clone instead of going back to the network.
+ */
+interface PreparedReview extends PreparedRemoteInstall {
+  /** Identity of the fetch itself. Options change the command list, not the tree it is read from. */
+  readonly cloneKey: string;
+  readonly remotePresets: readonly ResolvedPreset[];
+}
+
+/** Everything the command list is planned from, captured at the same instant as the fingerprint. */
+interface PrepareSnapshot {
+  readonly fingerprint: string;
+  readonly platforms: readonly Platform[];
+  readonly presetInstallExtensions: boolean;
+  readonly skipExternalSkills: boolean;
+  readonly localPresets: readonly ResolvedPreset[];
+}
+
+/**
  * Owns TUI state, workflow execution, and preference persistence.
  *
  * The renderer is injected so the same controller drives both the real terminal
@@ -59,7 +82,7 @@ export class TuiController {
   private lastSavedPreferences: string;
   private runAbortController: AbortController | undefined;
   /** Clone backing the review screen. Reused by the install so what ran is what was shown. */
-  private preparedRemote: PreparedRemoteInstall | undefined;
+  private preparedRemote: PreparedReview | undefined;
   private prepareGeneration = 0;
   private prepareAbort: AbortController | undefined;
   /**
@@ -104,6 +127,11 @@ export class TuiController {
     }
 
     if (effect.type === "cancelRunning") {
+      if (this.prepareAbort != null) {
+        this.pushLog("[warn] Stopping remote fetch...");
+        this.prepareAbort.abort();
+        return;
+      }
       if (this.runAbortController == null) return;
       this.pushLog("[warn] Stopping current workflow...");
       this.runAbortController.abort();
@@ -138,7 +166,10 @@ export class TuiController {
       await this.runWithLogs(title, successMessage, async (logger, signal) => {
         await (this.options.initializeSource ?? initializeMissingSource)(this.state, logger);
         if (pendingAction != null) {
-          await (this.options.runAction ?? runTuiAction)(this.state, pendingAction, logger, { signal });
+          await (this.options.runAction ?? runTuiAction)(this.state, pendingAction, logger, {
+            signal,
+            cwd: this.options.cwd,
+          });
         }
       });
       return;
@@ -197,11 +228,7 @@ export class TuiController {
     this.state.runningSpinnerFrame = 0;
     this.render();
 
-    this.spinnerTimer = setInterval(() => {
-      if (this.state.screen !== "running") return;
-      this.state.runningSpinnerFrame = (this.state.runningSpinnerFrame + 1) % 4;
-      this.render();
-    }, SPINNER_INTERVAL_MS);
+    this.startSpinner();
 
     try {
       await run(this.createLogger(), abortController.signal);
@@ -253,6 +280,15 @@ export class TuiController {
     this.state.notice = error;
   }
 
+  private startSpinner(): void {
+    this.clearSpinner();
+    this.spinnerTimer = setInterval(() => {
+      if (this.state.screen !== "running") return;
+      this.state.runningSpinnerFrame = (this.state.runningSpinnerFrame + 1) % 4;
+      this.render();
+    }, SPINNER_INTERVAL_MS);
+  }
+
   private clearSpinner(): void {
     if (this.spinnerTimer == null) return;
     clearInterval(this.spinnerTimer);
@@ -265,6 +301,26 @@ export class TuiController {
    * will run. The clone is kept and handed to the install, so consent applies to what executes.
    */
   private async prepareRemoteInstall(action: "install" | "presetInstall"): Promise<void> {
+    const plan = planSource(this.state, this.options.cwd);
+    const remoteRef = remotePresetRef(this.state);
+    // `action` rides along even though `publishReview` replans for whichever action is asked for:
+    // it costs one string and removes any need to reason about cross-action reuse at all.
+    const cloneKey = JSON.stringify([action, plan.remote ? plan.sourceDir : "", remoteRef ?? "", plan.globalInstall]);
+
+    // The review screen's own toggles are part of the fingerprint, so using them has to regenerate
+    // the review. They change the command list, never the tree it is planned from, so replan from
+    // the clone already on disk rather than putting a network round trip behind every checkbox.
+    if (this.prepareAbort == null && this.preparedRemote?.cloneKey === cloneKey) {
+      const reused = this.preparedRemote;
+      this.publishReview(action, plan, remoteRef, cloneKey, this.snapshotPrepareInputs(action), {
+        sourceDir: reused.sourceDir,
+        remotePresets: reused.remotePresets,
+        cleanup: reused.cleanup,
+      });
+      this.render();
+      return;
+    }
+
     // One preparation at a time: a second one must not overwrite the first's clone without
     // disposing it, and a completion that arrives after being superseded must throw its own away.
     this.prepareAbort?.abort();
@@ -276,15 +332,7 @@ export class TuiController {
     // Snapshot every input the command list depends on at the same instant as the fingerprint.
     // Reading them back after the awaits would let a change made during the clone (and reverted
     // afterwards) produce a review that omits commands the matching fingerprint then permits.
-    const plan = planSource(this.state, this.options.cwd);
-    const remoteRef = remotePresetRef(this.state);
-    const fingerprint = reviewFingerprint(this.state, action, this.options.cwd);
-    const snapshot = {
-      platforms: [...this.state.platforms],
-      presetInstallExtensions: this.state.presetInstallExtensions,
-      skipExternalSkills: this.state.skipExternalSkills,
-      localPresets: selectedPresets(this.state),
-    };
+    const snapshot = this.snapshotPrepareInputs(action);
     const cleanups: (() => void)[] = [];
     const disposeAll = () => {
       while (cleanups.length > 0) cleanups.pop()!();
@@ -292,7 +340,19 @@ export class TuiController {
     // Visible to shutdown, so an in-flight clone is never stranded on disk.
     this.inFlightCleanups.add(disposeAll);
 
+    // Fetching is a network operation, so it gets the same running screen as every other long
+    // operation: progress is visible, its logs stream, `q` cancels it, and - because that screen
+    // takes no editing keys - the plan cannot drift out from under the review being prepared.
+    const title = action === "install" ? "Fetch remote source" : "Fetch remote presets";
+    // A superseded preparation inherits the running screen; the plan screen is the only way in.
+    const originScreen: TuiScreen = this.state.screen === "running" ? "plan" : this.state.screen;
     this.state.notice = "";
+    this.state.logs = [`Starting: ${title}`];
+    this.state.screen = "running";
+    this.state.runningSpinnerFrame = 0;
+    this.startSpinner();
+    this.render();
+
     try {
       const source = plan.remote
         ? await resolveSourceOrRemote({
@@ -318,34 +378,26 @@ export class TuiController {
         disposeAll();
         return;
       }
+      // Cancelled mid-clone: keep the result off the screen as well as off the disk.
+      if (abort.signal.aborted) throw new Error(`${title} stopped by user.`);
 
-      const presets = [...snapshot.localPresets, ...(remote?.presets ?? [])];
-      const commands = planRemoteCommands({
-        sourceDir: action === "install" ? (source?.sourceDir ?? plan.sourceDir) : undefined,
-        presets,
-        platforms: snapshot.platforms,
-        globalInstall: plan.globalInstall,
-        installExtensions: action === "presetInstall" ? snapshot.presetInstallExtensions : true,
-        installSkills: !snapshot.skipExternalSkills,
-      });
-
-      this.preparedRemote = {
-        action,
-        fingerprint,
+      this.clearSpinner();
+      this.publishReview(action, plan, remoteRef, cloneKey, snapshot, {
         sourceDir: source?.sourceDir,
-        presets,
-        commands,
+        remotePresets: remote?.presets ?? [],
         cleanup: disposeAll,
-      };
-      this.state.remoteCommands = commands;
-      this.state.remoteCommandSource = redactUserinfo(plan.remote ? plan.sourceDir : (remoteRef ?? ""));
-      this.state.screen = action === "install" ? "installReview" : "presetInstallReview";
-      this.state.cursor = 0;
+      });
     } catch (error) {
       disposeAll();
       if (generation !== this.prepareGeneration) return;
+      this.clearSpinner();
       // A failed clone is a notice, never a crash.
-      this.state.notice = error instanceof Error ? error.message : String(error);
+      this.state.screen = originScreen;
+      this.state.notice = abort.signal.aborted
+        ? `${title} stopped by user.`
+        : error instanceof Error
+          ? error.message
+          : String(error);
       this.state.remoteCommands = [];
       this.state.remoteCommandSource = "";
     } finally {
@@ -353,6 +405,56 @@ export class TuiController {
       if (this.prepareAbort === abort) this.prepareAbort = undefined;
     }
     this.render();
+  }
+
+  private snapshotPrepareInputs(action: "install" | "presetInstall"): PrepareSnapshot {
+    return {
+      fingerprint: reviewFingerprint(this.state, action, this.options.cwd),
+      platforms: [...this.state.platforms],
+      presetInstallExtensions: this.state.presetInstallExtensions,
+      skipExternalSkills: this.state.skipExternalSkills,
+      localPresets: selectedPresets(this.state),
+    };
+  }
+
+  /** Plan the command list from an already-resolved clone and show it on the review screen. */
+  private publishReview(
+    action: "install" | "presetInstall",
+    plan: PlannedSource,
+    remoteRef: string | undefined,
+    cloneKey: string,
+    snapshot: PrepareSnapshot,
+    clone: { sourceDir?: string; remotePresets: readonly ResolvedPreset[]; cleanup: () => void },
+  ): void {
+    const presets = [...snapshot.localPresets, ...clone.remotePresets];
+    const commands = planRemoteCommands({
+      sourceDir: action === "install" ? (clone.sourceDir ?? plan.sourceDir) : undefined,
+      presets,
+      platforms: snapshot.platforms,
+      globalInstall: plan.globalInstall,
+      installExtensions: action === "presetInstall" ? snapshot.presetInstallExtensions : true,
+      installSkills: !snapshot.skipExternalSkills,
+    });
+
+    this.preparedRemote = {
+      action,
+      fingerprint: snapshot.fingerprint,
+      cloneKey,
+      sourceDir: clone.sourceDir,
+      remotePresets: clone.remotePresets,
+      presets,
+      commands,
+      cleanup: clone.cleanup,
+    };
+    this.state.remoteCommands = commands;
+    this.state.remoteCommandSource = redactUserinfo(plan.remote ? plan.sourceDir : (remoteRef ?? ""));
+
+    const screen = action === "install" ? "installReview" : "presetInstallReview";
+    if (this.state.screen !== screen) {
+      this.state.screen = screen;
+      // Land on "Start", never on a toggle: a confirming Enter must not flip an option instead.
+      this.state.cursor = action === "install" ? 0 : PRESET_INSTALL_REVIEW_START_ROW;
+    }
   }
 
   private disposePreparedRemote(): void {
