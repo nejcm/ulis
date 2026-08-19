@@ -6,6 +6,14 @@ export const ULIS_GENERATED_DIRNAME = "generated" as const;
 export const ULIS_PRESETS_DIRNAME = "presets" as const;
 
 /**
+ * Name of the provenance record every build writes into (or clears from) its `generated/` output,
+ * naming which platforms' output came from a remote preset. Read by `runInstall` so a later
+ * `--skip-rebuild` run can tell it is looking at remote-authored output even though it resolved no
+ * presets of its own.
+ */
+export const ULIS_PROVENANCE_FILENAME = ".ulis-provenance.json" as const;
+
+/**
  * Prefix of the temp directory a remote source is cloned into. Shared so the installer can tell a
  * cloned tree from one the user wrote, without importing the cloner (which imports the installer).
  */

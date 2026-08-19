@@ -20,6 +20,7 @@ import { assertShellSafeArgv, commandExists as commandExistsOnPath } from "./uti
 import { loadValidatedConfigFile } from "./utils/config-loader.js";
 import { logger as defaultLogger } from "./utils/logger.js";
 import { confirm } from "./utils/prompt.js";
+import { readRecordedRemoteSources } from "./utils/provenance.js";
 import { sanitizeLogText } from "./utils/redact.js";
 import type { ResolvedPreset } from "./utils/resolve-presets.js";
 
@@ -282,6 +283,27 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
   // source anyway, so removing the divergence beats mirroring it in a second code path.
   const remoteInTheMix = (options.remoteSources?.length ?? 0) > 0;
   const rebuild = remoteInTheMix || (options.rebuild ?? false);
+
+  // `remoteInTheMix` is only true when this run itself resolved a remote preset, which forces
+  // `rebuild` above regardless of `--skip-rebuild`. So whenever `rebuild` is still false here, this
+  // run resolved nothing remote of its own - if any platform this run is about to install was
+  // nonetheless built from a remote source (a prior `build --preset <url>`, say), there is no clone
+  // left to rebuild from and no fresh preview to gate on. Refuse rather than install it unreviewed.
+  // Scoped to `platforms`: a record naming only a platform this run does not touch must not block it.
+  // Runs even when `platforms` ends up empty below - harmless in practice only because the "No
+  // platforms selected" early return two blocks down makes an empty list a no-op either way. That
+  // coupling is incidental, not load-bearing: don't rely on it if this check ever moves.
+  if (!rebuild) {
+    const recordedRemoteSources = readRecordedRemoteSources(outputDir, platforms);
+    if (recordedRemoteSources.length > 0) {
+      throw new InstallError(
+        `This generated tree was built from ${recordedRemoteSources.join(", ")}; re-run ` +
+          `\`ulis install --preset ${recordedRemoteSources.join(",")}\` so the commands can be reviewed against a fresh build. ` +
+          "If a listed platform's own generated/<platform> directory has since been deleted, its entry " +
+          "lingers until a rebuild touches that platform - drop --skip-rebuild to rebuild it locally and clear it.",
+      );
+    }
+  }
 
   // A remote source's `.env` is remote-controlled and must not outlive this install in a long-lived
   // process (the TUI runs installs in-process). `loadDotEnv` only ever adds keys, so dropping the

@@ -13,8 +13,9 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import type { Logger } from "./build.js";
+import { runBuild, type Logger } from "./build.js";
 import { __test, loadDotEnv, resolveRunner, runInstall, runPresetInstall } from "./install.js";
+import { InstallError } from "./install/errors.js";
 import type { Platform } from "./platforms.js";
 import { readMergeableConfig } from "./utils/config-merger.js";
 
@@ -2747,6 +2748,405 @@ describe("remote trust gate", () => {
       true,
     );
     expect(run.logs.some((line) => line.trim().endsWith("some-extension@latest"))).toBe(true);
+  });
+});
+
+describe("cross-run remote provenance", () => {
+  function writeMinimalSource(dir: string, name: string): void {
+    write(join(dir, "config.yaml"), `version: 1\nname: ${name}\n`);
+  }
+
+  it("refuses `install --skip-rebuild` against a tree a prior remote build produced", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const presetDir = join(root, "preset");
+    const outputDir = join(sourceDir, "generated");
+    writeMinimalSource(sourceDir, "base");
+    writeMinimalSource(presetDir, "preset");
+
+    runBuild({
+      sourceDir,
+      outputDir,
+      targets: ["codex"],
+      logger: silentLogger,
+      presets: [{ name: "team", dir: presetDir, remoteUrl: "https://github.com/o/r" }],
+    });
+    expect(existsSync(join(outputDir, ".ulis-provenance.json"))).toBe(true);
+
+    const projectDir = join(root, "project");
+    mkdirSync(projectDir, { recursive: true });
+
+    const install = runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome: join(root, "home"),
+      platforms: ["codex"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+    await expect(install).rejects.toBeInstanceOf(InstallError);
+    await expect(install).rejects.toThrow(
+      "This generated tree was built from https://github.com/o/r; re-run `ulis install --preset https://github.com/o/r` " +
+        "so the commands can be reviewed against a fresh build.",
+    );
+    expect(existsSync(join(projectDir, ".codex"))).toBe(false);
+  });
+
+  // The narrow rebuild in step 2 must not erase what step 1 recorded for a platform it left
+  // untouched - `writer.ts`'s `cleanDir` only clears the platform dirs it is asked to regenerate,
+  // and the record has to track that, or a payload a wider remote build wrote survives on disk
+  // with no record left naming it.
+  it("a narrow local rebuild does not erase the record for a platform it left untouched", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const presetDir = join(root, "preset");
+    const outputDir = join(sourceDir, "generated");
+    writeMinimalSource(sourceDir, "base");
+    write(join(presetDir, "config.yaml"), "version: 1\nname: preset\n");
+    write(join(presetDir, "raw", "claude", "EVIL.md"), "evil payload\n");
+
+    // 1. `ulis build --preset <url>` across every platform.
+    runBuild({
+      sourceDir,
+      outputDir,
+      logger: silentLogger,
+      presets: [{ name: "team", dir: presetDir, remoteUrl: "https://github.com/o/evil" }],
+    });
+    expect(existsSync(join(outputDir, "claude", "EVIL.md"))).toBe(true);
+
+    // 2. `ulis install --target codex` (or `build --target codex`): purely local, narrow rebuild.
+    runBuild({ sourceDir, outputDir, targets: ["codex"], logger: silentLogger });
+    // The claude payload from step 1 is untouched - "codex" was never asked to clean it.
+    expect(existsSync(join(outputDir, "claude", "EVIL.md"))).toBe(true);
+    // And its provenance entry literally survives in the record, not just "some file exists".
+    const recordAfterNarrowRebuild = JSON.parse(read(join(outputDir, ".ulis-provenance.json"))) as {
+      remoteSources: Record<string, readonly string[]>;
+    };
+    expect(recordAfterNarrowRebuild.remoteSources.claude).toEqual(["https://github.com/o/evil"]);
+    expect(recordAfterNarrowRebuild.remoteSources.codex).toBeUndefined();
+
+    const projectDir = join(root, "project");
+    mkdirSync(projectDir, { recursive: true });
+
+    // 3. `ulis install --skip-rebuild` against "claude" must still refuse.
+    const install = runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome: join(root, "home"),
+      platforms: ["claude"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+    await expect(install).rejects.toBeInstanceOf(InstallError);
+    await expect(install).rejects.toThrow(/https:\/\/github\.com\/o\/evil/u);
+    expect(existsSync(join(projectDir, ".claude"))).toBe(false);
+  });
+
+  it("a purely local rebuild clears a previously written provenance record", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const presetDir = join(root, "preset");
+    const outputDir = join(sourceDir, "generated");
+    writeMinimalSource(sourceDir, "base");
+    writeMinimalSource(presetDir, "preset");
+
+    runBuild({
+      sourceDir,
+      outputDir,
+      targets: ["codex"],
+      logger: silentLogger,
+      presets: [{ name: "team", dir: presetDir, remoteUrl: "https://github.com/o/r" }],
+    });
+    expect(existsSync(join(outputDir, ".ulis-provenance.json"))).toBe(true);
+
+    runBuild({ sourceDir, outputDir, targets: ["codex"], logger: silentLogger });
+    expect(existsSync(join(outputDir, ".ulis-provenance.json"))).toBe(false);
+
+    const projectDir = join(root, "project");
+    mkdirSync(projectDir, { recursive: true });
+    const platforms = await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome: join(root, "home"),
+      platforms: ["codex"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+    expect(platforms).toEqual(["codex"]);
+    expect(existsSync(join(projectDir, ".codex"))).toBe(true);
+  });
+
+  it("still gates normally when `install --preset <remote>` resolves the same source live, replacing a stale record", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const presetDir = join(root, "preset");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    writeMinimalSource(sourceDir, "base");
+    writeMinimalSource(presetDir, "preset");
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    mkdirSync(outputDir, { recursive: true });
+    // A stale record from an unrelated prior remote build must not itself trigger the refusal, and
+    // must be replaced - not merely dropped - once this run's own live remote preset rebuilds "codex".
+    write(
+      join(outputDir, ".ulis-provenance.json"),
+      JSON.stringify({ version: 1, remoteSources: { codex: ["https://github.com/o/stale"] } }),
+    );
+
+    const questions: string[] = [];
+    __test.setRuntimeDependencies({
+      runCommand: () => ({ status: 0, stdout: "", stderr: "" }) as never,
+      async runAsyncCommand() {
+        return { status: 0, stdout: "", stderr: "" };
+      },
+      async confirm(question) {
+        questions.push(question);
+        return true;
+      },
+    });
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["codex"],
+      rebuild: false,
+      logger: silentLogger,
+      presets: [{ name: "team", dir: presetDir, remoteUrl: "https://github.com/o/r" }],
+      remoteSources: ["https://github.com/o/r"],
+    });
+
+    expect(questions).toEqual(["Install from this remote source?"]);
+    expect(existsSync(join(projectDir, ".codex"))).toBe(true);
+    // Replaced, not merely dropped: the record now names this run's own live preset for "codex".
+    const record = JSON.parse(read(join(outputDir, ".ulis-provenance.json"))) as {
+      remoteSources: Record<string, readonly string[]>;
+    };
+    expect(record.remoteSources.codex).toEqual(["https://github.com/o/r"]);
+  });
+
+  it("a purely local build writes no record, and install prompts for nothing", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    writeMinimalSource(sourceDir, "base");
+
+    runBuild({ sourceDir, outputDir, targets: ["codex"], logger: silentLogger });
+    expect(existsSync(join(outputDir, ".ulis-provenance.json"))).toBe(false);
+
+    const projectDir = join(root, "project");
+    mkdirSync(projectDir, { recursive: true });
+    const questions: string[] = [];
+    __test.setRuntimeDependencies({
+      runCommand: () => ({ status: 0, stdout: "", stderr: "" }) as never,
+      async runAsyncCommand() {
+        return { status: 0, stdout: "", stderr: "" };
+      },
+      async confirm(question) {
+        questions.push(question);
+        return true;
+      },
+    });
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome: join(root, "home"),
+      platforms: ["codex"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(questions).toHaveLength(0);
+    expect(existsSync(join(projectDir, ".codex"))).toBe(true);
+  });
+
+  // An unreadable record is exactly the case where the platforms it might name cannot be ruled
+  // out - failing open here (treating it as "no record") would be the same bypass class this file
+  // exists to close, just reached through disk corruption or a `kill -9` mid-write instead of a
+  // narrow rebuild. Refuse, and say so; the remedy is dropping `--skip-rebuild`.
+  it("refuses `install --skip-rebuild` when the provenance record exists but cannot be parsed", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    writeMinimalSource(sourceDir, "base");
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(outputDir, { recursive: true });
+    write(join(outputDir, ".ulis-provenance.json"), "{ not valid json");
+
+    const install = runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome: join(root, "home"),
+      platforms: ["codex"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+    await expect(install).rejects.toBeInstanceOf(InstallError);
+    await expect(install).rejects.toThrow(/could not parse|is not a version this ULIS understands/iu);
+    expect(existsSync(join(projectDir, ".codex"))).toBe(false);
+  });
+
+  // A record naming a future, unrecognised shape is the same "cannot rule this out" case as
+  // truncated JSON, just caused by a version bump instead of a crash.
+  it("refuses `install --skip-rebuild` when the provenance record is a version this build doesn't understand", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    writeMinimalSource(sourceDir, "base");
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(outputDir, { recursive: true });
+    write(
+      join(outputDir, ".ulis-provenance.json"),
+      JSON.stringify({ version: 2, remoteSources: { codex: ["https://github.com/o/r"] } }),
+    );
+
+    const install = runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome: join(root, "home"),
+      platforms: ["codex"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+    await expect(install).rejects.toBeInstanceOf(InstallError);
+    expect(existsSync(join(projectDir, ".codex"))).toBe(false);
+  });
+
+  // Locks in the before-loop write ordering (`build.ts`): a build that throws partway through a
+  // multi-target run must not leave the platforms it already wrote unrecorded. Forces a
+  // deterministic mid-loop throw with a broken symlink sitting where the second target's output
+  // directory needs to go - `cleanDir`'s `mkdirSync(..., { recursive: true })` throws `EEXIST`
+  // rather than silently succeeding, since a path occupied by a (broken) symlink still exists.
+  it("records provenance before generation starts, so a throw partway through a build still protects the platforms it already wrote", () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const presetDir = join(root, "preset");
+    const outputDir = join(sourceDir, "generated");
+    writeMinimalSource(sourceDir, "base");
+    writeMinimalSource(presetDir, "preset");
+    mkdirSync(outputDir, { recursive: true });
+    symlinkSync(join(root, "does-not-exist"), join(outputDir, "codex"));
+
+    let thrown: unknown;
+    try {
+      runBuild({
+        sourceDir,
+        outputDir,
+        // "claude" first (must survive), then "codex" (blocked, throws).
+        targets: ["claude", "codex"],
+        logger: silentLogger,
+        presets: [{ name: "team", dir: presetDir, remoteUrl: "https://github.com/o/evil" }],
+      });
+    } catch (error) {
+      thrown = error;
+    }
+    // Confirms the failure is actually the blocked mkdir this test sets up, not some unrelated throw.
+    expect((thrown as NodeJS.ErrnoException | undefined)?.code).toBe("EEXIST");
+
+    expect(existsSync(join(outputDir, "claude"))).toBe(true);
+    const record = JSON.parse(read(join(outputDir, ".ulis-provenance.json"))) as {
+      remoteSources: Record<string, readonly string[]>;
+    };
+    expect(record.remoteSources.claude).toEqual(["https://github.com/o/evil"]);
+  });
+
+  // The exact sequence the "lenient merge" bug produced: a narrow local rebuild over an unreadable
+  // record must not launder "refuse" into "no record". Only a FULL rebuild (covering every platform
+  // directory actually present) is allowed to discard an unreadable record; see
+  // `writeProvenanceRecord`'s doc comment.
+  it("a narrow local rebuild does not launder an unreadable record into 'no record'", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    writeMinimalSource(sourceDir, "base");
+    write(join(outputDir, "claude", "EVIL.md"), "evil payload\n");
+    mkdirSync(join(outputDir, "codex"), { recursive: true });
+    // A record from a newer ULIS version - unreadable to this one, with no corrupt bytes needed.
+    write(
+      join(outputDir, ".ulis-provenance.json"),
+      JSON.stringify({ version: 2, remoteSources: { claude: ["https://github.com/o/evil"] } }),
+    );
+    mkdirSync(projectDir, { recursive: true });
+
+    // Before: install refuses because the record cannot be trusted.
+    await expect(
+      runInstall({
+        sourceDir,
+        outputDir,
+        destBase: projectDir,
+        userHome: join(root, "home"),
+        platforms: ["claude"],
+        rebuild: false,
+        logger: silentLogger,
+      }),
+    ).rejects.toThrow(/is not a version this ULIS understands/u);
+
+    // A purely local, narrow rebuild of just "codex" - "claude" is left completely alone.
+    runBuild({ sourceDir, outputDir, targets: ["codex"], logger: silentLogger });
+
+    // The unreadable record must survive untouched, not be silently dropped.
+    expect(existsSync(join(outputDir, ".ulis-provenance.json"))).toBe(true);
+    expect(existsSync(join(outputDir, "claude", "EVIL.md"))).toBe(true);
+
+    // After: install still refuses. Before this fix, the narrow rebuild above deleted the record
+    // and this install would have proceeded, installing the claude payload with no gate at all.
+    await expect(
+      runInstall({
+        sourceDir,
+        outputDir,
+        destBase: projectDir,
+        userHome: join(root, "home"),
+        platforms: ["claude"],
+        rebuild: false,
+        logger: silentLogger,
+      }),
+    ).rejects.toThrow(/is not a version this ULIS understands/u);
+    expect(existsSync(join(projectDir, ".claude"))).toBe(false);
+  });
+
+  // The carve-out: a FULL local rebuild (covering every platform directory present) is safe to
+  // discard an unreadable record over, because nothing it could have named survives unregenerated.
+  it("a full local rebuild does discard an unreadable record, and install then proceeds", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    writeMinimalSource(sourceDir, "base");
+    mkdirSync(join(outputDir, "codex"), { recursive: true });
+    write(
+      join(outputDir, ".ulis-provenance.json"),
+      JSON.stringify({ version: 2, remoteSources: { codex: ["https://github.com/o/evil"] } }),
+    );
+    mkdirSync(projectDir, { recursive: true });
+
+    // Full rebuild: "codex" is the only platform directory present, and it is the only target.
+    runBuild({ sourceDir, outputDir, targets: ["codex"], logger: silentLogger });
+    expect(existsSync(join(outputDir, ".ulis-provenance.json"))).toBe(false);
+
+    const platforms = await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome: join(root, "home"),
+      platforms: ["codex"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+    expect(platforms).toEqual(["codex"]);
+    expect(existsSync(join(projectDir, ".codex"))).toBe(true);
   });
 });
 

@@ -77,19 +77,19 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
              [--skip-extensions] [--skip-external-skills]
 ```
 
-| Flag                     | Effect                                                                                                                                                     |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-g`, `--global`         | Read `~/.ulis/` and write to `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.config/opencode/` (Windows: `%USERPROFILE%\.config\opencode\`), and `~/.forge/`. |
-| `--source <path>`        | Override source (still writes to CWD or home depending on `--global`). Accepts a git URL — see [Remote Sources](/guide/remote-sources).                    |
-| `--target <platforms>`   | Only build/install the listed platforms.                                                                                                                   |
-| `-y`, `--yes`            | Skip the "about to overwrite" confirmation prompt — **and the remote-source trust gate**. See [Remote Sources](/guide/remote-sources#the-trust-gate).      |
-| `--skip-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`.                                                                                   |
-| `--backup`               | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.                                                                          |
-| `--no-prune`             | Keep agents and local skills from the previous ULIS install; retained stale entries become unmanaged.                                                      |
-| `--preset <names>`       | Same resolution as `ulis build --preset` (user-global directory, then bundled), or a git URL.                                                              |
-| `--runner <npx\|bunx>`   | Package runner used for `extensions.yaml` entries. `npx` or `bunx`. Overrides `runner` in `config.yaml`. Default: auto-detect (`bunx` if present).         |
-| `--skip-extensions`      | Skip running entries from `extensions.yaml`. Useful in CI where network installs are not desired.                                                          |
-| `--skip-external-skills` | Skip installing external skills declared in `skills.yaml`. Useful in CI where network installs are not desired.                                            |
+| Flag                     | Effect                                                                                                                                                                                                                                                                   |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `-g`, `--global`         | Read `~/.ulis/` and write to `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.config/opencode/` (Windows: `%USERPROFILE%\.config\opencode\`), and `~/.forge/`.                                                                                                               |
+| `--source <path>`        | Override source (still writes to CWD or home depending on `--global`). Accepts a git URL — see [Remote Sources](/guide/remote-sources).                                                                                                                                  |
+| `--target <platforms>`   | Only build/install the listed platforms.                                                                                                                                                                                                                                 |
+| `-y`, `--yes`            | Skip the "about to overwrite" confirmation prompt — **and the remote-source trust gate**, for a source this run resolves itself. It does **not** override the `--skip-rebuild` refusal below. See [Remote Sources](/guide/remote-sources#the-trust-gate).                |
+| `--skip-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`. Refused (`-y` included) if that output was built from a remote source: there is no clone left to preview, so re-run with `--preset <url>` instead. See [Remote Sources](/guide/remote-sources). |
+| `--backup`               | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.                                                                                                                                                                                        |
+| `--no-prune`             | Keep agents and local skills from the previous ULIS install; retained stale entries become unmanaged.                                                                                                                                                                    |
+| `--preset <names>`       | Same resolution as `ulis build --preset` (user-global directory, then bundled), or a git URL.                                                                                                                                                                            |
+| `--runner <npx\|bunx>`   | Package runner used for `extensions.yaml` entries. `npx` or `bunx`. Overrides `runner` in `config.yaml`. Default: auto-detect (`bunx` if present).                                                                                                                       |
+| `--skip-extensions`      | Skip running entries from `extensions.yaml`. Useful in CI where network installs are not desired.                                                                                                                                                                        |
+| `--skip-external-skills` | Skip installing external skills declared in `skills.yaml`. Useful in CI where network installs are not desired.                                                                                                                                                          |
 
 **Preset resolution:** Each name maps to a directory. ULIS checks `~/.ulis/presets/<name>/` first; if that folder is missing, it uses the matching bundled preset next to the CLI (`dist/presets/` when installed). A preset in your home tree with the same folder name **shadows** the bundled one. Multiple `--preset` values merge **left to right**, then the base source (from `--source`, `./.ulis/`, or `~/.ulis/`) is applied last — **the base wins on conflicts**. Interactive runs prompt to continue when a name is missing; with `--yes`, missing presets fail immediately.
 
@@ -218,7 +218,8 @@ Dry-run against a fixture without touching home:
 ulis build --source ./example
 ```
 
-Reinstall from an existing build without regenerating:
+Reinstall from an existing build without regenerating (refused if that build came from a remote
+source — see [Remote Sources](/guide/remote-sources)):
 
 ```bash
 ulis install --skip-rebuild --yes
