@@ -43,20 +43,34 @@ Only **HTTPS and SSH** are accepted; `http://` and `git://` are refused.
 
 ## The trust gate
 
-A remote source can declare external skills and extensions, which ULIS installs by spawning `npx`/`bunx`. That is code you did not write, so before any of it runs ULIS prints **every command, exactly as it will be spawned**, and asks:
+A remote source can hand your agents code you did not write, and not only by spawning something. Before **anything** is written or run, ULIS prints the whole execution surface and asks:
 
 ```
 ━━━ Remote Source Commands ━━━
 [info] From https://github.com/acme/ulis-config
+[info]   claude/.claude.json runs: npx -y @acme/review-mcp
+[info]   codex/config.toml runs: npx -y @acme/review-mcp
+[info]   installs claude/settings.json
+[info]   claude/settings.json runs: ./setup.sh
+[info]   sets approval policy claude.defaultMode = bypassPermissions
 [info]   npx skills@latest add acme/review -a claude-code --project --yes
 Run these commands? [y/N]
 ```
 
-Decline and the generated config files are still installed — only the external skills and extensions are skipped.
+ULIS answers that question by **generating the configs and reading them back**, rather than by trusting what the source declares. Whatever a payload looked like in the source, if it survives into a file that is about to be installed, it is listed. Four kinds of entry appear:
+
+- **Commands** from `skills.yaml` and `extensions.yaml`, exactly as they will be spawned.
+- **Anything in a generated config that carries a `command`** — an MCP server your agent spawns on its next launch, a hook it runs on a tool call, at stop, or at session start. A remote MCP server appears as `connects to <url>`: nothing runs locally, but your agent talks to that endpoint and every tool it advertises becomes callable. Each line names the file it lands in.
+- **Files copied through untouched** from `raw/`, from skill directories, and from doc directories. One is listed when the destination itself makes it run — a platform's own config file, a directory a platform auto-loads such as `plugin/` or `hooks/`, an executable extension — or when its contents declare a command. A file too large or too odd to read says `(contents not readable by the preview)` rather than passing as clean.
+- **Approval settings** from `permissions.yaml`, which decide what your agent may do without asking you.
+
+This is a best-effort reading, not a proof. It is why the gate is shown for **every** remote source, including one where nothing was recognised — in that case it says exactly that, and still asks, because the source's agents, skills and instructions are installed either way.
+
+**Decline and nothing is installed** — not the commands, and not the generated config files either. The gate stands in front of the whole install, so saying no leaves the destination exactly as it was. The run exits 0: declining is a choice, not a failure.
 
 Notes on how the gate behaves:
 
-- **A piped `y` does not answer it.** The prompt requires a real terminal; without one it declines. Generated configs still install.
+- **A piped `y` does not answer it.** The prompt requires a real terminal. Without one the run **fails with exit 1** rather than quietly installing nothing — a cron job or wrapper script that could not be asked has not consented. Use `-y` for those.
 - **`-y` / `--yes` accepts it**, along with the overwrite confirmation. This is the one escape hatch, for non-interactive runs — do not use it with a URL you have not read.
 - **In the TUI**, the same command list appears on the install review screen; proceeding from that screen is the consent. If anything about the plan changes after you review it, the install refuses to run rather than executing commands you did not see.
 - On Windows, a skill or extension argument containing a **shell metacharacter or a space** is refused rather than escaped, because the preview would otherwise show one argument where two would run.

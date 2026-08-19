@@ -41,12 +41,12 @@ Parse, validate, and generate configs into `<source>/generated/<platform>/` with
 ulis build [-g | --global] [--source <path>] [--target <platforms>] [--preset <names>]
 ```
 
-| Flag                   | Effect                                                                                                                                              |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-g`, `--global`       | Read from `~/.ulis/` instead of `./.ulis/`.                                                                                                         |
-| `--source <path>`      | Explicit source path. Takes precedence over `--global`. A git URL is refused here — see [Remote Sources](/guide/remote-sources).                    |
-| `--target <platforms>` | Comma-separated subset of `claude,codex,cursor,opencode,forgecode`. Default: all.                                                                   |
-| `--preset <names>`     | Apply preset(s) before the base source (comma-separated). Resolved from `~/.ulis/presets/<name>/` first, then bundled presets shipped with the CLI. |
+| Flag                   | Effect                                                                                                                                                                                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `-g`, `--global`       | Read from `~/.ulis/` instead of `./.ulis/`.                                                                                                                                                                                                |
+| `--source <path>`      | Explicit source path. Takes precedence over `--global`. A git URL is refused here — see [Remote Sources](/guide/remote-sources).                                                                                                           |
+| `--target <platforms>` | Comma-separated subset of `claude,codex,cursor,opencode,forgecode`. Default: all.                                                                                                                                                          |
+| `--preset <names>`     | Apply preset(s) before the base source (comma-separated). Resolved from `~/.ulis/presets/<name>/` first, then bundled presets shipped with the CLI. A name may also be a git repository URL — see [Remote Sources](/guide/remote-sources). |
 
 Output is always written under `<source>/generated/<platform>/`. Existing contents there are cleared before each build.
 
@@ -160,7 +160,7 @@ ulis preset install <names...> [-g | --global] [--target <platforms>]
 
 `-l` / `--list` is accepted. The default action is `list`. Each line shows the directory name (what you pass to `--preset`), a `user` or `bundled` label, optional `name` / `description` from `preset.yaml`, and the display title when it differs from the folder name.
 
-`ulis preset install <names...>` installs selected presets **without** merging a project or global source. Names may be comma-separated (`a,b`) or repeated (`a b`) and are merged in the order given. Generated output is temporary and is removed after install.
+`ulis preset install <names...>` installs selected presets **without** merging a project or global source. Names may be comma-separated (`a,b`) or repeated (`a b`) and are merged in the order given. A name may be a user-global or bundled preset directory, or a git repository URL, which is cloned for the run and then discarded — see [Remote Sources](/guide/remote-sources). Generated output is temporary and is removed after install.
 
 | Flag                     | Effect                                                                                       |
 | ------------------------ | -------------------------------------------------------------------------------------------- |
@@ -177,12 +177,22 @@ ulis preset install <names...> [-g | --global] [--target <platforms>]
 
 ## Exit codes
 
-| Code | Meaning                                                                 |
-| ---- | ----------------------------------------------------------------------- |
-| 0    | Success.                                                                |
-| 1    | Source missing, validation error, user declined prompt, or I/O failure. |
+| Code | Meaning                                                                                                                                |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | Success. Also an interactive **no** at the [trust gate](/guide/remote-sources#the-trust-gate), which installs nothing but is a choice. |
+| 1    | Source missing, validation error, declined overwrite prompt, a trust gate that cannot be asked (no terminal, no `-y`), or I/O failure. |
 
 All errors print a single human-readable line on stderr before exiting.
+
+A stdin that reaches end of input without an answer (`ulis install < /dev/null`, a detached CI job)
+declines rather than waiting, so an unattended run that would have needed an answer exits 1 instead
+of hanging.
+
+A piped answer still answers ordinary prompts — but it must end with a newline. `printf 'y\n' | ulis
+install` is a yes; `printf 'y' | ulis install` is a **no**, because the final partial line never
+reaches the reader before stdin closes. It never answers the trust gate, which requires a real
+terminal: without one the run fails with exit 1 rather than quietly installing nothing. Pass `-y` to
+accept both up front.
 
 ---
 

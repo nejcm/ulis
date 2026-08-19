@@ -292,18 +292,22 @@ describe("commands", () => {
     expect(exit.exits).toHaveLength(1);
   });
 
-  it("installCmd removes the temp directory when Ctrl-C is pressed twice during the clone", async () => {
+  // "Press again to force quit". The first press defers its exit until the clone unwinds; a second
+  // one must not be swallowed, or SIGINT, SIGTERM and SIGHUP would all be ignored until a wedged
+  // clone times out, leaving SIGKILL as the only way out. Stopping at once can leave the temp
+  // directory the clone still owns - that is the cost of the second press, not a regression.
+  it("installCmd force-quits when Ctrl-C is pressed twice during the clone", async () => {
     const projectRoot = createTempRoot();
     process.chdir(projectRoot);
     const before = process.listenerCount("SIGINT");
     let cloned: string[] = [];
-    // Sample at the instant the real process would have died: the temp dir must already be gone.
-    const survivedAtExit: boolean[] = [];
-    const exit = captureExit({ onExit: () => survivedAtExit.push(cloned.some(existsSync)) });
+    // Sampled at the instant the real process would have died.
+    const handlersAtExit: number[] = [];
+    const exit = captureExit({ onExit: () => handlersAtExit.push(process.listenerCount("SIGINT")) });
 
     cloned = mockClone((dir) => {
       pressCtrlC(); // aborts the clone
-      pressCtrlC(); // arrives before the clone has unwound
+      pressCtrlC(); // arrives before the clone has unwound: force quit
       cpSync(fixturesDir, dir, { recursive: true });
     });
 
@@ -315,11 +319,14 @@ describe("commands", () => {
       exit.restore();
     }
 
-    // The exit must be deferred until after the clone unwound and removed its temp directory.
-    expect(survivedAtExit).toEqual([false]);
+    // Exactly one exit: the second press takes it, and `release()` must not then repeat it.
     expect(exit.exits).toHaveLength(1);
-    expect(cloned.map(existsSync)).toEqual([false]);
+    // The handlers are deregistered before the exit, so a third signal reaches the default handler.
+    expect(handlersAtExit).toEqual([before]);
     expect(process.listenerCount("SIGINT")).toBe(before);
+    // Nothing is installed, and the clone's own unwinding still removes its temp directory here.
+    expect(existsSync(join(projectRoot, ".claude"))).toBe(false);
+    expect(cloned.map(existsSync)).toEqual([false]);
   });
 
   it("installCmd cleans up and stops the run when Ctrl-C lands after the clone", async () => {
@@ -446,4 +453,42 @@ describe("commands", () => {
     const installedAgent = readFileSync(join(projectRoot, ".claude", "agents", "worker.md"), "utf8");
     expect(installedAgent).toContain("Preset c");
   });
+});
+
+/**
+ * A declined overwrite prompt must be exit code 1, as `docs/CLI.md` documents, and must install
+ * nothing. Driven through a child process because that is the only way to observe the real exit
+ * code, and because the prompt needs a real stdin at EOF — which is also the case that used to hang
+ * forever instead of declining. `confirm` is imported directly by `installCmd`, so there is no
+ * in-process seam to stub without adding one to production code for the test's benefit.
+ */
+describe("installCmd with a declined overwrite prompt", () => {
+  it("exits 1 and installs nothing when stdin is at EOF", async () => {
+    const projectRoot = createTempRoot();
+    copyFixtureSource(projectRoot);
+    // A non-empty platform directory is what triggers the collision prompt.
+    mkdirSync(join(projectRoot, ".claude"), { recursive: true });
+    writeFileSync(join(projectRoot, ".claude", "settings.local.json"), '{"pre": "existing"}');
+
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        join(import.meta.dirname, "../cli.ts"),
+        "install",
+        "--target",
+        "claude",
+        "--skip-external-skills",
+        "--skip-extensions",
+      ],
+      { cwd: projectRoot, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
+    );
+
+    const stderr = await new Response(child.stderr).text();
+    expect(await child.exited).toBe(1);
+    expect(stderr).toContain("Aborted by user.");
+    // Nothing from the source reached the destination, and what was already there is untouched.
+    expect(existsSync(join(projectRoot, ".claude", "agents"))).toBe(false);
+    expect(existsSync(join(projectRoot, ".claude", ".ulis-manifest.json"))).toBe(false);
+    expect(readFileSync(join(projectRoot, ".claude", "settings.local.json"), "utf8")).toBe('{"pre": "existing"}');
+  }, 60_000);
 });

@@ -87,8 +87,9 @@ export async function presetInstallCmd(
       }
       const confirmed = await confirm("Continue?");
       if (!confirmed) {
-        log.info("Aborted by user.");
-        return;
+        // Thrown rather than returned: a declined prompt is exit code 1 (see docs/CLI.md), and a
+        // closed stdin declines, so a scripted run must not read as a successful install.
+        throw new Error("Aborted by user.");
       }
     }
 

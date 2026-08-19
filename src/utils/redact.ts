@@ -8,6 +8,15 @@
 const CONTROL_CHARS = /[\x00-\x1f\x7f]/u;
 
 /**
+ * True when `value` holds a C0 control or DEL. Exported because callers that percent-decode a URL
+ * have to re-check what decoding produced: the raw-string check in {@link hasUnredactableCredential}
+ * cannot see a control character still spelled `%00`.
+ */
+export function hasControlChars(value: string): boolean {
+  return CONTROL_CHARS.test(value);
+}
+
+/**
  * Anything that can move the cursor, erase a line, or reorder what the reader sees: C0/C1 controls
  * plus the Unicode bidi overrides and line/paragraph separators.
  */

@@ -1,8 +1,9 @@
 # Remote (git repo) sources and presets
 
-Status: approved, not started
+Status: implemented; released in 0.7.0 (`master`, `56a2ef4 chore(release): 0.7.0`, feature commit
+`4e97f2e feat(install): remote sources via git clone`). No git tag was cut — tags stop at `v0.0.1-beta.1`.
+`develop` still reads 0.6.1 and is three commits behind `master`.
 Design date: 2026-08-17 (revised 2026-08-17 — archive download → git clone)
-Tracking: `TODO.md:3` — "support url source"
 
 ---
 
@@ -51,9 +52,10 @@ and relative paths), commit-SHA refs, `.tar.gz`/`.zip` archive URLs, `http://` a
 web-URL parsing (one parse-table row when someone asks), caching, a preset registry, a dedicated TUI
 screen for remote presets, a subdir syntax for non-GitHub/GitLab hosts.
 
-**Documentation deferred by the user:** `docs/guide/presets.md` and `docs/CLI.md` were *not* selected.
-The new URL forms and the trust prompt will be undocumented for end users until that lands. Flagged once
-here; not re-litigated.
+**Documentation deferred by the user:** `docs/guide/presets.md` and `docs/CLI.md` were *not* selected at
+design time. That deferral no longer holds — the implementation shipped with `docs/guide/remote-sources.md`,
+[ADR 0003](../docs/adr/0003-remote-sources-via-git-clone.md), and updates to `docs/CLI.md` and
+`docs/guide/presets.md`.
 
 ## 3. Implementation
 

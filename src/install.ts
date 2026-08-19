@@ -2,13 +2,15 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { stdin } from "node:process";
 
 import { analyzePresets, runBuild, type Logger } from "./build.js";
-import { ULIS_GENERATED_DIRNAME } from "./config.js";
+import { REMOTE_CLONE_DIRNAME_PREFIX, ULIS_GENERATED_DIRNAME } from "./config.js";
 import { generate, writeResult } from "./generators/index.js";
 import { InstallError } from "./install/errors.js";
 import { preflightOwnership, reconcileOwnership } from "./install/manifest.js";
 import { installClaude, installCodex, installCursor, installForgecode, installOpencode } from "./install/platforms.js";
+import { formatCommandPreview, previewInstalledExecution, type PreviewInputs } from "./install/preview.js";
 import type { InstallContext, Runner as InstallRunner } from "./install/types.js";
 import { loadExtensions, mergeExtensionsConfigs } from "./parsers/extensions.js";
 import { loadSkills, mergeSkillsConfigs } from "./parsers/skills.js";
@@ -18,7 +20,7 @@ import { assertShellSafeArgv, commandExists as commandExistsOnPath } from "./uti
 import { loadValidatedConfigFile } from "./utils/config-loader.js";
 import { logger as defaultLogger } from "./utils/logger.js";
 import { confirm } from "./utils/prompt.js";
-import { redactUserinfo, sanitizeLogText } from "./utils/redact.js";
+import { sanitizeLogText } from "./utils/redact.js";
 import type { ResolvedPreset } from "./utils/resolve-presets.js";
 
 export type { Runner } from "./install/types.js";
@@ -36,6 +38,12 @@ export interface InstallOptions {
   readonly sourceLabel?: string;
   /** Redacted URLs of remote sources in this run; a non-empty list arms the trust gate. */
   readonly remoteSources?: readonly string[];
+  /**
+   * True when `sourceDir` is a tree this run cloned rather than one the user wrote. Set from the
+   * resolver's own `mode`, which is the precise signal; a caller that omits it falls back to the
+   * clone-directory naming check in {@link isClonedSourceDir}.
+   */
+  readonly sourceIsRemote?: boolean;
   /** `-y`: run a remote source's commands without prompting. */
   readonly nonInteractive?: boolean;
   /**
@@ -148,6 +156,12 @@ interface GeneratedInstallOptions {
   readonly installSkillsEnabled: boolean;
   readonly logger: Logger;
   readonly signal?: AbortSignal;
+  /**
+   * What this run installs from, for the trust preview to generate and read back. Not the merged
+   * configs above: the preview has to see the same inputs the build sees, or it describes a
+   * different project than the one being installed.
+   */
+  readonly previewInputs: PreviewInputs;
   /** Redacted URLs of the remote sources contributing to this run; empty for a purely local one. */
   readonly remoteSources?: readonly string[];
   readonly nonInteractive?: boolean;
@@ -162,7 +176,16 @@ const defaultRuntimeDependencies: RuntimeDependencies = {
     return runAsyncCommand(resolveExecutable(command), args, options);
   },
   confirm(question) {
-    // The trust gate is a security boundary: a piped `y` must not answer it.
+    // The trust gate is a security boundary: a piped `y` must not answer it. Without a terminal the
+    // question cannot be put at all, and that is a failure rather than a decision - a cron job or a
+    // wrapper script that silently installed nothing and exited 0 would read as a successful run.
+    // An interactive "no" is the opposite: a choice, and it exits 0.
+    if (!stdin.isTTY) {
+      throw new InstallError(
+        "Remote source commands need confirmation, but stdin is not a terminal. " +
+          "Re-run in a terminal to review them, or pass -y to accept them up front.",
+      );
+    }
     return confirm(question, { requireTty: true });
   },
 };
@@ -171,10 +194,29 @@ let runtimeDependencies: RuntimeDependencies = { ...defaultRuntimeDependencies }
 
 /**
  * Variables that steer how a child process finds, fetches and loads code. A remote `.env` is attacker-
- * controlled and is read before the trust gate, so setting one of these would hijack the very
- * `npx`/`bunx` command the user approved. Local sources keep the old behaviour.
+ * controlled, so setting one of these would hijack the very `npx`/`bunx` command the user approved.
+ * Local sources keep the old behaviour.
+ *
+ * `HOME`/`USERPROFILE` are here because they relocate where `npx`/`bunx` read `.npmrc` and
+ * `.bunfig.toml` (as does `XDG_CONFIG_HOME` on Linux), and `script-shell=` in an `.npmrc` is a
+ * code-execution primitive; `ComSpec` is the
+ * shell Node launches for `spawn({ shell: true })` on Windows; `SSH_ASKPASS`/`SSH_AUTH_SOCK` are the
+ * ssh-side hole next to the `GIT_*` ones.
  */
-const UNTRUSTED_ENV_DENYLIST = /^(?:PATH|NODE_.*|npm_.*|BUN_.*|LD_.*|DYLD_.*|GIT_.*|(?:HTTP|HTTPS|ALL|NO)_PROXY)$/iu;
+const UNTRUSTED_ENV_DENYLIST =
+  /^(?:PATH|HOME|USERPROFILE|XDG_CONFIG_HOME|ComSpec|NODE_.*|npm_.*|BUN_.*|LD_.*|DYLD_.*|GIT_.*|SSH_.*|(?:HTTP|HTTPS|ALL|NO)_PROXY)$/iu;
+
+/**
+ * True when `dir` looks like a tree this run cloned for a remote source. The fallback for a caller
+ * that does not pass `sourceIsRemote` (the TUI installs a clone in-process). Naming, not identity:
+ * a user directory that happens to start with the same prefix reads as remote, which costs that
+ * user their source `.env` — so the skip is logged rather than silent.
+ */
+function isClonedSourceDir(dir: string): boolean {
+  return resolve(dir)
+    .split(/[/\\]/u)
+    .some((segment) => segment.startsWith(REMOTE_CLONE_DIRNAME_PREFIX));
+}
 
 /**
  * Load environment variables from `<rootDir>/.env` without overriding existing values.
@@ -233,7 +275,13 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
   const globalInstall = options.globalInstall ?? isSamePath(destBase, userHome);
   const backup = options.backup ?? false;
   const prune = options.prune ?? true;
-  const rebuild = options.rebuild ?? false;
+  // A remote source never gets to skip the build. The trust gate previews what `generate()` would
+  // produce; installing `outputDir` instead would install whatever a `generated/` tree committed to
+  // the repository happens to hold, which the gate has never looked at - the preview and the install
+  // would be reading different bytes. A committed `generated/` tree has no legitimate use in a
+  // source anyway, so removing the divergence beats mirroring it in a second code path.
+  const remoteInTheMix = (options.remoteSources?.length ?? 0) > 0;
+  const rebuild = remoteInTheMix || (options.rebuild ?? false);
 
   // A remote source's `.env` is remote-controlled and must not outlive this install in a long-lived
   // process (the TUI runs installs in-process). `loadDotEnv` only ever adds keys, so dropping the
@@ -243,12 +291,20 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
   try {
     // Inside the `try`: the first call can have added keys before the second one throws.
     loadDotEnv(destBase);
-    // Any remote contributor arms the denylist: a local source's `.env` loses its loader-steering keys
-    // for this run when a remote preset is in the mix - the over-strict direction is the safe one.
-    loadDotEnv(sourceDir, process.env, { untrusted: (options.remoteSources?.length ?? 0) > 0 });
+    // A cloned source's `.env` is written by whoever owns the repository and serves no purpose the
+    // destination's own `.env` does not already serve, so it is not read at all. Otherwise any remote
+    // contributor arms the denylist: a local source's `.env` loses its loader-steering keys for this
+    // run when a remote preset is in the mix - the over-strict direction is the safe one.
+    const sourceIsRemote = (options.sourceIsRemote ?? false) || isClonedSourceDir(sourceDir);
+    if (!sourceIsRemote) {
+      loadDotEnv(sourceDir, process.env, { untrusted: (options.remoteSources?.length ?? 0) > 0 });
+    }
 
     logHeader(logger, `ULIS Install (${process.platform === "win32" ? "Windows" : "Linux/macOS"})`);
     logInfo(logger, `Source: ${options.sourceLabel ?? sourceDir}`);
+    if (sourceIsRemote) {
+      logInfo(logger, "Skipped the source tree's .env: a remote source's .env is never read.");
+    }
     logInfo(logger, `Output (generated): ${outputDir}`);
     logInfo(logger, `Destination base: ${destBase}`);
     logInfo(logger, `Platforms: ${platforms.join(", ")}`);
@@ -262,7 +318,11 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
     if (rebuild || missingBuildOutputs) {
       logWarn(
         logger,
-        rebuild ? "Rebuilding generated configs before install." : "Missing generated output. Running build.",
+        !rebuild
+          ? "Missing generated output. Running build."
+          : remoteInTheMix && options.rebuild === false
+            ? "Rebuilding generated configs before install: a remote source cannot skip the build, because the trust gate previews what the build produces."
+            : "Rebuilding generated configs before install.",
       );
       runBuild({ targets: platforms, sourceDir, outputDir, logger, presets: options.presets });
     }
@@ -286,7 +346,7 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
     });
     const runner = resolveRunner({ cliFlag: options.runner, configValue: ulisConfig.runner });
 
-    await installGeneratedOutput({
+    const installed = await installGeneratedOutput({
       outputDir,
       destBase,
       userHome,
@@ -296,6 +356,7 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
       platforms,
       skillsConfig,
       extensionsConfig,
+      previewInputs: { sourceDir, presets: options.presets ?? [], platforms },
       runner,
       installExtensionsEnabled,
       installSkillsEnabled,
@@ -306,6 +367,7 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
       signal: options.signal,
     });
 
+    if (!installed) return [];
     logHeader(logger, "Installation Complete");
     return platforms;
   } finally {
@@ -367,7 +429,7 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
     const skillsConfig = mergeSkillsConfigs(presets.map((preset) => loadSkills(preset.dir)));
     const extensionsConfig = mergeExtensionsConfigs(presets.map((preset) => loadExtensions(preset.dir)));
 
-    await installGeneratedOutput({
+    const installed = await installGeneratedOutput({
       outputDir,
       destBase,
       userHome,
@@ -377,6 +439,7 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
       platforms,
       skillsConfig,
       extensionsConfig,
+      previewInputs: { presets, platforms },
       runner,
       installExtensionsEnabled,
       installSkillsEnabled,
@@ -388,6 +451,7 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
     });
 
     throwIfAborted(options.signal);
+    if (!installed) return [];
     logHeader(logger, "Preset Installation Complete");
     return platforms;
   } finally {
@@ -398,7 +462,18 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
   }
 }
 
-async function installGeneratedOutput(options: GeneratedInstallOptions): Promise<void> {
+/** Returns false when the trust gate was declined, in which case nothing was installed. */
+async function installGeneratedOutput(options: GeneratedInstallOptions): Promise<boolean> {
+  // The trust gate, before anything reaches the destination. Everything below either spawns a
+  // command the remote source chose or writes a file the host agent loads as behaviour - a `.mcp.json`
+  // server it spawns on next launch, a `raw/` hook fragment it runs on next session start. Gating
+  // after the writes would leave the payload on disk no matter the answer, so declining here has to
+  // mean nothing is installed at all. Both runInstall and runPresetInstall funnel through here.
+  if (!(await confirmRemoteCommands(options))) {
+    logWarn(options.logger, "Declined. Nothing from the remote source was installed.");
+    return false;
+  }
+
   const timestamp = makeTimestamp();
   const ownership = preflightOwnership(
     options.platforms,
@@ -445,17 +520,6 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
     reconcileOwnership(platform, platformOwnership, context.prune, context.logger);
   }
 
-  // The generated config files are written above; everything below this point executes code the
-  // remote source chose. That makes this the trust boundary, and the only one - both runInstall
-  // and runPresetInstall funnel through here.
-  if (!(await confirmRemoteCommands(options))) {
-    logWarn(
-      options.logger,
-      "Skipped external skills and extensions from the remote source. Generated config files were still installed.",
-    );
-    return;
-  }
-
   if (options.installSkillsEnabled) {
     for (const platform of options.platforms) {
       throwIfAborted(options.signal);
@@ -488,7 +552,7 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
     }
   }
 
-  if (!options.installExtensionsEnabled) return;
+  if (!options.installExtensionsEnabled) return true;
 
   for (const platform of options.platforms) {
     throwIfAborted(options.signal);
@@ -500,6 +564,7 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
     logHeader(options.logger, "Installing Extensions");
     await installExtensions(allExtensions, "*", options.destBase, options.runner, options.logger, options.signal);
   }
+  return true;
 }
 
 // map platform key to skills argument agent name
@@ -543,31 +608,29 @@ function skillNpxArgs(
 }
 
 /**
- * Render argv for the trust prompt so the preview cannot lie about what will run: control
- * characters (a CR or an ANSI sequence in a remote manifest could erase or forge lines) are escaped,
- * arguments holding whitespace or quotes are quoted so argument boundaries stay visible, and any
- * credential in a package URL is redacted.
+ * argv for one `extensions.yaml` entry. `--` ends option parsing so a name is read as a package even
+ * if it looks like a flag; both runners accept it (verified against npx 11 and bun 1.3).
+ *
+ * It is only load-bearing for `npx`, which resolves everything after `--` as a package spec. `bunx`
+ * accepts `--` but keeps parsing its own flags past it (`bunx -- --version` still prints bun's
+ * version), so what actually covers bunx is `PackageNameSchema`
+ * (`src/schema/shared.ts`) refusing a name that starts with `-` at the input contract. Shared with the preview so the two cannot drift.
  */
-function formatCommandPreview(argv: readonly string[]): string {
-  return argv
-    .map((token) => {
-      const safe = sanitizeLogText(token);
-      // Quote anything whose boundaries would otherwise be ambiguous: an empty token would
-      // vanish entirely, and a trailing backslash would read as escaping the next separator.
-      return safe === "" || /["'\s\\]/u.test(safe) ? JSON.stringify(safe) : safe;
-    })
-    .join(" ");
+function extensionRunnerArgs(extension: { name: string; args?: readonly string[] }): string[] {
+  return ["--", extension.name, ...(extension.args ?? [])];
 }
 
 /**
- * Every command a remote source is about to run, exactly as it will be spawned. Built from the
- * same helpers the install paths use, so the prompt cannot drift from what actually executes.
+ * Every command a remote source is about to run, exactly as it will be spawned, plus the files it
+ * installs that a host agent later executes on its own. Built from the same helpers the install
+ * paths use, so the prompt cannot drift from what actually executes.
  */
 type RemoteCommandPlan = Pick<
   GeneratedInstallOptions,
   | "platforms"
   | "skillsConfig"
   | "extensionsConfig"
+  | "previewInputs"
   | "runner"
   | "globalInstall"
   | "installExtensionsEnabled"
@@ -605,6 +668,11 @@ export function planRemoteCommands(options: {
     platforms: uniquePlatforms(options.platforms),
     skillsConfig: mergeSkillsConfigs(dirs.map((dir) => loadSkills(dir))),
     extensionsConfig: mergeExtensionsConfigs(dirs.map((dir) => loadExtensions(dir))),
+    previewInputs: {
+      sourceDir: options.sourceDir,
+      presets: options.presets ?? [],
+      platforms: uniquePlatforms(options.platforms),
+    },
     runner: resolveRunner({ cliFlag: options.runner, configValue: ulisConfig?.runner }),
     globalInstall: options.globalInstall ?? false,
     installExtensionsEnabled: options.installExtensions ?? true,
@@ -613,6 +681,8 @@ export function planRemoteCommands(options: {
 }
 
 function renderCommandPlan(options: RemoteCommandPlan): string[] {
+  // Written first, and executed by the host agent rather than by us, so they lead the list.
+  const installs = previewInstalledExecution(options.previewInputs);
   const commands: string[][] = [];
   if (options.installSkillsEnabled) {
     for (const platform of options.platforms) {
@@ -632,11 +702,11 @@ function renderCommandPlan(options: RemoteCommandPlan): string[] {
   if (options.installExtensionsEnabled) {
     for (const platform of [...options.platforms, "*" as const]) {
       for (const extension of options.extensionsConfig[platform]?.extensions ?? []) {
-        commands.push([options.runner, extension.name, ...(extension.args ?? [])]);
+        commands.push([options.runner, ...extensionRunnerArgs(extension)]);
       }
     }
   }
-  return commands.map((argv) => formatCommandPreview(argv));
+  return [...installs, ...commands.map((argv) => formatCommandPreview(argv))];
 }
 
 /**
@@ -647,8 +717,11 @@ function renderCommandPlan(options: RemoteCommandPlan): string[] {
 async function confirmRemoteCommands(options: GeneratedInstallOptions): Promise<boolean> {
   const remoteSources = options.remoteSources ?? [];
   if (remoteSources.length === 0) return true;
+  // No early exit on an empty plan. An empty plan does not mean "nothing happens": it means nothing
+  // this planner recognises as executable, and the install still writes a remote source's agents,
+  // skills, rules and instructions into the destination. Skipping the gate there is what let a
+  // payload the enumeration had not learned about yet install with no prompt at all.
   const commands = renderCommandPlan(options);
-  if (commands.length === 0) return true;
 
   // A caller that already obtained consent — the TUI, which shows the list on its review screen
   // because it owns the terminal and cannot prompt on stdin — passes back exactly what it
@@ -668,7 +741,13 @@ async function confirmRemoteCommands(options: GeneratedInstallOptions): Promise<
   logHeader(options.logger, "Remote Source Commands");
   for (const url of remoteSources) logInfo(options.logger, `From ${url}`);
   for (const command of commands) logInfo(options.logger, `  ${command}`);
-  return await runtimeDependencies.confirm("Run these commands?");
+  if (commands.length > 0) return await runtimeDependencies.confirm("Run these commands?");
+
+  // Never claim there is nothing to run. Every bypass found so far printed a confident "nothing
+  // here" over a payload that was installing, and a false statement is worse than a missing one.
+  logInfo(options.logger, "  Nothing here was recognised as executable - which is not a guarantee.");
+  logInfo(options.logger, `  Its files will still be installed for: ${options.platforms.join(", ")}.`);
+  return await runtimeDependencies.confirm("Install from this remote source?");
 }
 
 function commandsMatch(approved: readonly string[], planned: readonly string[]): boolean {
@@ -766,7 +845,7 @@ async function installExtensions(
 
   for (const extension of extensions) {
     throwIfAborted(signal);
-    const args = [extension.name, ...(extension.args ?? [])];
+    const args = extensionRunnerArgs(extension);
     // Same formatting as the trust preview: a raw argv here could print a credential, or use
     // terminal controls to erase the preview the user just approved.
     logInfo(logger, `Will run: ${formatCommandPreview([runner, ...args])}`);

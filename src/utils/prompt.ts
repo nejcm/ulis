@@ -15,7 +15,18 @@ export async function confirm(question: string, options: { requireTty?: boolean 
   }
   const rl = createInterface({ input, output });
   try {
-    const answer = (await rl.question(`${question} [y/N] `)).trim().toLowerCase();
+    // `rl.question` never settles when stdin reaches EOF (`ulis install < /dev/null`, a detached
+    // CI job), which would hang the process past every `finally` — leaking a temp clone and its
+    // credentials — and exit 0 having done nothing. Racing the answer against `close` is what makes
+    // the documented "a closed stdin declines" true, while a piped answer still reads normally.
+    // A rejected question (an aborted interface) declines for the same reason.
+    const answered = rl.question(`${question} [y/N] `).then(
+      (answer) => answer.trim().toLowerCase(),
+      () => undefined,
+    );
+    const closed = new Promise<undefined>((resolveClosed) => rl.once("close", () => resolveClosed(undefined)));
+    const answer = await Promise.race([answered, closed]);
+    if (answer === undefined) output.write("\n");
     return answer === "y" || answer === "yes";
   } finally {
     rl.close();
