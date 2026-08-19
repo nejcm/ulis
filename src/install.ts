@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { stdin } from "node:process";
 
 import { analyzePresets, runBuild, type Logger } from "./build.js";
-import { REMOTE_CLONE_DIRNAME_PREFIX, ULIS_GENERATED_DIRNAME } from "./config.js";
+import { ULIS_GENERATED_DIRNAME } from "./config.js";
 import { generate, writeResult } from "./generators/index.js";
 import { InstallError } from "./install/errors.js";
 import { preflightOwnership, reconcileOwnership } from "./install/manifest.js";
@@ -41,8 +41,8 @@ export interface InstallOptions {
   readonly remoteSources?: readonly string[];
   /**
    * True when `sourceDir` is a tree this run cloned rather than one the user wrote. Set from the
-   * resolver's own `mode`, which is the precise signal; a caller that omits it falls back to the
-   * clone-directory naming check in {@link isClonedSourceDir}.
+   * resolver's own `mode` (identity), not from what the path looks like (naming) - every caller
+   * passes it explicitly.
    */
   readonly sourceIsRemote?: boolean;
   /** `-y`: run a remote source's commands without prompting. */
@@ -208,18 +208,6 @@ const UNTRUSTED_ENV_DENYLIST =
   /^(?:PATH|HOME|USERPROFILE|XDG_CONFIG_HOME|ComSpec|NODE_.*|npm_.*|BUN_.*|LD_.*|DYLD_.*|GIT_.*|SSH_.*|(?:HTTP|HTTPS|ALL|NO)_PROXY)$/iu;
 
 /**
- * True when `dir` looks like a tree this run cloned for a remote source. The fallback for a caller
- * that does not pass `sourceIsRemote` (the TUI installs a clone in-process). Naming, not identity:
- * a user directory that happens to start with the same prefix reads as remote, which costs that
- * user their source `.env` — so the skip is logged rather than silent.
- */
-function isClonedSourceDir(dir: string): boolean {
-  return resolve(dir)
-    .split(/[/\\]/u)
-    .some((segment) => segment.startsWith(REMOTE_CLONE_DIRNAME_PREFIX));
-}
-
-/**
  * Load environment variables from `<rootDir>/.env` without overriding existing values.
  * `untrusted` marks a remote source, whose `.env` may not set {@link UNTRUSTED_ENV_DENYLIST} keys.
  */
@@ -317,7 +305,7 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
     // destination's own `.env` does not already serve, so it is not read at all. Otherwise any remote
     // contributor arms the denylist: a local source's `.env` loses its loader-steering keys for this
     // run when a remote preset is in the mix - the over-strict direction is the safe one.
-    const sourceIsRemote = (options.sourceIsRemote ?? false) || isClonedSourceDir(sourceDir);
+    const sourceIsRemote = options.sourceIsRemote ?? false;
     if (!sourceIsRemote) {
       loadDotEnv(sourceDir, process.env, { untrusted: (options.remoteSources?.length ?? 0) > 0 });
     }

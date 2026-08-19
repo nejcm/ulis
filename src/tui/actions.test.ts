@@ -560,8 +560,42 @@ describe("tui remote sources", () => {
     // The URL is logged, never the temp path, and consent came from the review screen.
     expect(calls[0]!.sourceLabel).toBe(url);
     expect(calls[0]!.remoteSources).toEqual([url]);
+    // Declared remote from the resolver's own `mode` (`planned.remote`), not hardcoded `true` - see
+    // the next test for why that distinction matters.
+    expect(calls[0]!.sourceIsRemote).toBe(true);
     expect(calls[0]!.approvedCommands).toEqual(prepared.commands);
     expect(calls[0]!.nonInteractive).toBeUndefined();
+  });
+
+  // 1.2's exact scenario: the "install" branch also fires when only a presets-only remote ref is
+  // set (`remoteRef`), with the base source itself local. `sourceIsRemote` must follow the base
+  // source's own identity (`planned.remote`, false here) rather than the enclosing branch's remote
+  // condition - passing `true` here would drop that local source's own `.env` for no reason.
+  it("keeps the local base source's identity when only a presets-only ref is remote", async () => {
+    const calls: Record<string, unknown>[] = [];
+    __test.setRuntimeDependencies({
+      runInstall: ((opts: Record<string, unknown>) => {
+        calls.push(opts);
+        return Promise.resolve([]);
+      }) as never,
+    });
+    const state = createInitialState();
+    // Base source stays local (default "project" mode) - only the preset ref is remote.
+    state.flow = "presetsOnly";
+    state.presetSourceMode = "custom";
+    state.customPresetSource = url;
+    state.platforms = ["claude"];
+    const prepared = {
+      action: "install" as const,
+      fingerprint: reviewFingerprint(state, "install"),
+      presets: [{ name: "r", dir: "/tmp/clone/repo" }],
+      commands: ["npx skills@latest add demo -a claude --project --yes"],
+      cleanup: () => {},
+    };
+
+    await runTuiAction(state, "install", createLogger(), { prepared });
+
+    expect(calls[0]!.sourceIsRemote).toBe(false);
   });
 
   it("refuses a remote source install that skipped the review screen", async () => {

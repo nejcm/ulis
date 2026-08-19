@@ -2075,9 +2075,12 @@ describe("a cloned source's .env", () => {
     return seen;
   }
 
-  it("is not read when the source tree is a clone this run made", async () => {
+  // 1.3: `isClonedSourceDir`'s path-prefix heuristic is gone. `sourceIsRemote` (from the resolver's
+  // own `mode`) is the only input now, so a local directory that merely happens to be named like a
+  // clone is no longer mistaken for one - it keeps its `.env`.
+  it("is read for a local directory literally named like a clone, when the caller does not say it is remote", async () => {
     const root = createTempRoot();
-    expect(await runWithSource(join(root, "ulis-remote-XyZ123", "repo"))).toEqual([undefined]);
+    expect(await runWithSource(join(root, "ulis-remote-XyZ123", "repo"))).toEqual(["from-the-source-tree"]);
   });
 
   it("is still read for a source the user wrote", async () => {
@@ -2085,9 +2088,8 @@ describe("a cloned source's .env", () => {
     expect(await runWithSource(join(root, "workspace", ".ulis"))).toEqual(["from-the-source-tree"]);
   });
 
-  // The resolver already knows: it returns `mode: "remote"`. That is the precise signal, and it
-  // covers a clone wherever it sits - the directory-name check is only the fallback for a caller
-  // that cannot pass the flag.
+  // The resolver already knows: it returns `mode: "remote"`. That is the precise signal - every
+  // caller passes it explicitly, whatever the path looks like.
   it("is not read when the caller says the source is remote, whatever the path looks like", async () => {
     const root = createTempRoot();
     const logs: string[] = [];

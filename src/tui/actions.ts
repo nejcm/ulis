@@ -202,6 +202,10 @@ export async function runTuiAction(
     await runtimeDependencies.runInstall({
       sourceDir: prepared.sourceDir ?? planned.sourceDir,
       sourceLabel: label,
+      // Not `true`: this branch also fires for a presets-only `remoteRef` over a local base source
+      // (`planned.remote` false, `remoteRef` set), and `true` there would wrongly drop that local
+      // source's `.env` too - only `planned.remote` says whether the base source itself is a clone.
+      sourceIsRemote: planned.remote,
       destBase: planned.destBase,
       globalInstall: planned.globalInstall,
       platforms: state.platforms,
