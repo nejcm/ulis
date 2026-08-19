@@ -3026,6 +3026,62 @@ describe("cross-run remote provenance", () => {
     expect(existsSync(join(projectDir, ".codex"))).toBe(false);
   });
 
+  // `Object.values([]).every(...)` is vacuously true, so an array would otherwise pass validation
+  // as an empty map - the record would then be treated as "no remote sources" and the install would
+  // proceed ungated, exactly the fail-open this whole file exists to prevent.
+  it("refuses `install --skip-rebuild` when remoteSources is an array rather than a platform-keyed object", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    writeMinimalSource(sourceDir, "base");
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(outputDir, { recursive: true });
+    write(join(outputDir, ".ulis-provenance.json"), JSON.stringify({ version: 1, remoteSources: [] }));
+
+    const install = runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome: join(root, "home"),
+      platforms: ["codex"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+    await expect(install).rejects.toBeInstanceOf(InstallError);
+    expect(existsSync(join(projectDir, ".codex"))).toBe(false);
+  });
+
+  // A record naming a platform this binary does not recognise (an unknown or mis-cased key) must
+  // make the whole record unreadable, not have that one entry silently ignored by the
+  // platform-keyed lookup - which would otherwise let it name a real remote source under a key
+  // nothing ever looks up.
+  it("refuses `install --skip-rebuild` when the record names an unknown platform key", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    writeMinimalSource(sourceDir, "base");
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(outputDir, { recursive: true });
+    write(
+      join(outputDir, ".ulis-provenance.json"),
+      JSON.stringify({ version: 1, remoteSources: { bogus: ["https://github.com/o/evil"] } }),
+    );
+
+    const install = runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome: join(root, "home"),
+      platforms: ["codex"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+    await expect(install).rejects.toBeInstanceOf(InstallError);
+    expect(existsSync(join(projectDir, ".codex"))).toBe(false);
+  });
+
   // Locks in the before-loop write ordering (`build.ts`): a build that throws partway through a
   // multi-target run must not leave the platforms it already wrote unrecorded. Forces a
   // deterministic mid-loop throw with a broken symlink sitting where the second target's output
@@ -3149,6 +3205,65 @@ describe("cross-run remote provenance", () => {
     });
     expect(platforms).toEqual(["codex"]);
     expect(existsSync(join(projectDir, ".codex"))).toBe(true);
+  });
+
+  // `entry.isDirectory()` is false for a `Dirent` describing a symlink, but the installer's own
+  // copy step follows one. Without resolving through `statSync`, a symlinked platform dir was
+  // invisible to the "did this build cover everything present" check, so a narrow local rebuild of
+  // an unrelated platform could wrongly call itself "full" and discard a still-valid unreadable
+  // record - reopening the exact refusal a full rebuild is supposed to require.
+  it("does not lose the unreadable-record refusal to a symlinked platform dir the coverage check could not see", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    writeMinimalSource(sourceDir, "base");
+    mkdirSync(projectDir, { recursive: true });
+
+    // "claude" is a symlink to a real directory holding a payload; "codex" is a plain directory.
+    const claudeTarget = join(root, "claude-payload");
+    write(join(claudeTarget, "EVIL.md"), "evil payload\n");
+    mkdirSync(outputDir, { recursive: true });
+    symlinkSync(claudeTarget, join(outputDir, "claude"), process.platform === "win32" ? "junction" : "dir");
+    mkdirSync(join(outputDir, "codex"), { recursive: true });
+    write(
+      join(outputDir, ".ulis-provenance.json"),
+      JSON.stringify({ version: 2, remoteSources: { claude: ["https://github.com/o/evil"] } }),
+    );
+
+    // Before: refuses, since the record cannot be trusted.
+    await expect(
+      runInstall({
+        sourceDir,
+        outputDir,
+        destBase: projectDir,
+        userHome: join(root, "home"),
+        platforms: ["claude"],
+        rebuild: false,
+        logger: silentLogger,
+      }),
+    ).rejects.toThrow(/is not a version this ULIS understands/u);
+
+    // A purely local, narrow rebuild of just "codex" - the symlinked "claude" dir must still count
+    // as present, so this build does not cover everything and must not discard the record.
+    runBuild({ sourceDir, outputDir, targets: ["codex"], logger: silentLogger });
+    expect(existsSync(join(outputDir, ".ulis-provenance.json"))).toBe(true);
+    expect(existsSync(join(outputDir, "claude", "EVIL.md"))).toBe(true);
+
+    // After: still refuses. Before the fix, the narrow rebuild above discarded the record and this
+    // install would have proceeded, installing the symlinked claude payload with no gate at all.
+    await expect(
+      runInstall({
+        sourceDir,
+        outputDir,
+        destBase: projectDir,
+        userHome: join(root, "home"),
+        platforms: ["claude"],
+        rebuild: false,
+        logger: silentLogger,
+      }),
+    ).rejects.toThrow(/is not a version this ULIS understands/u);
+    expect(existsSync(join(projectDir, ".claude"))).toBe(false);
   });
 });
 

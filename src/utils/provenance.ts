@@ -1,5 +1,5 @@
 import type { Dirent } from "node:fs";
-import { readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { ULIS_PROVENANCE_FILENAME } from "../config.js";
@@ -24,13 +24,19 @@ function provenancePath(outputDir: string): string {
   return join(outputDir, ULIS_PROVENANCE_FILENAME);
 }
 
+/**
+ * True only for a plain object keyed by known platform ids, each mapped to a string array. Rejects
+ * an array (`Object.values([]).every(...)` is vacuously true, so an array would otherwise pass as
+ * an empty map - the exact fail-open a version-1 record must not have) and rejects an unknown or
+ * mis-cased key on purpose: a record naming a platform this binary does not recognise must make the
+ * whole record unreadable, not have that one entry silently ignored by the platform-keyed lookup in
+ * {@link readRecordedRemoteSources}.
+ */
 function isRemoteSourcesMap(value: unknown): value is Partial<Record<Platform, readonly string[]>> {
-  return (
-    value != null &&
-    typeof value === "object" &&
-    Object.values(value as Record<string, unknown>).every(
-      (urls) => Array.isArray(urls) && urls.every((url) => typeof url === "string"),
-    )
+  if (value == null || typeof value !== "object" || Array.isArray(value)) return false;
+  const platformNames = new Set<string>(PLATFORMS);
+  return Object.entries(value as Record<string, unknown>).every(
+    ([key, urls]) => platformNames.has(key) && Array.isArray(urls) && urls.every((url) => typeof url === "string"),
   );
 }
 
@@ -47,7 +53,21 @@ function parseRecord(contents: string): ProvenanceRecord | undefined {
   return undefined;
 }
 
-/** Platform subdirectories that actually exist under `outputDir` right now. */
+/**
+ * Platform subdirectories that actually exist under `outputDir` right now, for the unreadable-record
+ * carve-out in {@link writeProvenanceRecord}. `entry.isDirectory()` is false for a `Dirent`
+ * describing a symlink, but the installer's `copyPath`/`cpSync` follows one - so a symlinked
+ * platform dir is resolved through `statSync` rather than trusted on the `Dirent` type alone, or a
+ * narrow rebuild could see a symlinked platform as absent and wrongly call a build "full".
+ *
+ * Filtered to known platform names first, and only then checked on disk: a stray directory this
+ * binary does not recognise as a platform must not wedge the heal-by-full-rebuild path by counting
+ * as "always uncovered". That leaves one gap - a directory named for a platform a *future* ULIS
+ * knows about but this one does not (`generated/futuretool`) stays invisible here, so a full
+ * rebuild could still discard a record naming it. `isRemoteSourcesMap`'s key validation covers the
+ * realistic half of that: a *record* naming an unknown platform already fails to parse and refuses
+ * outright, rather than being silently discarded by this carve-out.
+ */
 function existingPlatformDirs(outputDir: string): readonly Platform[] {
   let entries: Dirent<string>[];
   try {
@@ -57,7 +77,11 @@ function existingPlatformDirs(outputDir: string): readonly Platform[] {
   }
   const platformNames = new Set<string>(PLATFORMS);
   return entries
-    .filter((entry) => entry.isDirectory() && platformNames.has(entry.name))
+    .filter((entry) => platformNames.has(entry.name))
+    .filter(
+      (entry) =>
+        entry.isDirectory() || statSync(join(outputDir, entry.name), { throwIfNoEntry: false })?.isDirectory() === true,
+    )
     .map((entry) => entry.name as Platform);
 }
 
@@ -173,7 +197,14 @@ export function writeProvenanceRecord(
     rmSync(path, { force: true });
     return;
   }
-  const record: ProvenanceRecord = { version: 1, remoteSources: next };
+  // Fixed key order (`PLATFORMS`, not insertion order): identical final inputs must produce
+  // byte-identical output regardless of which order platforms were built in across separate runs -
+  // this file lands in `generated/`, and map-iteration order in emitted output is exactly what
+  // AGENTS.md forbids.
+  const orderedRemoteSources = Object.fromEntries(
+    PLATFORMS.filter((platform) => next[platform]).map((platform) => [platform, next[platform]!]),
+  ) as Partial<Record<Platform, readonly string[]>>;
+  const record: ProvenanceRecord = { version: 1, remoteSources: orderedRemoteSources };
   writeAtomic(path, `${JSON.stringify(record, null, 2)}\n`);
 }
 

@@ -419,12 +419,12 @@ function remoteCommandRows(state: TuiState): ViewRow[] {
     { kind: "blank" },
     {
       kind: "text",
-      text: `${state.remoteCommandSource} contributes the commands below, and they WILL RUN if you continue. Review them first:`,
+      text: `${state.remoteCommandSource} contributes the entries below, and they WILL take effect if you continue. Review them first:`,
       tone: "error",
     },
     {
       kind: "text",
-      text: "Each entry runs during the install, or is installed now and run later by the agent.",
+      text: "Each entry runs during the install, runs later inside your agent, or widens what it may run without asking.",
       tone: "warn",
     },
     ...state.remoteCommands.map((command): ViewRow => ({ kind: "text", text: `  ${command}`, tone: "muted" })),
