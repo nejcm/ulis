@@ -3,6 +3,8 @@
  * Used by: claude, opencode.
  */
 
+import { toYamlKey } from "./keys.js";
+
 /**
  * Returns `value` as a YAML scalar, quoting it when the bare form would be
  * ambiguous or invalid (special characters, reserved words, whitespace, etc.).
@@ -27,11 +29,11 @@ export function extraToYamlLines(extra: Record<string, unknown>): string[] {
   for (const [key, value] of Object.entries(extra)) {
     if (value === undefined || value === null) continue;
     if (typeof value === "string") {
-      lines.push(`${key}: ${toYamlScalar(value)}`);
+      lines.push(`${toYamlKey(key)}: ${toYamlScalar(value)}`);
     } else if (typeof value === "number" || typeof value === "boolean") {
-      lines.push(`${key}: ${value}`);
+      lines.push(`${toYamlKey(key)}: ${value}`);
     } else if (Array.isArray(value)) {
-      lines.push(`${key}:`);
+      lines.push(`${toYamlKey(key)}:`);
       for (const item of value) {
         lines.push(`  - ${typeof item === "string" ? toYamlScalar(item) : String(item)}`);
       }
@@ -50,17 +52,17 @@ export function serializeYamlFrontmatter(data: Record<string, unknown>): string 
   for (const [key, value] of Object.entries(data)) {
     if (value === undefined || value === null) continue;
     if (Array.isArray(value)) {
-      lines.push(`${key}:`);
+      lines.push(`${toYamlKey(key)}:`);
       for (const item of value) {
         lines.push(`  - ${typeof item === "string" ? toYamlScalar(item) : String(item)}`);
       }
       continue;
     }
     if (typeof value === "string") {
-      lines.push(`${key}: ${toYamlScalar(value)}`);
+      lines.push(`${toYamlKey(key)}: ${toYamlScalar(value)}`);
       continue;
     }
-    lines.push(`${key}: ${value}`);
+    lines.push(`${toYamlKey(key)}: ${value}`);
   }
   lines.push("---");
   return lines.join("\n");

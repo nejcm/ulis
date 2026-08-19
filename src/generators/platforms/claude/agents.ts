@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { ParsedAgent } from "../../../parsers/agent.js";
 import { buildPolicyCommentBlock } from "../../../utils/policy-comments.js";
 import { mapTools } from "../../../utils/tool-mapper.js";
+import { blockedCommandHooks } from "../../shared/security-hooks.js";
 import { extraToYamlLines, toYamlScalar } from "../../shared/yaml.js";
 import type { FileArtifact } from "../../types.js";
 
@@ -60,13 +61,9 @@ function subagentFrontmatter(agent: ParsedAgent): string {
     for (const s of fm.mcpServers) lines.push(`  - ${toYamlScalar(s)}`);
   }
 
-  // Merge explicit hooks with blocked-command hooks derived from security policy.
-  const blockedCmds = fm.security?.blockedCommands ?? [];
-  const blockedHookEntries = blockedCmds.map((cmd) => ({
-    matcher: `Bash(${cmd}*)`,
-    command: `echo "Blocked by ULIS security policy: ${cmd}" && exit 1`,
-  }));
-  const mergedPreToolUse = [...(fm.hooks?.PreToolUse ?? []), ...blockedHookEntries];
+  // Merge explicit hooks with blocked-command hooks derived from security policy. The derivation
+  // lives in `blockedCommandHooks` so the trust preview enumerates exactly what is generated here.
+  const mergedPreToolUse = [...(fm.hooks?.PreToolUse ?? []), ...blockedCommandHooks(fm.security)];
   const mergedHooks = {
     ...(fm.hooks ?? {}),
     ...(mergedPreToolUse.length > 0 ? { PreToolUse: mergedPreToolUse } : {}),

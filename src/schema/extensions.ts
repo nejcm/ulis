@@ -1,10 +1,11 @@
 import { z } from "zod";
 
 import { emptyYamlAsEmptyObject } from "../utils/yaml.js";
+import { PackageNameSchema } from "./shared.js";
 
 export const ExtensionSchema = z.object({
   key: z.string().optional(),
-  name: z.string().min(1),
+  name: PackageNameSchema,
   args: z.array(z.string()).optional(),
 });
 

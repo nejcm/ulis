@@ -1,3 +1,5 @@
+import { toTomlKey } from "../../shared/keys.js";
+
 export const EFFORT_MAP: Record<string, string> = { low: "low", medium: "medium", high: "high", max: "max" };
 
 export function toTomlString(value: string): string {
@@ -12,12 +14,12 @@ export function emitTomlExtra(lines: string[], extra: Record<string, unknown>): 
   for (const [key, value] of Object.entries(extra)) {
     if (value === undefined || value === null) continue;
     if (typeof value === "string") {
-      lines.push(`${key} = ${toTomlString(value)}`);
+      lines.push(`${toTomlKey(key)} = ${toTomlString(value)}`);
     } else if (typeof value === "number" || typeof value === "boolean") {
-      lines.push(`${key} = ${value}`);
+      lines.push(`${toTomlKey(key)} = ${value}`);
     } else if (Array.isArray(value) && value.every((v) => typeof v === "string")) {
       const items = (value as string[]).map((v) => toTomlString(v)).join(", ");
-      lines.push(`${key} = [${items}]`);
+      lines.push(`${toTomlKey(key)} = [${items}]`);
     }
   }
 }

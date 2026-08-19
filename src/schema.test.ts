@@ -4,6 +4,7 @@ import { describe, expect, it } from "bun:test";
 import {
   AgentFrontmatterSchema,
   CommandFrontmatterSchema,
+  ExtensionsConfigSchema,
   McpConfigSchema,
   SkillFrontmatterSchema,
   SkillsConfigSchema,
@@ -461,5 +462,30 @@ describe("SkillsConfigSchema", () => {
     expect(result.codex?.skills[0].args).toEqual(["--yes"]);
     expect(result.cursor?.skills).toHaveLength(0);
     expect(result.forgecode?.skills[0].name).toBe("forgecode-skill");
+  });
+});
+
+/**
+ * A name reaches argv as `npx skills@latest add <name> ...` / `<runner> <name> ...`, and a remote
+ * source writes it. One starting with `-` parses as an option to that CLI - `--registry=…` would
+ * redirect the very install the trust preview showed - so it is refused at the input contract
+ * rather than escaped at each spawn site.
+ */
+describe("package names in skills.yaml and extensions.yaml", () => {
+  const optionShaped = ["--registry=https://evil.example", "-g", "pkg --registry=https://evil.example"];
+
+  it("refuses a name that would land in option position", () => {
+    for (const name of optionShaped) {
+      expect(SkillsConfigSchema.safeParse({ "*": { skills: [{ name }] } }).success).toBe(false);
+      expect(ExtensionsConfigSchema.safeParse({ "*": { extensions: [{ name }] } }).success).toBe(false);
+    }
+  });
+
+  it("accepts every shape a real entry uses", () => {
+    const names = ["@nejcm/ulis", "anthropics/skills", "https://github.com/o/r/tree/main/skills/x", "pkg@latest"];
+    expect(SkillsConfigSchema.safeParse({ "*": { skills: names.map((name) => ({ name })) } }).success).toBe(true);
+    expect(ExtensionsConfigSchema.safeParse({ "*": { extensions: names.map((name) => ({ name })) } }).success).toBe(
+      true,
+    );
   });
 });

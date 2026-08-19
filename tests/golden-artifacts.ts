@@ -12,7 +12,7 @@ hooks:
     - matcher: "Bash(rm -rf*)"
       hooks:
         - type: command
-          command: "echo \\"Blocked by ULIS security policy: rm -rf\\" && exit 1"
+          command: "echo \\"Blocked by ULIS security policy\\" && exit 1"
 ---
 
 <!--

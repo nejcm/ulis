@@ -1,10 +1,11 @@
 import { z } from "zod";
 
 import { emptyYamlAsEmptyObject } from "../utils/yaml.js";
+import { PackageNameSchema } from "./shared.js";
 
 export const GlobalSkillSchema = z.object({
   key: z.string().optional(),
-  name: z.string(),
+  name: PackageNameSchema,
   args: z
     .array(z.string())
     .describe("Command-line fragments; each item may contain an option and its value.")

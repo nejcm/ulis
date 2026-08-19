@@ -61,7 +61,7 @@ Provider adapters own their own parsing-to-native behavior, generated file layou
 
 Between parsing and generation the orchestrator runs **validators** (`src/validators/`):
 
-- `validateCrossRefs(agents, skills, mcp)` — agent → skill (warn), agent → mcp (**error**)
+- `validateCrossRefs(agents, skills, mcp)` — agent → skill (warn), agent → mcp (**error**), agent → subagent allowlist (warn)
 - `validateCollisions(agents, skills)` — duplicate agent or skill names (**error**)
 
 Errors abort the build (exit code 1, no files written). Warnings print and the build proceeds.

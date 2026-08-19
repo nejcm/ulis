@@ -219,6 +219,14 @@ type OverlayMode = "json" | "toml";
 interface PreservedNativeConfigSpec {
   readonly platform: Platform;
   readonly label: string;
+  /**
+   * Every basename the destination file can have. Declared rather than derived from `targetPath`,
+   * which needs a context and can vary by install mode. Required, so a new platform cannot be added
+   * without saying which files it reads natively - {@link NATIVE_CONFIG_FILENAMES} is what the
+   * remote-source trust preview checks a `raw/` fragment against, and a missing entry there means a
+   * hook or an MCP server installs unannounced.
+   */
+  readonly names: readonly string[];
   readonly generatedPath: (context: PreservedNativeConfigContext) => string;
   readonly targetPath: (context: PreservedNativeConfigContext) => string;
   readonly preservedPaths: readonly ConfigPath[];
@@ -265,6 +273,7 @@ export const PRESERVED_NATIVE_CONFIGS = [
   {
     platform: "opencode",
     label: "opencode.json",
+    names: ["opencode.json"],
     generatedPath: (context) => join(context.outputDir, "opencode", "opencode.json"),
     targetPath: (context) => join(platformConfigDir("opencode", context.destBase, context.userHome), "opencode.json"),
     preservedPaths: [["mcp"]],
@@ -272,6 +281,7 @@ export const PRESERVED_NATIVE_CONFIGS = [
   {
     platform: "claude",
     label: "settings.json",
+    names: ["settings.json"],
     generatedPath: (context) => join(context.outputDir, "claude", "settings.json"),
     targetPath: (context) => join(platformConfigDir("claude", context.destBase, context.userHome), "settings.json"),
     preservedPaths: [
@@ -291,6 +301,7 @@ export const PRESERVED_NATIVE_CONFIGS = [
     // fragment provides, so the existing file is the base and generated values
     // overlay on top; with no generated file the user's file is left untouched.
     label: "settings.local.json",
+    names: ["settings.local.json"],
     generatedPath: (context) => join(context.outputDir, "claude", "settings.local.json"),
     targetPath: (context) =>
       join(platformConfigDir("claude", context.destBase, context.userHome), "settings.local.json"),
@@ -300,6 +311,7 @@ export const PRESERVED_NATIVE_CONFIGS = [
   {
     platform: "claude",
     label: ".claude.json / .mcp.json",
+    names: [".claude.json", ".mcp.json"],
     generatedPath: (context) => join(context.outputDir, "claude", ".claude.json"),
     // Claude Code reads MCP servers from two different files depending on scope:
     // - Global install (~): user-scope `~/.claude.json` (huge file Claude Code owns —
@@ -323,6 +335,7 @@ export const PRESERVED_NATIVE_CONFIGS = [
   {
     platform: "codex",
     label: "config.toml",
+    names: ["config.toml"],
     generatedPath: (context) => join(context.outputDir, "codex", "config.toml"),
     targetPath: (context) => join(platformConfigDir("codex", context.destBase, context.userHome), "config.toml"),
     preservedPaths: [["projects"], ["hooks"], ["mcp_servers"], ["tui"], ["notice"], ["features"]],
@@ -331,6 +344,7 @@ export const PRESERVED_NATIVE_CONFIGS = [
   {
     platform: "cursor",
     label: "mcp.json",
+    names: ["mcp.json"],
     generatedPath: (context) => join(context.outputDir, "cursor", "mcp.json"),
     targetPath: (context) => join(platformConfigDir("cursor", context.destBase, context.userHome), "mcp.json"),
     preservedPaths: [["mcpServers"]],
@@ -338,6 +352,7 @@ export const PRESERVED_NATIVE_CONFIGS = [
   {
     platform: "forgecode",
     label: ".mcp.json",
+    names: [".mcp.json"],
     generatedPath: (context) =>
       join(context.outputDir, "forgecode", resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project), ".mcp.json"),
     targetPath: (context) => join(platformConfigDir("forgecode", context.destBase, context.userHome), ".mcp.json"),
@@ -346,11 +361,22 @@ export const PRESERVED_NATIVE_CONFIGS = [
   {
     platform: "forgecode",
     label: ".forge.toml",
+    names: [".forge.toml"],
     generatedPath: (context) => join(context.outputDir, "forgecode", ".forge.toml"),
     targetPath: (context) => join(platformConfigDir("forgecode", context.destBase, context.userHome), ".forge.toml"),
     preservedPaths: [[]],
   },
 ] as const satisfies readonly PreservedNativeConfigSpec[];
+
+/**
+ * Every basename a platform reads as its own native config. These files carry hooks, startup
+ * commands and MCP server definitions, so a `raw/` fragment landing in one installs behaviour the
+ * host agent later executes on its own — which is why the remote-source trust preview names them.
+ * Derived from the specs above so adding a platform cannot silently reopen that hole.
+ */
+export const NATIVE_CONFIG_FILENAMES: ReadonlySet<string> = new Set(
+  PRESERVED_NATIVE_CONFIGS.flatMap((spec) => spec.names),
+);
 
 export function getPreservedNativeConfigEntries(
   platform: Platform,
