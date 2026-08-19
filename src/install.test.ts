@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { runBuild, type Logger } from "./build.js";
 import { __test, loadDotEnv, resolveRunner, runInstall, runPresetInstall } from "./install.js";
 import { InstallError } from "./install/errors.js";
-import type { Platform } from "./platforms.js";
+import { PLATFORMS, type Platform } from "./platforms.js";
 import { readMergeableConfig } from "./utils/config-merger.js";
 
 const tmpRoots: string[] = [];
@@ -2795,6 +2795,27 @@ describe("cross-run remote provenance", () => {
     expect(existsSync(join(projectDir, ".codex"))).toBe(false);
   });
 
+  // `next` preserves keys from the prior record in insertion order, so a platform built alone can
+  // stay ahead of an earlier canonical platform added by a later wider build. Re-sorting every
+  // update keeps identical final provenance byte-identical regardless of the build sequence.
+  it("writes remote-source keys in canonical platform order across build history", () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const presetDir = join(root, "preset");
+    const outputDir = join(sourceDir, "generated");
+    writeMinimalSource(sourceDir, "base");
+    writeMinimalSource(presetDir, "preset");
+    const presets = [{ name: "team", dir: presetDir, remoteUrl: "https://github.com/o/r" }];
+
+    runBuild({ sourceDir, outputDir, targets: ["cursor"], logger: silentLogger, presets });
+    runBuild({ sourceDir, outputDir, targets: ["claude", "cursor"], logger: silentLogger, presets });
+
+    const record = JSON.parse(read(join(outputDir, ".ulis-provenance.json"))) as {
+      remoteSources: Record<string, readonly string[]>;
+    };
+    expect(Object.keys(record.remoteSources)).toEqual(PLATFORMS.filter((platform) => platform in record.remoteSources));
+  });
+
   // The narrow rebuild in step 2 must not erase what step 1 recorded for a platform it left
   // untouched - `writer.ts`'s `cleanDir` only clears the platform dirs it is asked to regenerate,
   // and the record has to track that, or a payload a wider remote build wrote survives on disk
@@ -3252,6 +3273,44 @@ describe("cross-run remote provenance", () => {
 
     // After: still refuses. Before the fix, the narrow rebuild above discarded the record and this
     // install would have proceeded, installing the symlinked claude payload with no gate at all.
+    await expect(
+      runInstall({
+        sourceDir,
+        outputDir,
+        destBase: projectDir,
+        userHome: join(root, "home"),
+        platforms: ["claude"],
+        rebuild: false,
+        logger: silentLogger,
+      }),
+    ).rejects.toThrow(/is not a version this ULIS understands/u);
+    expect(existsSync(join(projectDir, ".claude"))).toBe(false);
+  });
+
+  // `statSync` can throw for a platform-shaped entry, notably a self-referential symlink. Treating
+  // that uncertainty as absence would let this narrow rebuild call itself full and discard an
+  // unreadable record, so it must instead preserve the refusal for output it did not regenerate.
+  it("preserves an unreadable record when a looping platform symlink cannot be inspected", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    writeMinimalSource(sourceDir, "base");
+    mkdirSync(outputDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    symlinkSync(
+      join(outputDir, "claude"),
+      join(outputDir, "claude"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    write(
+      join(outputDir, ".ulis-provenance.json"),
+      JSON.stringify({ version: 2, remoteSources: { claude: ["https://github.com/o/evil"] } }),
+    );
+
+    runBuild({ sourceDir, outputDir, targets: ["codex"], logger: silentLogger });
+    expect(existsSync(join(outputDir, ".ulis-provenance.json"))).toBe(true);
+
     await expect(
       runInstall({
         sourceDir,

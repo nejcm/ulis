@@ -78,10 +78,17 @@ function existingPlatformDirs(outputDir: string): readonly Platform[] {
   const platformNames = new Set<string>(PLATFORMS);
   return entries
     .filter((entry) => platformNames.has(entry.name))
-    .filter(
-      (entry) =>
-        entry.isDirectory() || statSync(join(outputDir, entry.name), { throwIfNoEntry: false })?.isDirectory() === true,
-    )
+    .filter((entry) => {
+      if (entry.isDirectory()) return true;
+      try {
+        return statSync(join(outputDir, entry.name), { throwIfNoEntry: false })?.isDirectory() === true;
+      } catch {
+        // If the entry cannot be inspected, count it as present so its provenance is preserved.
+        // Treating a throw as absent could let a narrow rebuild call itself full and discard a
+        // record it could not read.
+        return true;
+      }
+    })
     .map((entry) => entry.name as Platform);
 }
 
