@@ -2,13 +2,13 @@
 
 Source for the `@nejcm/ulis` CLI: a single source of truth for AI tool configs. It reads a user-owned `.ulis/` tree (project-local) or `~/.ulis/` (global) and generates native configs for Claude Code, Codex, OpenCode, Cursor and ForgeCode.
 
-TypeScript bundled with `tsup` (Node 20+, ESM). Dev runtime: Bun. CLI framework: `cac`. Validation: `zod` v4.
+TypeScript bundled with `tsup` (Node 20.3+, ESM — `engines.node` in `package.json`). Dev runtime: Bun. CLI framework: `cac`. Validation: `zod` v4.
 
 This repo has no `CLAUDE.md`, and should not get one. `AGENTS.md` is the single agent instruction file — the same model the tool implements, and `.claude/skills/add-platform` is a symlink to `.agents/add-platform`, not a copy. Add instructions here; if a harness needs its own file, symlink it.
 
 ## Before you start
 
-- [`CONTEXT.md`](CONTEXT.md) — glossary. Use these terms when describing changes back to me: source vs destination, preset layer vs preset source, raw fragment, ownership manifest, managed vs unmanaged entry, prune, preserved native config.
+- [`CONTEXT.md`](CONTEXT.md) — glossary. Use these terms when describing changes back to me: source vs destination, remote source, trust gate, preset layer vs preset source, raw fragment, ownership manifest, managed vs unmanaged entry, prune, preserved native config.
 - [`.agents/add-platform/`](.agents/add-platform/) — the checklist for adding a platform target. Read it before touching `src/platforms.ts`.
 - [`docs/SPEC.md`](docs/SPEC.md) architecture, [`docs/CLI.md`](docs/CLI.md) CLI surface, [`docs/TESTING.md`](docs/TESTING.md) what the suite covers and what it deliberately omits. `docs/REFERENCE.md` is meant to be the field-level schema reference but currently generates empty — read `src/schema/` directly instead.
 
@@ -99,7 +99,12 @@ If you changed generators, parsers, schemas, or CLI wiring, also:
 4. `bun run build` — `tsup`, then schema generation, then preset copy. Produces `dist/cli.js`, `dist/tui.js`, `schemas/`.
 5. `node dist/cli.js build --source example` — smoke the Node bundle end to end.
 
-If you changed Zod schemas: `bun run gen:reference` to refresh [`docs/REFERENCE.md`](docs/REFERENCE.md).
+If you changed Zod schemas: `bun run gen:schemas` (it runs as part of `bun run build`) to refresh the
+publishable JSON Schemas under `schemas/`.
+
+Do **not** run `bun run gen:reference`. That generator is broken — see the Zod v4 note under Key
+conventions — and running it commits a `docs/REFERENCE.md` of empty headings. Porting it to
+`z.toJSONSchema` is the prerequisite for putting it back in this list.
 
 There is no fixture regeneration command. `tests/golden-artifacts.ts` is hand-maintained TypeScript string constants, not snapshots — when generated output changes on purpose, edit that file by hand and say so in the diff.
 
