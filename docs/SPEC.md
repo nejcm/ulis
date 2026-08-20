@@ -310,23 +310,23 @@ Hooks are native to Claude Code only. On other targets they are silently dropped
 
 ## 4. Capability Matrix
 
-| Feature                              |   Claude Code   |       OpenCode       |     Codex     | Cursor  | ForgeCode  |
-| ------------------------------------ | :-------------: | :------------------: | :-----------: | :-----: | :--------: |
-| Native agents                        |        ✓        |          ✓           |       ✓       |    ✓    |     ✓      |
-| Native skills/commands               |        ✓        |          ✓           |       ✓       |    ✓    |     ✓      |
-| Hooks (PreToolUse/PostToolUse/Stop)  |        ✓        |          —           |       —       |    —    |     —      |
-| Subagent spawning                    |        ✓        |          ✓           |    comment    |    —    |     —      |
-| Background execution                 |        ✓        |          —           |       —       |    ✓    |     —      |
-| Git worktree isolation               |        ✓        |          —           |       —       |    —    |     —      |
-| Local MCP servers                    |        ✓        |          ✓           |       ✓       |    ✓    |     ✓      |
-| Remote MCP servers                   |        ✓        |          ✓           | localFallback |    ✓    |     ✓      |
+| Feature                              |   Claude Code   |       OpenCode       |     Codex     |   Cursor   | ForgeCode  |
+| ------------------------------------ | :-------------: | :------------------: | :-----------: | :--------: | :--------: |
+| Native agents                        |        ✓        |          ✓           |       ✓       |     ✓      |     ✓      |
+| Native skills/commands               |        ✓        |          ✓           |       ✓       |     ✓      |     ✓      |
+| Hooks (PreToolUse/PostToolUse/Stop)  |        ✓        |          —           |       —       |     —      |     —      |
+| Subagent spawning                    |        ✓        |          ✓           |    comment    |     —      |     —      |
+| Background execution                 |        ✓        |          —           |       —       |     ✓      |     —      |
+| Git worktree isolation               |        ✓        |          —           |       —       |     —      |     —      |
+| Local MCP servers                    |        ✓        |          ✓           |       ✓       |     ✓      |     ✓      |
+| Remote MCP servers                   |        ✓        |          ✓           | localFallback |     ✓      |     ✓      |
 | Fine-grained tool permissions        |        ✓        |          ✓           |       —       | allowlists | tools list |
-| `contextHints` enforcement           |     comment     |       comment        |    comment    | comment |  comment   |
-| `toolPolicy.avoid`                   | disallowedTools |       comment        |    comment    | comment |  comment   |
-| `toolPolicy.requireConfirmation`     | permissionMode  | permission.edit/bash |    comment    | comment |  comment   |
-| `security.permissionLevel: readonly` |    plan mode    |      deny perms      |    comment    | comment |  comment   |
-| `security.blockedCommands`           | PreToolUse hook |       comment        |    comment    | comment |  comment   |
-| `security.rateLimit`                 |     comment     | rate_limit_per_hour  |    comment    | comment |  comment   |
+| `contextHints` enforcement           |     comment     |       comment        |    comment    |  comment   |  comment   |
+| `toolPolicy.avoid`                   | disallowedTools |       comment        |    comment    |  comment   |  comment   |
+| `toolPolicy.requireConfirmation`     | permissionMode  | permission.edit/bash |    comment    |  comment   |  comment   |
+| `security.permissionLevel: readonly` |    plan mode    |      deny perms      |    comment    |  comment   |  comment   |
+| `security.blockedCommands`           | PreToolUse hook |       comment        |    comment    |  comment   |  comment   |
+| `security.rateLimit`                 |     comment     | rate_limit_per_hour  |    comment    |  comment   |  comment   |
 
 **Legend:** ✓ native · comment = emitted as comment in output file · — = not emitted
 

@@ -17,11 +17,11 @@ Both resolvers hand their disposal back to the caller:
 Every CLI caller must therefore pair `guard.track(...)` with `guard.onCleanup(result.cleanup)` by hand.
 Four pairs across three commands:
 
-| Site | Lines |
-|------|-------|
-| [`src/commands/build.ts`](../src/commands/build.ts) | 40–43 |
+| Site                                                    | Lines                           |
+| ------------------------------------------------------- | ------------------------------- |
+| [`src/commands/build.ts`](../src/commands/build.ts)     | 40–43                           |
 | [`src/commands/install.ts`](../src/commands/install.ts) | 35–45 (source), 51–58 (presets) |
-| [`src/commands/preset.ts`](../src/commands/preset.ts) | 71–80 |
+| [`src/commands/preset.ts`](../src/commands/preset.ts)   | 71–80                           |
 
 Forgetting the second half strands a temp clone that may carry credentials from the URL. **This is a
 discipline hazard, not a live bug** — all four existing call sites register correctly, and the tests
@@ -44,13 +44,13 @@ that without either changing the consent flow ADR 0003 depends on, or re-exposin
 
 ## 2. Decisions
 
-| # | Decision | Choice | Why |
-|---|----------|--------|-----|
-| 1 | Shape | One extra operation on the existing `InterruptGuard` | No new module; the guard already owns the cleanup list |
-| 2 | Constraint | `T extends { readonly cleanup: () => void }` | Both resolvers already satisfy it; nothing else has to change |
-| 3 | Registration order | Register cleanup *after* `work()` resolves, before returning | Nothing exists to clean up until it resolves; a throw inside is handled by the resolver's own unwind |
-| 4 | `track`/`onCleanup` | Keep both public | The TUI does not use the guard, but keeping the primitives avoids forcing every future caller through one shape |
-| 5 | Scope | CLI commands only | TUI ownership stays explicit (§1) |
+| #   | Decision            | Choice                                                       | Why                                                                                                             |
+| --- | ------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| 1   | Shape               | One extra operation on the existing `InterruptGuard`         | No new module; the guard already owns the cleanup list                                                          |
+| 2   | Constraint          | `T extends { readonly cleanup: () => void }`                 | Both resolvers already satisfy it; nothing else has to change                                                   |
+| 3   | Registration order  | Register cleanup _after_ `work()` resolves, before returning | Nothing exists to clean up until it resolves; a throw inside is handled by the resolver's own unwind            |
+| 4   | `track`/`onCleanup` | Keep both public                                             | The TUI does not use the guard, but keeping the primitives avoids forcing every future caller through one shape |
+| 5   | Scope               | CLI commands only                                            | TUI ownership stays explicit (§1)                                                                               |
 
 ## 3. Implementation
 
@@ -96,7 +96,13 @@ const { presets } = await guard.resolve(() =>
 ```ts
 // src/commands/install.ts:35-45
 const resolved = await guard.resolve(() =>
-  resolveSourceOrRemote({ global: options.global, homeDir: options.homeDir, source: options.source, logger: log, signal: guard.signal }),
+  resolveSourceOrRemote({
+    global: options.global,
+    homeDir: options.homeDir,
+    source: options.source,
+    logger: log,
+    signal: guard.signal,
+  }),
 );
 const { sourceDir, destBase, mode } = resolved;
 ```

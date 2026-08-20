@@ -17,7 +17,7 @@ means "clone this repo first, then point ULIS at it".
 
 **Goal:** a user can point `--source` — or a preset ref — at a git repository URL, and every downstream
 behaviour (build, validate, install, prune, manifest) is identical. One primitive does the work:
-*shallow-clone a repo into a temp directory, then hand that directory to the existing code paths.* ULIS
+_shallow-clone a repo into a temp directory, then hand that directory to the existing code paths._ ULIS
 does the "clone it first" step for you; nothing after the clone knows the source was remote.
 
 **Why clone and not download.** An earlier revision of this plan fetched `.tar.gz` archives over
@@ -32,27 +32,27 @@ shelled out to `npx`/`bunx`. Recorded in ADR 0003 (§3.9).
 
 Settled during the design interview. Each row is a closed question — reopen deliberately, not by drift.
 
-| # | Decision | Choice | Why |
-|---|----------|--------|-----|
-| 1 | Surfaces | Both `--source <url>` and preset refs | A preset *is* a source tree; one clone primitive serves both |
-| 2 | Accepted URLs | Any git remote over HTTPS or SSH. GitHub/GitLab web URLs additionally parse `<ref>` and `<subdir>` from the path; a `#<ref>` fragment works on any host | Clone is host-agnostic, so a host allowlist would be code that only *removes* capability |
-| 3 | Mechanism | `git clone --depth 1 --single-branch [--branch <ref>]` into a temp dir | Shallowest thing that works; no new dependency beyond `git` itself |
-| 4 | GitHub auth | Plain `git` first; on **any** clone failure for a `github.com` URL, retry once via `gh repo clone` when `gh` is on `PATH` | Uses `gh`'s token when the user has one, without probing `gh auth status` or preferring an unauthenticated `gh` over a working `git` |
-| 5 | Lifetime | Temp dir per run, removed in `finally` | No cache invalidation question, no diverged-local-copy question |
-| 6 | Trust | Print the commands a remote source's `extensions.yaml`/`skills.yaml` will run; require y/N; `-y` bypasses | Local presets you authored, remote ones you did not |
-| 7 | Naming | `preset.yaml` `name` → repo directory name → last URL path segment | Name is display/merge-order identity only |
-| 8 | Refs | Branch or tag only (`--branch` accepts both). A commit SHA is rejected with an explicit message | SHA checkout needs `init`+`fetch`+`checkout`; not worth it until asked |
-| 9 | Limits | HTTPS/SSH only, 60s clone timeout, symlinks in the cloned tree rejected | Bytes land as real files with no amplification, so byte caps bought nothing; a hung remote is the failure users actually hit |
-| 10 | `build --source <url>` | Rejected with a clear error | Build writes `generated/` into the source tree, which is then deleted — a no-op with a progress bar |
-| 11 | destBase | CWD when no `--global`; `~` with `--global` | A temp dir has no meaningful parent (today's rule at `resolve-source.ts:40`) |
-| 12 | Identity | Full URL in log lines; derived short name in `ResolvedPreset.name` and the ownership manifest | Honest provenance in logs without URLs leaking into merge keys and diagnostics |
+| #   | Decision               | Choice                                                                                                                                                  | Why                                                                                                                                  |
+| --- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Surfaces               | Both `--source <url>` and preset refs                                                                                                                   | A preset _is_ a source tree; one clone primitive serves both                                                                         |
+| 2   | Accepted URLs          | Any git remote over HTTPS or SSH. GitHub/GitLab web URLs additionally parse `<ref>` and `<subdir>` from the path; a `#<ref>` fragment works on any host | Clone is host-agnostic, so a host allowlist would be code that only _removes_ capability                                             |
+| 3   | Mechanism              | `git clone --depth 1 --single-branch [--branch <ref>]` into a temp dir                                                                                  | Shallowest thing that works; no new dependency beyond `git` itself                                                                   |
+| 4   | GitHub auth            | Plain `git` first; on **any** clone failure for a `github.com` URL, retry once via `gh repo clone` when `gh` is on `PATH`                               | Uses `gh`'s token when the user has one, without probing `gh auth status` or preferring an unauthenticated `gh` over a working `git` |
+| 5   | Lifetime               | Temp dir per run, removed in `finally`                                                                                                                  | No cache invalidation question, no diverged-local-copy question                                                                      |
+| 6   | Trust                  | Print the commands a remote source's `extensions.yaml`/`skills.yaml` will run; require y/N; `-y` bypasses                                               | Local presets you authored, remote ones you did not                                                                                  |
+| 7   | Naming                 | `preset.yaml` `name` → repo directory name → last URL path segment                                                                                      | Name is display/merge-order identity only                                                                                            |
+| 8   | Refs                   | Branch or tag only (`--branch` accepts both). A commit SHA is rejected with an explicit message                                                         | SHA checkout needs `init`+`fetch`+`checkout`; not worth it until asked                                                               |
+| 9   | Limits                 | HTTPS/SSH only, 60s clone timeout, symlinks in the cloned tree rejected                                                                                 | Bytes land as real files with no amplification, so byte caps bought nothing; a hung remote is the failure users actually hit         |
+| 10  | `build --source <url>` | Rejected with a clear error                                                                                                                             | Build writes `generated/` into the source tree, which is then deleted — a no-op with a progress bar                                  |
+| 11  | destBase               | CWD when no `--global`; `~` with `--global`                                                                                                             | A temp dir has no meaningful parent (today's rule at `resolve-source.ts:40`)                                                         |
+| 12  | Identity               | Full URL in log lines; derived short name in `ResolvedPreset.name` and the ownership manifest                                                           | Honest provenance in logs without URLs leaking into merge keys and diagnostics                                                       |
 
 **Out of scope** (deliberately, not accidentally): `owner/repo` shorthand (ambiguous against preset names
 and relative paths), commit-SHA refs, `.tar.gz`/`.zip` archive URLs, `http://` and `git://`, Bitbucket
 web-URL parsing (one parse-table row when someone asks), caching, a preset registry, a dedicated TUI
 screen for remote presets, a subdir syntax for non-GitHub/GitLab hosts.
 
-**Documentation deferred by the user:** `docs/guide/presets.md` and `docs/CLI.md` were *not* selected at
+**Documentation deferred by the user:** `docs/guide/presets.md` and `docs/CLI.md` were _not_ selected at
 design time. That deferral no longer holds — the implementation shipped with `docs/guide/remote-sources.md`,
 [ADR 0003](../docs/adr/0003-remote-sources-via-git-clone.md), and updates to `docs/CLI.md` and
 `docs/guide/presets.md`.
@@ -72,9 +72,9 @@ export function fetchRemoteSource(
 ): Promise<RemoteSource>;
 
 export interface RemoteSource {
-  readonly dir: string;      // clone root (or subdir), ready for existing code paths
-  readonly url: string;      // original URL, for logging
-  readonly name: string;     // derived short identity
+  readonly dir: string; // clone root (or subdir), ready for existing code paths
+  readonly url: string; // original URL, for logging
+  readonly name: string; // derived short identity
   readonly cleanup: () => void;
 }
 ```
@@ -87,16 +87,16 @@ a parseable URL at all — match it with an explicit `/^[^/\\]+@[^/\\:]+:/` styl
 
 **`parseRepoUrl`** — parse table:
 
-| Input | Output |
-|---|---|
-| `https://github.com/<o>/<r>` | `cloneUrl` as-is |
-| `https://github.com/<o>/<r>/tree/<ref>` | `cloneUrl` = `https://github.com/<o>/<r>`, `ref` |
-| `https://github.com/<o>/<r>/tree/<ref>/<subdir…>` | as above, plus `subdir` |
-| `https://gitlab.com/<o>/<r>/-/tree/<ref>[/<subdir…>]` | same treatment |
-| `<any git url>#<ref>` | `cloneUrl` without the fragment, `ref` |
-| `git@host:<o>/<r>.git`, `ssh://git@host/<o>/<r>` | `cloneUrl` as-is |
-| any other `https://…` | `cloneUrl` as-is — let `git` decide whether it is a repo |
-| `http://…`, `git://…` | throw — "remote sources must use HTTPS or SSH" |
+| Input                                                 | Output                                                   |
+| ----------------------------------------------------- | -------------------------------------------------------- |
+| `https://github.com/<o>/<r>`                          | `cloneUrl` as-is                                         |
+| `https://github.com/<o>/<r>/tree/<ref>`               | `cloneUrl` = `https://github.com/<o>/<r>`, `ref`         |
+| `https://github.com/<o>/<r>/tree/<ref>/<subdir…>`     | as above, plus `subdir`                                  |
+| `https://gitlab.com/<o>/<r>/-/tree/<ref>[/<subdir…>]` | same treatment                                           |
+| `<any git url>#<ref>`                                 | `cloneUrl` without the fragment, `ref`                   |
+| `git@host:<o>/<r>.git`, `ssh://git@host/<o>/<r>`      | `cloneUrl` as-is                                         |
+| any other `https://…`                                 | `cloneUrl` as-is — let `git` decide whether it is a repo |
+| `http://…`, `git://…`                                 | throw — "remote sources must use HTTPS or SSH"           |
 
 A `<ref>` containing `/` (branch names like `feature/x`) is ambiguous against `<subdir>` in the web-URL
 forms. Take the first segment as the ref and document that slashed branch names need the `#<ref>`
@@ -122,13 +122,13 @@ we wrap its stderr; inventing a shape check for arbitrary hosts would be guessin
 4. Timeout: 60s, no flag. Wire it as an `AbortSignal` composed with the caller's `signal` — `install.ts`
    already threads `signal` through the async runner. This is a hang guard, not a security control.
 5. Non-zero status → if the URL host is `github.com` and `gh` is on `PATH`, retry **once** with
-   `gh repo clone <o>/<r> <temp>/repo -- --depth 1 --single-branch [--branch <ref>]`. Retry on *any*
+   `gh repo clone <o>/<r> <temp>/repo -- --depth 1 --single-branch [--branch <ref>]`. Retry on _any_
    failure rather than sniffing stderr for "Authentication failed" / "Repository not found" — the wasted
    retry only ever happens on an already-failing path. Known cost: a 404 URL fails twice, roughly
    doubling error latency in that case. Still failing → throw `failed to clone <url>` plus the last
    stderr line via the existing `formatCommandFailure` shape.
 6. Descend into `<subdir>` when the URL carried one; a missing subdir throws naming both the URL and the
-   path. There is no top-level-directory strip — unlike a tarball, `git clone <dir>` *is* the tree root.
+   path. There is no top-level-directory strip — unlike a tarball, `git clone <dir>` _is_ the tree root.
 7. Walk the tree and **reject symlinks** (`lstatSync().isSymbolicLink()`), naming the offending entry. A
    repo can contain a symlink pointing at `~/.ssh`, and later reads would follow it. Cheap `readdirSync`
    recursion, skipping `.git/`; no dependency.
@@ -140,8 +140,8 @@ we wrap its stderr; inventing a shape check for arbitrary hosts would be guessin
 
 **`git` availability.** Probe with the existing `commandExists` helper in
 [`src/install.ts:579`](../src/install.ts) — lift it to a shared util rather than copying it — and fail
-with: *"git is required for remote sources — install git, or clone the repo manually and use
-`--source <path>`."* No archive fallback; a fallback would resurrect everything this revision deletes.
+with: _"git is required for remote sources — install git, or clone the repo manually and use
+`--source <path>`."_ No archive fallback; a fallback would resurrect everything this revision deletes.
 
 ### 3.2 `src/utils/resolve-source.ts`
 
@@ -185,7 +185,7 @@ Cleanups must reach the caller. Return a small wrapper rather than a bare array:
 ```ts
 export interface ResolvedPresets {
   readonly presets: readonly ResolvedPreset[];
-  readonly cleanup: () => void;   // no-op when nothing was cloned
+  readonly cleanup: () => void; // no-op when nothing was cloned
 }
 ```
 
@@ -234,7 +234,7 @@ The `customSource` and `customPresetSource` screens already accept free-text
   the TUI for stdin.
 - Persisted preferences already store `customSource` / `customPresetSource` strings — a URL round-trips
   as-is, no schema change.
-- `listTuiPresets`'s unused `customRoot` stays as-is: a remote preset ref is a *ref*, not a root to scan.
+- `listTuiPresets`'s unused `customRoot` stays as-is: a remote preset ref is a _ref_, not a root to scan.
 - No new screen, no new preference scope (there are already four).
 
 ### 3.8 CLI help — `src/cli.ts`
@@ -246,10 +246,12 @@ description mentions that a name may be a git repository URL. Both occurrences o
 ### 3.9 Docs
 
 - **`CONTEXT.md`** — add:
+
   > **Remote Source**: A source tree shallow-cloned from a git repository into a temporary directory for
   > the duration of a single run. It is discarded afterwards and is never cached.
 
   Amend **Source** and **Preset** to note either may be remote.
+
 - **`docs/adr/0003-remote-sources-via-git-clone.md`** — clone-over-download. Context: shared team
   configs. Alternatives: HTTPS archive download + `tar` (rejected — needs streaming download, size caps,
   and a tarball traversal guard, and supports neither private repos nor SSH), per-file API crawl, a
@@ -266,37 +268,37 @@ Split by concern: real git for behaviour, mocked spawn for argv. **New prerequis
 
 **New — `src/utils/remote-source.test.ts`**
 
-*Parse table (pure, no spawn):*
+_Parse table (pure, no spawn):_
 
-| Case | Expectation |
-|---|---|
-| `isRemoteSource` on `https://…`, `ssh://…`, `git@github.com:o/r.git` | `true` |
-| `isRemoteSource` on `C:\presets`, `/home/x/presets`, `./rel`, `team` | `false` — Windows drive letters are the trap |
-| Plain GitHub repo URL | `cloneUrl` unchanged, no `ref`, no `subdir` |
-| `/tree/main` | `cloneUrl` stripped to repo root, `ref === "main"` |
-| `/tree/main/presets/team` | as above, `subdir === "presets/team"` |
-| GitLab `/-/tree/<ref>/<subdir>` | same treatment |
-| `https://git.corp/x/y.git#v1.2.3` | fragment stripped, `ref === "v1.2.3"` |
-| `git@github.com:o/r.git` | passthrough, no ref |
-| `https://example.com/thing.zip` | passthrough — not pre-validated, git decides |
-| `http://…`, `git://…` | throws, message names HTTPS or SSH |
-| `/tree/<40-hex-sha>` | throws, message names branches and tags |
+| Case                                                                 | Expectation                                        |
+| -------------------------------------------------------------------- | -------------------------------------------------- |
+| `isRemoteSource` on `https://…`, `ssh://…`, `git@github.com:o/r.git` | `true`                                             |
+| `isRemoteSource` on `C:\presets`, `/home/x/presets`, `./rel`, `team` | `false` — Windows drive letters are the trap       |
+| Plain GitHub repo URL                                                | `cloneUrl` unchanged, no `ref`, no `subdir`        |
+| `/tree/main`                                                         | `cloneUrl` stripped to repo root, `ref === "main"` |
+| `/tree/main/presets/team`                                            | as above, `subdir === "presets/team"`              |
+| GitLab `/-/tree/<ref>/<subdir>`                                      | same treatment                                     |
+| `https://git.corp/x/y.git#v1.2.3`                                    | fragment stripped, `ref === "v1.2.3"`              |
+| `git@github.com:o/r.git`                                             | passthrough, no ref                                |
+| `https://example.com/thing.zip`                                      | passthrough — not pre-validated, git decides       |
+| `http://…`, `git://…`                                                | throws, message names HTTPS or SSH                 |
+| `/tree/<40-hex-sha>`                                                 | throws, message names branches and tags            |
 
-*Clone behaviour (real `git`, `file://` remote — no network):* build fixture repos in `beforeAll` with
+_Clone behaviour (real `git`, `file://` remote — no network):_ build fixture repos in `beforeAll` with
 `git init` + two commits, then clone from their `file://` path.
 
-| Case | Expectation |
-|---|---|
-| Clone of a fixture repo | `dir` contains the committed files, `.git` present |
-| Clone with `ref` = a fixture tag/branch | that ref's content, not the default branch |
-| Subdir descent | fixture with `presets/team/preset.yaml` + `subdir` → `dir` is the team dir |
-| Missing subdir | throws naming URL and path |
-| Fixture repo containing a symlink | throws naming the entry |
-| Nonexistent `file://` path | throws with the git stderr tail |
-| Name derivation | `preset.yaml` name wins; then repo dir name; then URL last segment |
-| `cleanup()` twice | idempotent, no throw; temp dir gone (Windows read-only `.git` objects included) |
+| Case                                    | Expectation                                                                     |
+| --------------------------------------- | ------------------------------------------------------------------------------- |
+| Clone of a fixture repo                 | `dir` contains the committed files, `.git` present                              |
+| Clone with `ref` = a fixture tag/branch | that ref's content, not the default branch                                      |
+| Subdir descent                          | fixture with `presets/team/preset.yaml` + `subdir` → `dir` is the team dir      |
+| Missing subdir                          | throws naming URL and path                                                      |
+| Fixture repo containing a symlink       | throws naming the entry                                                         |
+| Nonexistent `file://` path              | throws with the git stderr tail                                                 |
+| Name derivation                         | `preset.yaml` name wins; then repo dir name; then URL last segment              |
+| `cleanup()` twice                       | idempotent, no throw; temp dir gone (Windows read-only `.git` objects included) |
 
-*Mocked spawn (via `__test.setRuntimeDependencies`, [`src/install.ts:679`](../src/install.ts)):*
+_Mocked spawn (via `__test.setRuntimeDependencies`, [`src/install.ts:679`](../src/install.ts)):_
 
 - argv is `clone --depth 1 --single-branch <url> <dir>`; `--branch <ref>` present only when a ref was parsed.
 - Spawn env carries `GIT_TERMINAL_PROMPT=0`.
@@ -339,7 +341,7 @@ Run from a scratch directory, not the repo. These URLs work because this repo ke
 1. **Happy path, project install**
    `ulis install --source https://github.com/nejcm/ulis/tree/master/example --target claude`
    → log shows `Source: https://github.com/…` (URL, not a temp path); collision prompt lists
-   *scratch-dir* paths; `.claude/` contains generated output; `%TEMP%\ulis-remote-*` is gone afterwards.
+   _scratch-dir_ paths; `.claude/` contains generated output; `%TEMP%\ulis-remote-*` is gone afterwards.
 2. **Subdirectory preset**
    `ulis preset install https://github.com/nejcm/ulis/tree/master/example/presets/react-web --target claude`
    → installs only that preset; `Presets:` line shows the derived name.
