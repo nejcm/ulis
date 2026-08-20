@@ -72,14 +72,14 @@ export function buildCodexSkillArtifacts(skill: ParsedSkill): FileArtifact[] {
     }
 
     yamlLines.push("policy:");
-    yamlLines.push(`  allow_implicit_invocation: ${fm?.allowImplicitInvocation}`);
+    yamlLines.push(`  allow_implicit_invocation: ${fm?.allowImplicitInvocation !== false}`);
     yamlLines.push("");
 
     if (hasDeps) {
       yamlLines.push("dependencies:");
       yamlLines.push("  tools:");
       for (const dep of codexPlatform!.mcpDependencies!) {
-        yamlLines.push(`    - type: ${dep.type}`);
+        yamlLines.push(`    - type: ${toYamlString(dep.type)}`);
         yamlLines.push(`      value: ${toYamlString(dep.value)}`);
         if (dep.description) yamlLines.push(`      description: ${toYamlString(dep.description)}`);
         if (dep.transport) yamlLines.push(`      transport: ${toYamlString(dep.transport)}`);

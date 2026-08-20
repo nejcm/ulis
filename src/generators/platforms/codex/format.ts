@@ -6,6 +6,16 @@ export function toTomlString(value: string): string {
   return JSON.stringify(value);
 }
 
+export function toTomlMultilineString(value: string): string {
+  const escaped = value
+    .replaceAll("\\", "\\\\")
+    .replaceAll('"""', '""\\"')
+    .replace(/\r(?!\n)|[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, (char) =>
+      char === "\r" ? "\\r" : `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
+    );
+  return `"""\n${escaped}\\\n"""`;
+}
+
 export function toYamlString(value: string): string {
   return JSON.stringify(value);
 }

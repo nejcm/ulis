@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { ParsedAgent } from "../../../parsers/agent.js";
 import { buildPolicyCommentBlock } from "../../../utils/policy-comments.js";
 import type { FileArtifact } from "../../types.js";
-import { EFFORT_MAP, emitTomlExtra, toTomlString } from "./format.js";
+import { EFFORT_MAP, emitTomlExtra, toTomlMultilineString, toTomlString } from "./format.js";
 
 export function buildCodexAgentArtifact(agent: ParsedAgent): FileArtifact {
   const codexPlatform = agent.frontmatter.platforms?.codex;
@@ -24,9 +24,7 @@ export function buildCodexAgentArtifact(agent: ParsedAgent): FileArtifact {
   agentLines.push(`name = ${toTomlString(agent.name)}`);
   agentLines.push(`description = ${toTomlString(agent.frontmatter.description)}`);
   agentLines.push("");
-  agentLines.push(`developer_instructions = """`);
-  agentLines.push(agent.body.trim());
-  agentLines.push(`"""`);
+  agentLines.push(`developer_instructions = ${toTomlMultilineString(agent.body)}`);
   agentLines.push("");
 
   if (codexPlatform?.model) agentLines.push(`model = ${toTomlString(codexPlatform.model)}`);
