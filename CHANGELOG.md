@@ -35,6 +35,8 @@ Re-running the install replaces the managed files, but it cannot undo commands t
 
 ### Fixed
 
+- A full build now replaces removable files, symlinks, FIFOs, and sockets at a generated platform path, so the full build that ULIS's provenance errors tell you to run can actually regenerate the tree.
+
 - A second Ctrl-C while a remote clone was still being aborted used to be ignored, and a cleanup step that itself threw (a locked file on Windows, a flaky network mount) could strand every cleanup still queued behind it and surface as an uncaught exception inside the signal handler. A repeat interrupt now exits regardless, and cleanups run inside a `try`/`catch`.
 
 ### ⚠ Behaviour changes

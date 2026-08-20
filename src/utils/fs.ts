@@ -29,9 +29,7 @@ export function copyDir(src: string, dest: string, shouldCopy?: (relativePath: s
 }
 
 export function cleanDir(dirPath: string): void {
-  if (existsSync(dirPath)) {
-    rmSync(dirPath, { recursive: true, force: true });
-  }
+  rmSync(dirPath, { recursive: true, force: true });
   ensureDir(dirPath);
 }
 

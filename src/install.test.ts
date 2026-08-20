@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import {
+  chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -3066,12 +3068,46 @@ describe("cross-run remote provenance", () => {
     expect(existsSync(join(projectDir, ".codex"))).toBe(false);
   });
 
-  // Locks in the before-loop write ordering (`build.ts`): a build that throws partway through a
-  // multi-target run must not leave the platforms it already wrote unrecorded. Forces a
-  // deterministic mid-loop throw with a broken symlink sitting where the second target's output
-  // directory needs to go - `cleanDir`'s `mkdirSync(..., { recursive: true })` throws `EEXIST`
-  // rather than silently succeeding, since a path occupied by a (broken) symlink still exists.
-  it("records provenance before generation starts, so a throw partway through a build still protects the platforms it already wrote", () => {
+  // POSIX permission bits are bypassed by root, so this test is a no-op under root and on Windows.
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "records provenance before generation starts, so a throw partway through a build still protects the platforms it already wrote",
+    () => {
+      const root = createTempRoot();
+      const sourceDir = join(root, ".ulis");
+      const presetDir = join(root, "preset");
+      const outputDir = join(sourceDir, "generated");
+      const restrictedDir = join(outputDir, "codex", "sub");
+      writeMinimalSource(sourceDir, "base");
+      writeMinimalSource(presetDir, "preset");
+      mkdirSync(restrictedDir, { recursive: true });
+      write(join(restrictedDir, "f.txt"), "x");
+      chmodSync(restrictedDir, 0o555);
+
+      let thrown: unknown;
+      try {
+        runBuild({
+          sourceDir,
+          outputDir,
+          targets: ["claude", "codex"],
+          logger: silentLogger,
+          presets: [{ name: "team", dir: presetDir, remoteUrl: "https://github.com/o/evil" }],
+        });
+      } catch (error) {
+        thrown = error;
+      } finally {
+        if (existsSync(restrictedDir)) chmodSync(restrictedDir, 0o755);
+      }
+
+      expect((thrown as NodeJS.ErrnoException | undefined)?.code).toBe("EACCES");
+      expect(existsSync(join(outputDir, "claude"))).toBe(true);
+      const marker = JSON.parse(read(join(outputDir, "claude", ".ulis-provenance.json"))) as {
+        remoteSources: readonly string[];
+      };
+      expect(marker.remoteSources).toEqual(["https://github.com/o/evil"]);
+    },
+  );
+
+  it("heals a platform output symlink during a full build", () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const presetDir = join(root, "preset");
@@ -3081,24 +3117,15 @@ describe("cross-run remote provenance", () => {
     mkdirSync(outputDir, { recursive: true });
     symlinkSync(join(root, "does-not-exist"), join(outputDir, "codex"));
 
-    let thrown: unknown;
-    try {
-      runBuild({
-        sourceDir,
-        outputDir,
-        // "claude" first (must survive), then "codex" (blocked, throws).
-        targets: ["claude", "codex"],
-        logger: silentLogger,
-        presets: [{ name: "team", dir: presetDir, remoteUrl: "https://github.com/o/evil" }],
-      });
-    } catch (error) {
-      thrown = error;
-    }
-    // Confirms the failure is actually the blocked mkdir this test sets up, not some unrelated throw.
-    expect((thrown as NodeJS.ErrnoException | undefined)?.code).toBe("EEXIST");
+    runBuild({
+      sourceDir,
+      outputDir,
+      logger: silentLogger,
+      presets: [{ name: "team", dir: presetDir, remoteUrl: "https://github.com/o/evil" }],
+    });
 
-    expect(existsSync(join(outputDir, "claude"))).toBe(true);
-    const marker = JSON.parse(read(join(outputDir, "claude", ".ulis-provenance.json"))) as {
+    expect(lstatSync(join(outputDir, "codex")).isDirectory()).toBe(true);
+    const marker = JSON.parse(read(join(outputDir, "codex", ".ulis-provenance.json"))) as {
       remoteSources: readonly string[];
     };
     expect(marker.remoteSources).toEqual(["https://github.com/o/evil"]);
