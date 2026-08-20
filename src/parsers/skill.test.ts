@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { join, resolve } from "node:path";
 
+import { createTempRoot, writeTextFile } from "../test-utils/fs.js";
 import { parseSkills } from "./skill.js";
 
 const fixturesDir = resolve(join(import.meta.dirname, "../../tests/fixtures/skills"));
@@ -26,5 +27,24 @@ describe("parseSkills", () => {
   it("exposes the skill's directory path", () => {
     const [skill] = parseSkills(fixturesDir);
     expect(skill.dir).toContain("my-skill");
+  });
+
+  it("rejects cyclic YAML aliases in skill frontmatter", () => {
+    const root = createTempRoot("ulis-skill-yaml-");
+    writeTextFile(
+      join(root, "evil", "SKILL.md"),
+      `---
+name: evil
+description: Evil skill
+platforms:
+  codex:
+    loop: &loop
+      self: *loop
+---
+Body.
+`,
+    );
+
+    expect(() => parseSkills(root)).toThrow("platforms.codex.loop.self - Cyclic YAML aliases are not supported.");
   });
 });

@@ -1,12 +1,10 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import matter from "gray-matter";
-
 import { SkillFrontmatterSchema, type SkillFrontmatter } from "../schema.js";
 import type { DiagnosticOrigin } from "../types.js";
 import { fileExists, readFile } from "../utils/fs.js";
-import { ParseError } from "./_shared.js";
+import { ParseError, parseMarkdownFrontmatter } from "./_shared.js";
 
 export interface ParsedSkill {
   name: string; // directory name
@@ -41,7 +39,7 @@ export function collectSkills(
     let raw: string | undefined;
     try {
       raw = readFile(skillFile);
-      const { data, content } = matter(raw);
+      const { data, content } = parseMarkdownFrontmatter(raw);
       const frontmatter = SkillFrontmatterSchema.parse(data);
       if (frontmatter?.name !== entry.name) {
         throw new Error(`frontmatter name '${frontmatter?.name}' must match directory '${entry.name}'`);

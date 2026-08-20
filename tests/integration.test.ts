@@ -110,7 +110,7 @@ describe("Claude generator", () => {
   it("generates agent .md with correct frontmatter", () => {
     const c = get(m, "agents/worker.md");
     expect(c).toContain("name: worker");
-    expect(c).toContain("description: A minimal test agent");
+    expect(c).toContain('description: "A minimal test agent, focus: safe changes"');
     expect(c).toContain("model: claude-haiku-4-5-20251001");
   });
 
@@ -386,7 +386,7 @@ describe("Cursor generator", () => {
 
   it("generates agent .mdc with model", () => {
     const mdc = get(m, "agents/worker.mdc");
-    expect(mdc).toContain("description: A minimal test agent");
+    expect(mdc).toContain('description: "A minimal test agent, focus: safe changes"');
     expect(mdc).toContain("model:");
   });
 
@@ -452,7 +452,7 @@ describe("ForgeCode generator", () => {
   it("generates agent markdown with Forge frontmatter", () => {
     const c = get(m, ".forge/agents/worker.md");
     expect(c).toContain("id: worker");
-    expect(c).toContain("description: A minimal test agent");
+    expect(c).toContain('description: "A minimal test agent, focus: safe changes"');
     expect(c).toContain("tools:");
   });
 

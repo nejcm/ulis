@@ -2,7 +2,7 @@ export const GOLDEN_ARTIFACTS = {
   claude: {
     "agents/worker.md": `---
 name: worker
-description: A minimal test agent
+description: "A minimal test agent, focus: safe changes"
 model: claude-haiku-4-5-20251001
 tools: "Read, Glob, Grep, Edit"
 disallowedTools: Bash
@@ -44,7 +44,7 @@ You are a minimal worker agent used for testing.
   "small_model": "opencode/kimi-k2.5-free",
   "agent": {
     "worker": {
-      "description": "A minimal test agent",
+      "description": "A minimal test agent, focus: safe changes",
       "mode": "subagent",
       "model": "claude-haiku-4-5-20251001",
       "tools": {
@@ -113,7 +113,7 @@ bearer_token_env_var = "TEST_REMOTE_TOKEN"
 #   rateLimit: 30/hour
 
 name = "worker"
-description = "A minimal test agent"
+description = "A minimal test agent, focus: safe changes"
 
 developer_instructions = """
 You are a minimal worker agent used for testing.\\
@@ -122,7 +122,7 @@ You are a minimal worker agent used for testing.\\
   },
   cursor: {
     "agents/worker.mdc": `---
-description: A minimal test agent
+description: "A minimal test agent, focus: safe changes"
 model: claude-haiku-4-5-20251001
 readonly: true
 tools:
@@ -158,7 +158,7 @@ You are a minimal worker agent used for testing.
     ".forge/agents/worker.md": `---
 id: worker
 title: worker
-description: A minimal test agent
+description: "A minimal test agent, focus: safe changes"
 model: claude-haiku-4-5-20251001
 tools:
   - read

@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import matter from "gray-matter";
-import type { ZodSchema } from "zod";
+import { ZodError, type ZodSchema } from "zod";
 
 import { deriveDiagnosticOrigin, formatCause, suggestFix } from "../diagnostics.js";
 import type { Diagnostic, DiagnosticOrigin } from "../types.js";
@@ -112,7 +112,7 @@ export function readMarkdownDir<TFrontmatter, TItem>(
     let raw: string | undefined;
     try {
       raw = readFile(absoluteFile);
-      const { data, content } = matter(raw);
+      const { data, content } = parseMarkdownFrontmatter(raw);
       const frontmatter = schema.parse(data);
       const name = opts?.recursive ? relFile.replace(/\.md$/, "") : basename(relFile, ".md");
       const origin: DiagnosticOrigin = {
@@ -138,6 +138,39 @@ export function readMarkdownDir<TFrontmatter, TItem>(
   }
 
   return { items, errors };
+}
+
+export function parseMarkdownFrontmatter(raw: string) {
+  const parsed = matter(raw);
+  assertSafeYamlFrontmatter(parsed.data);
+  return parsed;
+}
+
+function assertSafeYamlFrontmatter(
+  value: unknown,
+  path: PropertyKey[] = [],
+  ancestors: WeakSet<object> = new WeakSet(),
+  depth = 0,
+): void {
+  if (depth > 100) {
+    throw new ZodError([{ code: "custom", path, message: "YAML frontmatter cannot exceed 100 levels." }]);
+  }
+  if (value === null || typeof value !== "object" || value instanceof Date) return;
+  const prototype = Object.getPrototypeOf(value);
+  if (!Array.isArray(value) && prototype !== null && prototype !== Object.prototype) {
+    throw new ZodError([{ code: "custom", path, message: "Non-plain YAML values are not supported." }]);
+  }
+  if (ancestors.has(value)) {
+    throw new ZodError([{ code: "custom", path, message: "Cyclic YAML aliases are not supported." }]);
+  }
+  ancestors.add(value);
+  try {
+    for (const [key, child] of Object.entries(value)) {
+      assertSafeYamlFrontmatter(child, [...path, key], ancestors, depth + 1);
+    }
+  } finally {
+    ancestors.delete(value);
+  }
 }
 
 function frontmatterContent(raw: string): string | undefined {

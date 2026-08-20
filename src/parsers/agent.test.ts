@@ -13,7 +13,7 @@ describe("parseAgents", () => {
 
     const [worker] = agents;
     expect(worker.name).toBe("worker");
-    expect(worker.frontmatter.description).toBe("A minimal test agent");
+    expect(worker.frontmatter.description).toBe("A minimal test agent, focus: safe changes");
     expect(worker.frontmatter.model).toBe("claude-haiku-4-5-20251001");
     const tools = worker.frontmatter.tools;
     if (typeof tools === "string") throw new Error("expected tools object");

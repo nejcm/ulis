@@ -11,13 +11,19 @@
 
 /** Bare where the format allows it, quoted where it does not. TOML basic strings escape like JSON. */
 const BARE_KEY = /^[A-Za-z0-9_-]+$/u;
+const YAML_RESOLVES_NON_STRING = /^[-+]?(?:[0-9]|\.[0-9])/u;
+const YAML_RESERVED_SCALAR = /^(?:true|false|null|~|y|n|yes|no|on|off|\.nan|[-+]?\.inf)$/iu;
+
+export function yamlScalarResolvesNonString(value: string): boolean {
+  return YAML_RESOLVES_NON_STRING.test(value) || YAML_RESERVED_SCALAR.test(value);
+}
 
 /**
  * One dotted segment of a TOML key or table header. `[mcp_servers.<name>]` must pass `<name>`
  * through here, or a `]`, a newline or a quote in it opens a table the user never wrote.
  */
 export function toTomlKey(segment: string): string {
-  return BARE_KEY.test(segment) ? segment : JSON.stringify(segment);
+  return BARE_KEY.test(segment) && !/^-+$/u.test(segment) ? segment : JSON.stringify(segment);
 }
 
 /** A dotted TOML table header, each segment quoted independently: `[a.b]`, `[a."odd key"]`. */
@@ -31,5 +37,5 @@ export function toTomlTableHeader(...segments: readonly string[]): string {
  * is how an unknown `platforms.claude` key smuggled a whole `hooks:` block into an agent file.
  */
 export function toYamlKey(key: string): string {
-  return BARE_KEY.test(key) ? key : JSON.stringify(key);
+  return BARE_KEY.test(key) && !/^-+$/u.test(key) && !yamlScalarResolvesNonString(key) ? key : JSON.stringify(key);
 }

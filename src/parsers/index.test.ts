@@ -19,7 +19,7 @@ describe("parseProject (happy path)", () => {
     const p = parseProject(fixturesDir);
     expect(p.agents.length).toBe(1);
     expect(p.agents[0].name).toBe("worker");
-    expect(p.agents[0].frontmatter.description).toBe("A minimal test agent");
+    expect(p.agents[0].frontmatter.description).toBe("A minimal test agent, focus: safe changes");
   });
 
   it("parses skills from fixtures dir", () => {
