@@ -17,12 +17,13 @@ import { ensureDir, removePath } from "./fs.js";
 import { MANAGED_PLATFORM_LAYOUTS } from "./layouts.js";
 
 export const ULIS_MANIFEST_FILENAME = ".ulis-manifest.json";
-const MANIFEST_VERSION = 1;
+const MANIFEST_VERSION = 2;
 
 export interface OwnershipManifest {
-  readonly version: typeof MANIFEST_VERSION;
+  readonly version: 1 | typeof MANIFEST_VERSION;
   readonly agents: readonly string[];
   readonly skills: readonly string[];
+  readonly rootEntries: readonly string[] | undefined;
 }
 
 export interface PlatformOwnership {
@@ -82,19 +83,28 @@ function readManifest(platform: Platform, targetDir: string): OwnershipManifest 
     throw new InstallError(`Invalid ULIS ownership manifest for ${platform} at ${manifestPath}`, error);
   }
 
-  if (!isRecord(raw) || raw.version !== MANIFEST_VERSION) {
+  if (!isRecord(raw) || (raw.version !== 1 && raw.version !== MANIFEST_VERSION)) {
     const version = isRecord(raw) ? String(raw.version) : "missing";
     throw new InstallError(
-      `Unsupported ULIS ownership manifest for ${platform} at ${manifestPath}: expected version ${MANIFEST_VERSION}, received ${version}`,
+      `Unsupported ULIS ownership manifest for ${platform} at ${manifestPath}: expected version 1 or ${MANIFEST_VERSION}, received ${version}`,
     );
   }
   if (!Array.isArray(raw.agents) || !Array.isArray(raw.skills)) {
     throw new InstallError(`Invalid ULIS ownership manifest for ${platform} at ${manifestPath}: expected arrays`);
   }
+  if (raw.version === MANIFEST_VERSION && !Array.isArray(raw.rootEntries)) {
+    throw new InstallError(
+      `Invalid ULIS ownership manifest for ${platform} at ${manifestPath}: expected rootEntries array`,
+    );
+  }
 
   const agents = validatePaths(platform, "agents", raw.agents, manifestPath);
   const skills = validatePaths(platform, "skills", raw.skills, manifestPath);
-  return { version: MANIFEST_VERSION, agents, skills };
+  const rootEntries =
+    raw.version === MANIFEST_VERSION
+      ? validateRootEntries(raw.rootEntries as readonly unknown[], manifestPath)
+      : undefined;
+  return { version: raw.version, agents, skills, rootEntries };
 }
 
 function collectGeneratedManifest(platform: Platform, outputDir: string): OwnershipManifest {
@@ -111,7 +121,37 @@ function collectGeneratedManifest(platform: Platform, outputDir: string): Owners
     version: MANIFEST_VERSION,
     agents: validatePaths(platform, "agents", agents, platformOutput),
     skills: validatePaths(platform, "skills", skills, platformOutput),
+    rootEntries: listRootEntries(platformOutput),
   };
+}
+
+function listRootEntries(dirPath: string): string[] {
+  if (!existsSync(dirPath)) return [];
+  try {
+    return validateRootEntries(readdirSync(dirPath), dirPath);
+  } catch (error) {
+    if (error instanceof InstallError) throw error;
+    throw new InstallError(`Failed to inspect generated root entries at ${dirPath}`, error);
+  }
+}
+
+function validateRootEntries(values: readonly unknown[], sourcePath: string): string[] {
+  const entries: string[] = [];
+  for (const value of values) {
+    if (
+      typeof value !== "string" ||
+      !value ||
+      value === "." ||
+      value === ".." ||
+      value.includes("/") ||
+      value.includes("\\") ||
+      value.includes("\0")
+    ) {
+      throw new InstallError(`Unsafe root entry in ULIS ownership data at ${sourcePath}: ${String(value)}`);
+    }
+    entries.push(value);
+  }
+  return [...new Set(entries)].sort();
 }
 
 function listNames(dirPath: string, expectedType: "file" | "directory"): string[] {

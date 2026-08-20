@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { join } from "node:path";
 
 import type { ParsedRule } from "../../parsers/rule.js";
+import { PLATFORM_DIRS, resolvePlatformDirSegment } from "../../platforms.js";
 import { buildRulesIndex } from "./rules-index.js";
 
 function createRule(overrides: Partial<ParsedRule> = {}): ParsedRule {
@@ -40,5 +41,15 @@ describe("buildRulesIndex", () => {
     expect(result).not.toBeNull();
     expect(result?.artifacts).toEqual([{ path: join("rules", "common/code-review.md"), contents: "rule content\n" }]);
     expect(result?.appendEntry.content).toContain("`~/.codex/rules/common/code-review.md`");
+  });
+
+  it("uses the documented OpenCode home path in AGENTS.md rule links", () => {
+    const result = buildRulesIndex([createRule({ body: "rule content\n" })], {
+      artifactPrefix: "rules",
+      referencePrefix: join("~", resolvePlatformDirSegment(PLATFORM_DIRS.opencode.home), "rules"),
+      indexPath: "AGENTS.md",
+    });
+
+    expect(result?.appendEntry.content).toContain("`~/.config/opencode/rules/common/code-review.md`");
   });
 });

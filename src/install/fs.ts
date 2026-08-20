@@ -13,6 +13,7 @@ export interface CopyPlatformContentsOptions {
   readonly skipNames?: ReadonlySet<string>;
   readonly namedDirectories?: Readonly<Record<string, NamedDirectoryCopyRule>>;
   readonly pruneExtraNames?: boolean;
+  readonly previouslyManagedRootEntries?: readonly string[];
 }
 
 export function backupPath(targetPath: string, timestamp: string): string {
@@ -56,7 +57,13 @@ export function copyPlatformContents(
   targetDir: string,
   options: CopyPlatformContentsOptions = {},
 ): void {
-  const { logger, skipNames = new Set(), namedDirectories = {}, pruneExtraNames = false } = options;
+  const {
+    logger,
+    skipNames = new Set(),
+    namedDirectories = {},
+    pruneExtraNames = false,
+    previouslyManagedRootEntries,
+  } = options;
   ensureDir(targetDir);
   if (!existsSync(sourceDir)) {
     throw new InstallError(`Generated platform directory does not exist: ${sourceDir}`);
@@ -64,7 +71,7 @@ export function copyPlatformContents(
 
   const entries = readDirectoryEntries(sourceDir);
   if (pruneExtraNames) {
-    pruneExtraTargetEntries(targetDir, entries, skipNames, namedDirectories);
+    pruneExtraTargetEntries(targetDir, entries, previouslyManagedRootEntries, skipNames, namedDirectories);
   }
 
   for (const entry of entries) {
@@ -90,11 +97,14 @@ export function copyPlatformContents(
 function pruneExtraTargetEntries(
   targetDir: string,
   sourceEntries: readonly string[],
+  previouslyManagedRootEntries: readonly string[] | undefined,
   skipNames: ReadonlySet<string>,
   namedDirectories: Readonly<Record<string, NamedDirectoryCopyRule>>,
 ): void {
   const sourceNames = new Set(sourceEntries);
-  for (const targetEntry of readDirectoryEntries(targetDir)) {
+  // Root entries do not pass validateManagedDestinations' realpath containment check. Names are
+  // manifest-validated, and rmSync removes a symlink itself instead of following its target.
+  for (const targetEntry of previouslyManagedRootEntries ?? []) {
     if (
       hasName(sourceNames, targetEntry) ||
       hasName(skipNames, targetEntry) ||

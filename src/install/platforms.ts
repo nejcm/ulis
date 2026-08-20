@@ -1,16 +1,20 @@
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { ULIS_PROVENANCE_FILENAME } from "../config.js";
 import {
   PLATFORM_DIRS,
   PLATFORM_LABELS,
+  PLATFORMS,
+  isSamePath,
   platformConfigDir,
   resolvePlatformDirSegment,
   type Platform,
 } from "../platforms.js";
 import {
   capturePreservedNativeConfigs,
+  nativeConfigFilenames,
   PreservedNativeConfigParseError,
   writePreservedNativeConfigs,
   type CapturedPreservedNativeConfig,
@@ -21,28 +25,38 @@ import { MANAGED_PLATFORM_LAYOUTS } from "./layouts.js";
 import { ULIS_MANIFEST_FILENAME } from "./manifest.js";
 import type { InstallContext } from "./types.js";
 
-export async function installOpencode(context: InstallContext): Promise<void> {
+const PLATFORM_INSTALL_SKIP_NAMES: Readonly<Record<Platform, ReadonlySet<string>>> = Object.fromEntries(
+  PLATFORMS.map((platform) => [platform, reservedNames(...nativeConfigFilenames(platform))]),
+) as Record<Platform, ReadonlySet<string>>;
+
+export async function installOpencode(
+  context: InstallContext,
+  previouslyManagedRootEntries?: readonly string[],
+): Promise<void> {
   const targetDir = platformConfigDir("opencode", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "opencode");
 
   logHeader(context, `Installing ${PLATFORM_LABELS.opencode}`);
+  warnLegacyOpencodeDirectories(context);
   backupDirectory(targetDir, context);
   const preservedConfigs = capturePlatformPreservedNativeConfigs("opencode", context);
+  ensureDir(targetDir);
+  writePlatformPreservedNativeConfigs("opencode", preservedConfigs, context);
 
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
-    skipNames: reservedNames(),
+    skipNames: PLATFORM_INSTALL_SKIP_NAMES.opencode,
     namedDirectories: managedDirectoryRules("opencode"),
-    pruneExtraNames: true,
+    pruneExtraNames: context.prune,
+    previouslyManagedRootEntries,
   });
-  writePlatformPreservedNativeConfigs("opencode", preservedConfigs, context);
   logSuccess(context, `OpenCode -> ${targetDir}`);
 }
 
 export async function installClaude(context: InstallContext): Promise<void> {
   const targetDir = platformConfigDir("claude", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "claude");
-  const targetRootConfig = context.globalInstall
+  const targetRootConfig = isSamePath(context.destBase, context.userHome)
     ? join(context.destBase, ".claude.json")
     : join(context.destBase, ".mcp.json");
 
@@ -56,7 +70,7 @@ export async function installClaude(context: InstallContext): Promise<void> {
 
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
-    skipNames: reservedNames("settings.json", "settings.local.json", ".claude.json"),
+    skipNames: PLATFORM_INSTALL_SKIP_NAMES.claude,
     namedDirectories: managedDirectoryRules("claude"),
   });
 }
@@ -69,12 +83,12 @@ export async function installCodex(context: InstallContext): Promise<void> {
   backupDirectory(targetDir, context);
   const preservedConfigs = capturePlatformPreservedNativeConfigs("codex", context);
   ensureDir(targetDir);
+  writePlatformPreservedNativeConfigs("codex", preservedConfigs, context);
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
-    skipNames: reservedNames("config.toml"),
+    skipNames: PLATFORM_INSTALL_SKIP_NAMES.codex,
     namedDirectories: managedDirectoryRules("codex"),
   });
-  writePlatformPreservedNativeConfigs("codex", preservedConfigs, context);
 }
 
 export async function installCursor(context: InstallContext): Promise<void> {
@@ -90,7 +104,7 @@ export async function installCursor(context: InstallContext): Promise<void> {
 
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
-    skipNames: reservedNames("mcp.json"),
+    skipNames: PLATFORM_INSTALL_SKIP_NAMES.cursor,
     namedDirectories: managedDirectoryRules("cursor"),
   });
 }
@@ -106,47 +120,43 @@ export async function installForgecode(context: InstallContext): Promise<void> {
   backupFile(targetMcp, context);
   const preservedConfigs = capturePlatformPreservedNativeConfigs("forgecode", context);
   ensureDir(targetForgeDir);
+  writePlatformPreservedNativeConfigs("forgecode", preservedConfigs, context);
 
   if (existsSync(sourceForgeDir)) {
     copyPlatformContents(sourceForgeDir, targetForgeDir, {
       logger: context.logger,
-      skipNames: reservedNames(".mcp.json"),
+      skipNames: PLATFORM_INSTALL_SKIP_NAMES.forgecode,
       namedDirectories: managedDirectoryRules("forgecode"),
     });
   }
 
   copyPlatformContents(sourceDir, targetForgeDir, {
     logger: context.logger,
-    skipNames: reservedNames(resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project), ".forge.toml"),
+    skipNames: reservedNames(
+      ...PLATFORM_INSTALL_SKIP_NAMES.forgecode,
+      resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project),
+    ),
   });
-
-  writePlatformPreservedNativeConfigs("forgecode", preservedConfigs, context);
 }
 
 export function detectInstallCollisions(
   destBase: string,
   targets: readonly Platform[],
-  globalInstall: boolean,
-  userHome?: string,
+  userHome: string = homedir(),
 ): string[] {
   const paths = new Set<string>();
   for (const platform of targets) {
-    for (const path of detectPlatformCollisions(platform, destBase, globalInstall, userHome)) {
+    for (const path of detectPlatformCollisions(platform, destBase, userHome)) {
       paths.add(path);
     }
   }
   return [...paths];
 }
 
-function detectPlatformCollisions(
-  platform: Platform,
-  destBase: string,
-  globalInstall: boolean,
-  userHome?: string,
-): readonly string[] {
+function detectPlatformCollisions(platform: Platform, destBase: string, userHome: string): readonly string[] {
   switch (platform) {
     case "claude":
-      return detectClaudeCollisions(destBase, globalInstall, userHome);
+      return detectClaudeCollisions(destBase, userHome);
     case "forgecode":
       return detectForgecodeCollisions(destBase, userHome);
     case "codex":
@@ -156,9 +166,9 @@ function detectPlatformCollisions(
   }
 }
 
-function detectClaudeCollisions(destBase: string, globalInstall: boolean, userHome?: string): readonly string[] {
+function detectClaudeCollisions(destBase: string, userHome: string): readonly string[] {
   const paths: string[] = [];
-  const rootConfigPath = globalInstall ? join(destBase, ".claude.json") : join(destBase, ".mcp.json");
+  const rootConfigPath = isSamePath(destBase, userHome) ? join(destBase, ".claude.json") : join(destBase, ".mcp.json");
   if (existsSync(rootConfigPath)) {
     paths.push(rootConfigPath);
   }
@@ -216,6 +226,19 @@ function capturePlatformPreservedNativeConfigs(
       throw new InstallError(error.message, error);
     }
     throw new InstallError(`Failed to capture preserved native config for ${platform}`, error);
+  }
+}
+
+function warnLegacyOpencodeDirectories(context: InstallContext): void {
+  if (!isSamePath(context.destBase, context.userHome)) return;
+
+  const targetDir = platformConfigDir("opencode", context.userHome, context.userHome);
+  for (const legacyDir of [join(context.userHome, "opencode"), join(context.userHome, ".opencode")]) {
+    if (existsSync(join(legacyDir, ULIS_MANIFEST_FILENAME))) {
+      context.logger?.warn(
+        `Legacy OpenCode directory found at ${legacyDir}. Move its contents to ${targetDir} or remove it.`,
+      );
+    }
   }
 }
 

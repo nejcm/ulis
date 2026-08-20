@@ -523,9 +523,11 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
 
   for (const platform of options.platforms) {
     throwIfAborted(options.signal);
+    const platformOwnership = ownership.get(platform);
+    if (!platformOwnership) throw new InstallError(`Missing ownership preflight data for ${platform}`);
     switch (platform) {
       case "opencode":
-        await installOpencode(context);
+        await installOpencode(context, platformOwnership.previous?.rootEntries);
         break;
       case "claude":
         await installClaude(context);
@@ -540,8 +542,6 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
         await installForgecode(context);
         break;
     }
-    const platformOwnership = ownership.get(platform);
-    if (!platformOwnership) throw new InstallError(`Missing ownership preflight data for ${platform}`);
     reconcileOwnership(platform, platformOwnership, context.prune, context.logger);
   }
 

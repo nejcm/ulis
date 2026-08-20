@@ -60,7 +60,7 @@ export async function installCmd(options: InstallCmdOptions = {}): Promise<void>
     // `--global` is the flag that decides this, not the resolved mode: a remote source resolves to
     // mode "remote" while still installing into the home tree.
     const globalInstall = options.global === true;
-    const collisions = detectInstallCollisions(destBase, targets, globalInstall);
+    const collisions = detectInstallCollisions(destBase, targets, options.homeDir);
     if (collisions.length > 0 && !options.yes) {
       log.warn("The following folders already exist and will be modified/overwritten:");
       for (const path of collisions) {

@@ -390,6 +390,10 @@ export const NATIVE_CONFIG_FILENAMES: ReadonlySet<string> = new Set(
   PRESERVED_NATIVE_CONFIGS.flatMap((spec) => spec.names),
 );
 
+export function nativeConfigFilenames(platform: Platform): ReadonlySet<string> {
+  return new Set(PRESERVED_NATIVE_CONFIGS.filter((spec) => spec.platform === platform).flatMap((spec) => spec.names));
+}
+
 export function getPreservedNativeConfigEntries(
   platform: Platform,
   context: PreservedNativeConfigContext,

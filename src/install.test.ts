@@ -731,6 +731,40 @@ describe("runInstall", () => {
     });
   });
 
+  it("keeps preserved OpenCode MCP servers when the later platform copy fails", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const generatedDir = join(outputDir, "opencode");
+    const targetConfig = join(projectDir, ".opencode", "opencode.json");
+    write(join(generatedDir, "opencode.json"), JSON.stringify({ mcp: {} }));
+    write(join(generatedDir, "AGENTS.md"), "Generated instructions.\n");
+    write(targetConfig, JSON.stringify({ mcp: { existing: { command: ["old"] } } }));
+    mkdirSync(userHome, { recursive: true });
+    const logger: Logger = {
+      ...silentLogger,
+      success(message) {
+        if (message.startsWith("opencode.json")) rmSync(generatedDir, { recursive: true });
+      },
+    };
+
+    await expect(
+      runInstall({
+        sourceDir,
+        outputDir,
+        destBase: projectDir,
+        userHome,
+        platforms: ["opencode"],
+        rebuild: false,
+        logger,
+      }),
+    ).rejects.toThrow("Generated platform directory does not exist");
+
+    expect(JSON.parse(read(targetConfig)).mcp).toEqual({ existing: { command: ["old"] } });
+  });
+
   it("drops existing native config when generated config is absent and no allowlisted keys exist", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
@@ -1610,9 +1644,10 @@ describe("runInstall", () => {
 
     for (const configDir of [".claude", ".codex", ".cursor", ".opencode", ".forge"]) {
       expect(JSON.parse(read(join(projectDir, configDir, ".ulis-manifest.json")))).toEqual({
-        version: 1,
+        version: 2,
         agents: [],
         skills: [],
+        rootEntries: expect.any(Array),
       });
     }
     expect(copiedEntries).not.toContain(".ulis-manifest.json");
@@ -1687,8 +1722,9 @@ describe("runInstall", () => {
 
   for (const [caseName, manifest] of [
     ["malformed JSON", "{"],
-    ["a future version", JSON.stringify({ version: 2, agents: [], skills: [] })],
+    ["a future version", JSON.stringify({ version: 3, agents: [], skills: [], rootEntries: [] })],
     ["path traversal", JSON.stringify({ version: 1, agents: ["agents/../../outside.md"], skills: [] })],
+    ["root traversal", JSON.stringify({ version: 2, agents: [], skills: [], rootEntries: ["../outside"] })],
   ] as const) {
     it(`aborts every selected platform before mutation when a manifest has ${caseName}`, async () => {
       const root = createTempRoot();
@@ -1800,7 +1836,7 @@ describe("runInstall", () => {
     expect(read(join(projectDir, ".opencode", "agents", "specialized", "local.md"))).toBe("Local specialized agent.\n");
   });
 
-  it("prunes stale OpenCode non-agent and non-skill entries while preserving unmanaged agents and skills", async () => {
+  it("preserves unmanaged OpenCode root entries when no prior manifest exists", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -1827,10 +1863,168 @@ describe("runInstall", () => {
     });
 
     expect(read(join(projectDir, ".opencode", "AGENTS.md"))).toBe("Generated instructions.\n");
-    expect(existsSync(join(projectDir, ".opencode", "commands", "old.md"))).toBe(false);
-    expect(existsSync(join(projectDir, ".opencode", "docs", "old.md"))).toBe(false);
+    expect(existsSync(join(projectDir, ".opencode", "commands", "old.md"))).toBe(true);
+    expect(existsSync(join(projectDir, ".opencode", "docs", "old.md"))).toBe(true);
     expect(read(join(projectDir, ".opencode", "agents", "specialized", "local.md"))).toBe("Local agent.\n");
     expect(read(join(projectDir, ".opencode", "skills", "local", "SKILL.md"))).toBe("Local skill.\n");
+  });
+
+  it("prunes OpenCode root entries listed by a v2 manifest", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const generatedCommands = join(outputDir, "opencode", "commands");
+    mkdirSync(userHome, { recursive: true });
+    write(join(generatedCommands, "old.md"), "Old command.\n");
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["opencode"] as const,
+      rebuild: false,
+      logger: silentLogger,
+    };
+    await runInstall(options);
+    rmSync(generatedCommands, { recursive: true });
+    write(join(outputDir, "opencode", "AGENTS.md"), "Generated instructions.\n");
+
+    await runInstall(options);
+
+    expect(existsSync(join(projectDir, ".opencode", "commands"))).toBe(false);
+  });
+
+  it("--no-prune retains OpenCode root entries listed by a v2 manifest", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const generatedCommands = join(outputDir, "opencode", "commands");
+    mkdirSync(userHome, { recursive: true });
+    write(join(generatedCommands, "old.md"), "Old command.\n");
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["opencode"] as const,
+      rebuild: false,
+      logger: silentLogger,
+    };
+    await runInstall(options);
+    rmSync(generatedCommands, { recursive: true });
+    write(join(outputDir, "opencode", "AGENTS.md"), "Generated instructions.\n");
+
+    await runInstall({ ...options, prune: false });
+
+    expect(read(join(projectDir, ".opencode", "commands", "old.md"))).toBe("Old command.\n");
+  });
+
+  it("migrates a v1 manifest without sweeping OpenCode root entries", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const targetDir = join(projectDir, ".opencode");
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "opencode", "AGENTS.md"), "Generated instructions.\n");
+    write(join(targetDir, "commands", "old.md"), "Old command.\n");
+    write(join(targetDir, ".ulis-manifest.json"), JSON.stringify({ version: 1, agents: [], skills: [] }));
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["opencode"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(read(join(targetDir, "commands", "old.md"))).toBe("Old command.\n");
+    expect(JSON.parse(read(join(targetDir, ".ulis-manifest.json")))).toMatchObject({
+      version: 2,
+      rootEntries: ["AGENTS.md"],
+    });
+  });
+
+  it("does not warn about legacy home directories during a project install", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const warnings: string[] = [];
+    write(join(outputDir, "opencode", "AGENTS.md"), "Generated instructions.\n");
+    write(join(userHome, "opencode", ".ulis-manifest.json"), JSON.stringify({ version: 1, agents: [], skills: [] }));
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["opencode"],
+      rebuild: false,
+      logger: {
+        ...silentLogger,
+        warn(message) {
+          warnings.push(message);
+        },
+      },
+    });
+
+    expect(warnings).toEqual([]);
+  });
+
+  it("installs OpenCode globally into .config without touching legacy or unmanaged entries", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const userHome = join(root, "home");
+    const targetDir = join(userHome, ".config", "opencode");
+    const warnings: string[] = [];
+    const logger: Logger = {
+      ...silentLogger,
+      warn(message) {
+        warnings.push(message);
+      },
+    };
+    write(join(outputDir, "opencode", "AGENTS.md"), "Generated instructions.\n");
+    write(join(targetDir, "unmanaged.txt"), "Keep target.\n");
+    for (const legacyDir of [join(userHome, "opencode"), join(userHome, ".opencode")]) {
+      write(join(legacyDir, "unmanaged.txt"), "Keep legacy.\n");
+    }
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase: userHome,
+      userHome,
+      globalInstall: true,
+      platforms: ["opencode"] as const,
+      rebuild: false,
+      logger,
+    };
+    await runInstall(options);
+    expect(warnings).toEqual([]);
+    for (const legacyDir of [join(userHome, "opencode"), join(userHome, ".opencode")]) {
+      write(join(legacyDir, ".ulis-manifest.json"), JSON.stringify({ version: 1, agents: [], skills: [] }));
+    }
+    await runInstall({ ...options, prune: false });
+    write(join(targetDir, "commands", "old.md"), "Keep v1 entry.\n");
+    write(join(targetDir, ".ulis-manifest.json"), JSON.stringify({ version: 1, agents: [], skills: [] }));
+    await runInstall(options);
+
+    expect(read(join(targetDir, "AGENTS.md"))).toBe("Generated instructions.\n");
+    expect(read(join(targetDir, "unmanaged.txt"))).toBe("Keep target.\n");
+    expect(read(join(targetDir, "commands", "old.md"))).toBe("Keep v1 entry.\n");
+    expect(read(join(userHome, "opencode", "unmanaged.txt"))).toBe("Keep legacy.\n");
+    expect(read(join(userHome, ".opencode", "unmanaged.txt"))).toBe("Keep legacy.\n");
+    expect(warnings.some((message) => message.includes(join(userHome, "opencode")))).toBe(true);
+    expect(warnings.some((message) => message.includes(join(userHome, ".opencode")))).toBe(true);
   });
 
   it("writes Claude MCP servers to <project>/.mcp.json on a project install", async () => {
@@ -1895,6 +2089,37 @@ describe("runInstall", () => {
     expect(JSON.parse(read(join(userHome, ".claude.json")))).toEqual({
       mcpServers: { shared: { command: "generated" } },
     });
+  });
+
+  it("backs up the Claude root config selected by home-path equality", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const userHome = join(root, "home");
+    const targetConfig = join(userHome, ".claude.json");
+    const original = JSON.stringify({ mcpServers: { existing: { command: "existing" } } });
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "claude", "settings.json"), "{}");
+    write(join(outputDir, "claude", ".claude.json"), JSON.stringify({ mcpServers: {} }));
+    write(targetConfig, original);
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: userHome,
+      userHome,
+      globalInstall: false,
+      platforms: ["claude"],
+      rebuild: false,
+      backup: true,
+      logger: silentLogger,
+    });
+
+    const backup = readdirSync(userHome).find(
+      (entry) => entry.startsWith(".claude.json.") && entry.endsWith(".backup"),
+    );
+    expect(backup).toBeDefined();
+    expect(read(join(userHome, backup!))).toBe(original);
   });
 
   it("overlays generated MCP servers into ~/.claude.json without removing unmanaged servers", async () => {

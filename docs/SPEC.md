@@ -98,7 +98,7 @@ Preset-only install (`ulis preset install <names...>` and the TUI Presets screen
 
 ### 2.3 Install ownership
 
-Each selected platform config root stores `.ulis-manifest.json` version 1. It contains validated relative paths for agents and local skill directories installed by ULIS. The manifest excludes external `skills.yaml` installs, extension output, preserved native config, and other generated files.
+Each selected platform config root stores `.ulis-manifest.json` version 2. It contains validated relative paths for agents and local skill directories installed by ULIS, plus generated root entry names used by OpenCode pruning. Version 1 manifests remain readable and migrate without root-entry pruning. The manifest excludes external `skills.yaml` installs, extension output, and preserved native config.
 
 Before any selected destination is modified, ULIS reads and validates every selected platform manifest and derives the current managed set from generated output. Missing manifests trigger first-run adoption without pruning. After platform files are installed, ULIS removes `previous managed − current managed`, then atomically writes the current manifest. Ownership is path-based, so user edits to a tracked file do not prevent its removal. OpenCode records `agents/core/...` and `agents/specialized/...` separately.
 

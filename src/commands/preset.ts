@@ -79,7 +79,7 @@ export async function presetInstallCmd(
     );
     guard.onCleanup(cleanup);
 
-    const collisions = detectInstallCollisions(destBase, targets, Boolean(options.global), userHome);
+    const collisions = detectInstallCollisions(destBase, targets, userHome);
     if (collisions.length > 0 && !options.yes) {
       log.warn("The following folders already exist and will be modified/overwritten:");
       for (const path of collisions) {
