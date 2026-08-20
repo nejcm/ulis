@@ -46,6 +46,30 @@ describe("writeResult", () => {
     );
   });
 
+  it("rejects an artifact resolving to the reserved provenance path", () => {
+    const outDir = createTempRoot("ulis-writer-");
+    expect(() => writeResult(resultWithArtifact("nested/../.ulis-provenance.json"), outDir, "claude")).toThrow(
+      "Refusing to write a generated artifact at the reserved provenance path: nested/../.ulis-provenance.json",
+    );
+    expect(() => writeResult(resultWithArtifact(".ULIS-PROVENANCE.JSON"), outDir, "claude")).toThrow(
+      "reserved provenance path",
+    );
+  });
+
+  it("writes remote provenance before a payload write can fail", () => {
+    const outDir = createTempRoot("ulis-writer-");
+    const result: GenerationResult = {
+      artifacts: [
+        { path: "blocked", contents: "file" },
+        { path: "blocked/child.txt", contents: "unreachable" },
+      ],
+      post: { rawDirs: [], aliasFiles: [], skillDirs: [] },
+    };
+
+    expect(() => writeResult(result, outDir, "codex", undefined, ["https://github.com/o/r"])).toThrow();
+    expect(existsSync(join(outDir, ".ulis-provenance.json"))).toBe(true);
+  });
+
   it("copies skill directories into the default skills destination", () => {
     const root = createTempRoot("ulis-writer-");
     const outDir = join(root, "out");

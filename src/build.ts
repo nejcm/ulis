@@ -1,3 +1,4 @@
+import { rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { ULIS_GENERATED_DIRNAME } from "./config.js";
@@ -9,7 +10,7 @@ import { PLATFORMS, uniquePlatforms } from "./platforms.js";
 import type { Diagnostic } from "./types.js";
 import { logger as defaultLogger } from "./utils/logger.js";
 import { mergeProjects } from "./utils/merge-projects.js";
-import { writeProvenanceRecord } from "./utils/provenance.js";
+import { legacyRootRecordPath } from "./utils/provenance.js";
 import type { ResolvedPreset } from "./utils/resolve-presets.js";
 import { validateCollisions } from "./validators/collisions.js";
 import { validateCrossRefs } from "./validators/cross-refs.js";
@@ -225,23 +226,19 @@ export function runBuild(options: BuildOptions): BuildResult {
   const analysis = analyzeProject({ sourceDir, logger, presets: options.presets });
 
   const remoteUrls = (options.presets ?? []).flatMap((preset) => (preset.remoteUrl ? [preset.remoteUrl] : []));
-  // Recorded for `activeTargets` before generation starts, not after: if `generate`/`writeResult`
-  // throws partway through the loop below, the platforms already written must not be left
-  // unrecorded just because the build as a whole didn't finish.
-  if (remoteUrls.length > 0) writeProvenanceRecord(outputDir, activeTargets, remoteUrls);
 
   for (const target of activeTargets) {
     const outDir = join(outputDir, target);
     const result = generate(target, analysis.project);
     if (!result) throw new Error(`No generator registered for platform: ${target}`);
-    writeResult(result, outDir, target, logger);
+    writeResult(result, outDir, target, logger, remoteUrls);
   }
 
-  // A purely local build clears its own stale record for the platforms it just rebuilt, but only
-  // once they actually finished - a failing local rebuild must not erase a still-valid record for
-  // output it never touched. Other platforms' entries (from a differently-targeted build) are left
-  // alone; see `writeProvenanceRecord`.
-  if (remoteUrls.length === 0) writeProvenanceRecord(outputDir, activeTargets, []);
+  // The pre-release root record described the whole generated tree. Only a full build can replace
+  // everything it may have covered, so narrow builds leave the opaque refusal flag in place.
+  if (PLATFORMS.every((platform) => activeTargets.includes(platform))) {
+    rmSync(legacyRootRecordPath(outputDir), { force: true, recursive: true });
+  }
 
   logger.header("Build Complete");
   logger.success(`Generated configs for: ${activeTargets.join(", ")}`);

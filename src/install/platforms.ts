@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
+import { ULIS_PROVENANCE_FILENAME } from "../config.js";
 import {
   PLATFORM_DIRS,
   PLATFORM_LABELS,
@@ -251,7 +252,7 @@ function backupFile(targetPath: string, context: InstallContext): void {
 }
 
 function reservedNames(...names: readonly string[]): ReadonlySet<string> {
-  return new Set([ULIS_MANIFEST_FILENAME, ...names]);
+  return new Set([ULIS_MANIFEST_FILENAME, ULIS_PROVENANCE_FILENAME, ...names]);
 }
 
 function managedDirectoryRules(platform: Platform) {

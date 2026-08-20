@@ -74,15 +74,13 @@ Notes on how the gate behaves:
 - **`-y` / `--yes` accepts it**, along with the overwrite confirmation. This is the one escape hatch, for non-interactive runs — do not use it with a URL you have not read.
 - **In the TUI**, the same command list appears on the install review screen; proceeding from that screen is the consent. If anything about the plan changes after you review it, the install refuses to run rather than executing commands you did not see.
 - On Windows, a skill or extension argument containing a **shell metacharacter or a space** is refused rather than escaped, because the preview would otherwise show one argument where two would run.
-- **The gate can't be skipped across runs.** `ulis build --preset <url>` writes `generated/.ulis-provenance.json`,
-  recording which remote sources contributed to each generated platform's output. A later `ulis install
---skip-rebuild` reads it, scoped to the platforms being installed: if any of them still names a remote source
-  and this run resolved no remote preset of its own, the install refuses instead of deploying that tree
-  unreviewed — there is no clone left to preview, and skipping the rebuild also skips the gate. Re-run
-  `ulis install --preset <url>` so the source is resolved and reviewed again. A local rebuild only clears the
-  record **for the platforms it targets** — `ulis build --target codex` after a full remote build clears
-  `codex`'s entry but leaves the other platforms' recorded (and still gated) until they are rebuilt too, whether
-  locally or from the same remote source again.
+- **The gate can't be skipped across runs.** `ulis build --preset <url>` writes a provenance marker inside each
+  generated platform directory, recording the remote sources for that output. A later `ulis install
+--skip-rebuild` reads the selected platforms' markers. If any marker names a remote source and this run resolved
+  no remote preset of its own, install refuses instead of deploying that tree unreviewed. There is no clone left
+  to preview, and skipping the rebuild also skips the gate. Re-run `ulis install --preset <url>` so the source is
+  resolved and reviewed again. A local build replaces each targeted platform directory without a marker, while
+  markers inside untouched platform directories remain armed.
 
 ## Credentials in URLs
 

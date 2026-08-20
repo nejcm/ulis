@@ -187,18 +187,30 @@ function mergeOrCopyFile(srcFile: string, destFile: string): void {
   }
 }
 
-export function mergeOrCopyDir(srcDir: string, destDir: string): void {
+export function mergeOrCopyDir(
+  srcDir: string,
+  destDir: string,
+  shouldCopy: (relativePath: string) => boolean = () => true,
+): void {
   if (!fileExists(srcDir)) return;
-  ensureDir(destDir);
-  for (const entry of readdirSync(srcDir)) {
-    const srcPath = join(srcDir, entry);
-    const destPath = join(destDir, entry);
-    if (statSync(srcPath).isDirectory()) {
-      mergeOrCopyDir(srcPath, destPath);
-    } else {
-      mergeOrCopyFile(srcPath, destPath);
+
+  const visit = (currentSrcDir: string, currentDestDir: string, prefix: string): void => {
+    ensureDir(currentDestDir);
+    for (const entry of readdirSync(currentSrcDir)) {
+      const relativePath = join(prefix, entry);
+      if (!shouldCopy(relativePath)) continue;
+
+      const srcPath = join(currentSrcDir, entry);
+      const destPath = join(currentDestDir, entry);
+      if (statSync(srcPath).isDirectory()) {
+        visit(srcPath, destPath, relativePath);
+      } else {
+        mergeOrCopyFile(srcPath, destPath);
+      }
     }
-  }
+  };
+
+  visit(srcDir, destDir, "");
 }
 
 export type ConfigPath = readonly string[];

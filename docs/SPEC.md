@@ -24,24 +24,18 @@ ULIS is a CLI (`ulis`) that lets you define AI agent configurations **once** and
 ├── permissions.yaml
 └── config.yaml          ◄─── version + name + optional install + runner settings
 
-.ulis/generated/.ulis-provenance.json   ◄─── remote sources this build resolved, if any
+.ulis/generated/<platform>/.ulis-provenance.json ◄─── remote sources for that platform output, if any
 ```
 
-`ulis build` writes `generated/.ulis-provenance.json` (`{ version: 1, remoteSources: Record<platform, string[]> }`,
-keyed by platform, e.g. `{ "claude": ["https://github.com/o/r"] }`) for every platform in that build's targets,
-whenever any resolved preset carries a remote URL — including a target that preset itself contributed nothing
-to; over-recording is the safe direction. A local rebuild clears the record only for the platforms it targets
-(`--target codex` clears just `codex`'s entry; other platforms' entries from an earlier, wider build are
-untouched) and removes the file once no platform has an entry left. If the existing record is present but this
-ULIS version cannot parse or recognise it, a narrow rebuild leaves it exactly as it is rather than guess at what
-it named; only a _full_ rebuild (every platform directory actually present under `generated/` is in this
-build's targets) discards it, since nothing it could have named survives unregenerated. `ulis install
---skip-rebuild` reads the record, scoped to the platforms being installed: if any of them still names a remote
-source, or if the record cannot be parsed or recognised at all, the install refuses rather than deploy a tree it
-cannot vouch for — the same message either way names the reason and points at the fix. Re-run
-`ulis install --preset <url>` so the source is resolved and its commands reviewed again, or drop
-`--skip-rebuild` for a plain local rebuild of just the missing/stale platforms (a full rebuild if the record
-itself is unreadable).
+`ulis build` writes `generated/<platform>/.ulis-provenance.json` whenever a resolved preset carries a remote URL.
+The marker is `{ version: 1, remoteSources: string[] }`; URLs are redacted, deduplicated, and sorted. The writer
+creates it immediately after clearing that platform directory and before writing any payload, so provenance lives
+and is destroyed with the output it describes. A local build writes no marker.
+
+`ulis install --skip-rebuild` reads the selected platforms' markers. A malformed marker, an unsupported version,
+or any recorded remote source makes install refuse before writing a destination. Re-run
+`ulis install --preset <url>` to rebuild and review the source. A root-level `generated/.ulis-provenance.json` from
+the pre-release format also refuses; only a full `ulis build` without `--target` removes that opaque legacy flag.
 
 `ulis install` deploys the generated tree to the per-platform destination (`./.claude/`, `./.forge/`, etc.). Existing unmanaged destination agents and skills are left in place unless a generated entry has the same native name. Codex `config.toml`, Claude `settings.json`, and global `.claude.json` use base-first overlays: generated values overwrite matching paths and absent native values remain. Codex TOML comments and ordering outside generated paths are preserved. Other native configs preserve their allowlisted values or files, such as MCP server maps and ForgeCode `.forge.toml`.
 

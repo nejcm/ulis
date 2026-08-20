@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { stdin } from "node:process";
 
 import { analyzePresets, runBuild, type Logger } from "./build.js";
-import { ULIS_GENERATED_DIRNAME } from "./config.js";
+import { ULIS_GENERATED_DIRNAME, ULIS_PROVENANCE_FILENAME } from "./config.js";
 import { generate, writeResult } from "./generators/index.js";
 import { InstallError } from "./install/errors.js";
 import { preflightOwnership, reconcileOwnership } from "./install/manifest.js";
@@ -20,7 +20,7 @@ import { assertShellSafeArgv, commandExists as commandExistsOnPath } from "./uti
 import { loadValidatedConfigFile } from "./utils/config-loader.js";
 import { logger as defaultLogger } from "./utils/logger.js";
 import { confirm } from "./utils/prompt.js";
-import { readRecordedRemoteSources } from "./utils/provenance.js";
+import { legacyRootRecordPath, readRecordedRemoteSources } from "./utils/provenance.js";
 import { sanitizeLogText } from "./utils/redact.js";
 import type { ResolvedPreset } from "./utils/resolve-presets.js";
 
@@ -284,13 +284,23 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
   // platforms selected" early return two blocks down makes an empty list a no-op either way. That
   // coupling is incidental, not load-bearing: don't rely on it if this check ever moves.
   if (!rebuild) {
+    const legacyPath = legacyRootRecordPath(outputDir);
+    if (existsSync(legacyPath)) {
+      throw new InstallError(
+        `The generated tree at ${outputDir} carries a provenance record from a pre-release build of ULIS, which recorded provenance for the whole tree rather than per platform. ` +
+          "Run a full `ulis build` (no --target) to regenerate it, then retry.",
+      );
+    }
+
     const recordedRemoteSources = readRecordedRemoteSources(outputDir, platforms);
     if (recordedRemoteSources.length > 0) {
+      const recordedPlatforms = platforms.filter((platform) =>
+        existsSync(join(outputDir, platform, ULIS_PROVENANCE_FILENAME)),
+      );
       throw new InstallError(
         `This generated tree was built from ${recordedRemoteSources.join(", ")}; re-run ` +
           `\`ulis install --preset ${recordedRemoteSources.join(",")}\` so the commands can be reviewed against a fresh build. ` +
-          "If a listed platform's own generated/<platform> directory has since been deleted, its entry " +
-          "lingers until a rebuild touches that platform - drop --skip-rebuild to rebuild it locally and clear it.",
+          `Recorded for: ${recordedPlatforms.join(", ")}.`,
       );
     }
   }
@@ -429,12 +439,15 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
 
     throwIfAborted(options.signal);
     const analysis = analyzePresets({ presets, logger });
+    const remoteUrls = presets.flatMap((preset) => (preset.remoteUrl ? [preset.remoteUrl] : []));
     for (const target of platforms) {
       throwIfAborted(options.signal);
       const outDir = join(outputDir, target);
       const result = generate(target, analysis.project);
       if (!result) throw new Error(`No generator registered for platform: ${target}`);
-      writeResult(result, outDir, target, logger);
+      // This temporary tree is removed in `finally`; the marker keeps `writeResult` uniform but is
+      // not read by the preset install path.
+      writeResult(result, outDir, target, logger, remoteUrls);
     }
 
     throwIfAborted(options.signal);
