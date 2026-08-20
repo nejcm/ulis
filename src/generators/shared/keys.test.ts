@@ -367,7 +367,7 @@ Body.
 
   for (const platform of ["claude", "cursor"] as const) {
     // flips to it() in 2.4 — rule frontmatter
-    it.failing(`${platform} rule keeps a colon-bearing description as one frontmatter scalar`, () => {
+    it(`${platform} rule keeps a colon-bearing description as one frontmatter scalar`, () => {
       const description = "a: b";
       const sourceDir = sourceWith({
         "rules/evil.md": matter.stringify("Rule body.", { description, alwaysApply: true }),
@@ -382,7 +382,7 @@ Body.
     });
 
     // flips to it() in 2.4 — rule frontmatter
-    it.failing(`${platform} rule preserves quotes in a frontmatter scalar`, () => {
+    it(`${platform} rule preserves quotes in a frontmatter scalar`, () => {
       const description = '"quoted"';
       const sourceDir = sourceWith({
         "rules/evil.md": matter.stringify("Rule body.", { description, alwaysApply: true }),
@@ -397,7 +397,7 @@ Body.
     });
 
     // flips to it() in 2.4 — rule frontmatter
-    it.failing(`${platform} rule keeps a Windows path inside one frontmatter field`, () => {
+    it(`${platform} rule keeps a Windows path inside one frontmatter field`, () => {
       const paths = ["C:\\dev\\x"];
       const sourceDir = sourceWith({
         "rules/evil.md": matter.stringify("Rule body.", { paths, alwaysApply: true }),
@@ -409,6 +409,17 @@ Body.
       const parsed = matter(artifact!);
       expect(Object.keys(parsed.data)).toEqual([platform === "cursor" ? "globs" : "paths", "alwaysApply"]);
       expect(parsed.data[platform === "cursor" ? "globs" : "paths"]).toEqual(paths);
+    });
+
+    it(`${platform} rule emits a plain glob unquoted`, () => {
+      const sourceDir = sourceWith({
+        "rules/evil.md": matter.stringify("Rule body.", { paths: ["src"] }),
+      });
+      const path = platform === "cursor" ? join("rules", "evil.mdc") : join("rules", "evil.md");
+      const key = platform === "cursor" ? "globs" : "paths";
+
+      const artifact = generated(sourceDir, platform).get(path);
+      expect(artifact).toContain(`${key}:\n  - src\n---`);
     });
   }
 
