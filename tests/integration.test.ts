@@ -11,7 +11,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
+import matter from "gray-matter";
 import { parse as parseToml } from "smol-toml";
+import { parse as parseYaml } from "yaml";
 
 import { generate } from "../src/generators/index.js";
 import type { FileArtifact, ProjectBundle } from "../src/generators/types.js";
@@ -93,11 +95,11 @@ function assertSafeRelativeArtifactPath(path: string): void {
   expect(normalized.split("/")).not.toContain("");
 }
 
-function assertMarkdownFrontmatter(content: string): void {
-  if (!content.startsWith("---\n")) return;
-  const end = content.indexOf("\n---\n", 4);
-  expect(end).toBeGreaterThan(0);
-  expect(content.slice(end + "\n---\n".length).length).toBeGreaterThan(0);
+function assertMarkdownFrontmatter(content: string, expectedKeys: readonly string[]): void {
+  const parsed = matter(content);
+  expect(content.startsWith("---\n")).toBe(expectedKeys.length > 0);
+  expect(Object.keys(parsed.data).sort()).toEqual([...expectedKeys].sort());
+  expect(parsed.content.trim().length).toBeGreaterThan(0);
 }
 
 // ─── Claude ──────────────────────────────────────────────────────────────────
@@ -503,6 +505,21 @@ Review security-sensitive changes.
   });
 
   it("emits structurally valid and safe relative artifacts", () => {
+    const expectedFrontmatterKeys: Record<string, readonly string[]> = {
+      "claude:agents/worker.md": [
+        "name",
+        "description",
+        "model",
+        "tools",
+        "disallowedTools",
+        "permissionMode",
+        "hooks",
+      ],
+      "codex:skills/my-skill/SKILL.md": ["name", "description", "custom_agent_hint"],
+      "cursor:agents/worker.mdc": ["description", "model", "readonly", "tools"],
+      "forgecode:.forge/agents/worker.md": ["id", "title", "description", "model", "tools"],
+    };
+
     for (const platform of ["claude", "codex", "cursor", "opencode", "forgecode"] as const) {
       const result = generate(platform, buildProject());
       expect(result).toBeDefined();
@@ -517,8 +534,11 @@ Review security-sensitive changes.
         if (path.endsWith(".toml")) {
           expect(() => parseToml(contents)).not.toThrow();
         }
+        if (path.endsWith(".yaml") || path.endsWith(".yml")) {
+          expect(() => parseYaml(contents)).not.toThrow();
+        }
         if (path.endsWith(".md") || path.endsWith(".mdc")) {
-          assertMarkdownFrontmatter(contents);
+          assertMarkdownFrontmatter(contents, expectedFrontmatterKeys[`${platform}:${path}`] ?? []);
         }
       }
     }
