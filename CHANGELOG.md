@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format loosely foll
 
 Releases before this one predate this file. See [GitHub Releases](https://github.com/nejcm/ulis/releases) for their notes.
 
-## [Unreleased]
+## [0.8.0] — 2026-08-20
 
 0.7.0 introduced remote sources (`--source`/`--preset` accepting a git URL) behind a trust gate meant to stop unreviewed remote code from reaching your machine. That gate had several ways around it, closed in this release. **If you have used a remote `--source` or `--preset` on 0.7.0, treat anything it installed as unreviewed and re-run the install after upgrading.** If you have only ever used local sources, none of this applies to you.
 
@@ -53,4 +53,5 @@ Re-running the install replaces the managed files, but it cannot undo commands t
 
 3. **`--skip-rebuild` no longer applies when this run resolves a remote source.** `ulis install --preset <url> --skip-rebuild` now rebuilds anyway and logs why: the gate previews what the build produces, so installing a pre-existing `generated/` tree would show you one thing and install another.
 
-[Unreleased]: https://github.com/nejcm/ulis/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/nejcm/ulis/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/nejcm/ulis/releases/tag/v0.8.0
