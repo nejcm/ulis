@@ -396,12 +396,20 @@ export class TuiApp {
       this.lastPaneSignature = signature;
     }
 
+    let selected: [ScrollBoxRenderable, string] | undefined;
     for (const paneView of view.panes) {
       const scroll = this.paneScrolls.get(paneView.id);
       if (!scroll) continue;
       const box = scroll.parent;
       if (box instanceof BoxRenderable) box.title = ` ${paneView.title} `;
       this.fillPane(scroll, paneView);
+      const position = paneView.rows.findIndex((row) => row.kind === "option" && row.selected);
+      if (position >= 0) selected = [scroll, this.rowId(paneView.id, position)];
+    }
+    if (selected) {
+      this.renderer.root.calculateLayout();
+      this.renderer.root.updateLayout(0);
+      selected[0].scrollChildIntoView(selected[1]);
     }
   }
 
@@ -445,8 +453,12 @@ export class TuiApp {
     });
   }
 
+  private rowId(paneId: string, position: number): string {
+    return `ulis-row-${paneId}-${position}`;
+  }
+
   private createRow(paneId: string, position: number, row: ViewRow): Renderable {
-    const id = `ulis-row-${paneId}-${position}`;
+    const id = this.rowId(paneId, position);
 
     switch (row.kind) {
       case "blank":

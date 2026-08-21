@@ -68,6 +68,23 @@ afterEach(() => {
 });
 
 describe("TUI layout", () => {
+  it("keeps the selected install action visible at the minimum size", async () => {
+    const harness = await createHarness(MIN_COLUMNS, MIN_ROWS);
+    const state = harness.controller.state;
+    state.screen = "installReview";
+    state.remoteCommandSource = "https://github.com/acme/remote";
+    state.remoteCommands = Array.from({ length: 24 }, (_, index) => `remote command ${index + 1}`);
+    const fingerprint = reviewFingerprint(state, "install");
+
+    harness.controller.render();
+    await harness.renderOnce();
+    const frame = harness.captureCharFrame();
+
+    expect(frame).toContain("> Start install");
+    expect(await harness.frame()).toBe(frame);
+    expect(reviewFingerprint(state, "install")).toBe(fingerprint);
+  });
+
   it("renders the start screen with its options and control hints", async () => {
     const harness = await createHarness();
     const frame = await harness.frame();
