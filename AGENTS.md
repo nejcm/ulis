@@ -11,6 +11,7 @@ This repo has no `CLAUDE.md`, and should not get one. `AGENTS.md` is the single 
 - [`CONTEXT.md`](CONTEXT.md) — glossary. Use these terms when describing changes back to me: source vs destination, remote source, trust gate, preset layer vs preset source, raw fragment, ownership manifest, managed vs unmanaged entry, prune, preserved native config.
 - [`.agents/add-platform/`](.agents/add-platform/) — the checklist for adding a platform target. Read it before touching `src/platforms.ts`.
 - [`docs/SPEC.md`](docs/SPEC.md) architecture, [`docs/CLI.md`](docs/CLI.md) CLI surface, [`docs/TESTING.md`](docs/TESTING.md) what the suite covers and what it deliberately omits. `docs/REFERENCE.md` is meant to be the field-level schema reference but currently generates empty — read `src/schema/` directly instead.
+- [`archive/`](archive/) — archive of old plans and docs. These might not be relevant anymore but are kept for reference.
 
 ## Blast radius
 
