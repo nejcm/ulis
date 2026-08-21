@@ -23,7 +23,7 @@ import { loadMcp } from "../src/parsers/mcp.js";
 import { loadPermissions } from "../src/parsers/permissions.js";
 import { parseRules } from "../src/parsers/rule.js";
 import { parseSkills } from "../src/parsers/skill.js";
-import type { Platform } from "../src/platforms.js";
+import { PLATFORMS, type Platform } from "../src/platforms.js";
 import { UlisConfigSchema } from "../src/schema.js";
 import { validateCollisions } from "../src/validators/collisions.js";
 import { validateCrossRefs } from "../src/validators/cross-refs.js";
@@ -68,6 +68,39 @@ function createTempSource(): string {
 function write(path: string, content: string): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, content, "utf8");
+}
+
+/**
+ * Writes one identical fixture tree, creating entries in the given order so that the on-disk dirent
+ * order differs between calls with different orders. Byte content is identical either way.
+ */
+function materializeOrderingFixture(names: readonly string[]): ProjectBundle {
+  const sourceDir = createTempSource();
+  write(join(sourceDir, "config.yaml"), "version: 1\nname: ordering\n");
+  for (const name of names) {
+    write(
+      join(sourceDir, "rules", `${name}.md`),
+      `---\ndescription: Rule ${name}\npaths:\n  - src/${name}/**\n---\n\nRule ${name} body.\n`,
+    );
+    write(
+      join(sourceDir, "agents", `${name}.md`),
+      `---\ndescription: Agent ${name}\nmodel: claude-haiku-4-5-20251001\ntools:\n  read: true\n---\n\nAgent ${name} body.\n`,
+    );
+    write(
+      join(sourceDir, "skills", name, "SKILL.md"),
+      `---\nname: ${name}\ndescription: Skill ${name}\n---\n\nSkill ${name} body.\n`,
+    );
+  }
+
+  return {
+    agents: parseAgents(join(sourceDir, "agents")),
+    skills: parseSkills(join(sourceDir, "skills")),
+    rules: parseRules(join(sourceDir, "rules")),
+    mcp: loadMcp(sourceDir),
+    permissions: loadPermissions(sourceDir),
+    ulisConfig: UlisConfigSchema.parse({ version: 1, name: "ordering" }),
+    sourceDir,
+  };
 }
 
 afterEach(() => {
@@ -553,10 +586,21 @@ Review security-sensitive changes.
     }
   });
 
-  it("is pure: two runs produce byte-identical artifacts", () => {
-    const a = run("claude");
-    const b = run("claude");
-    expect([...a.entries()].sort()).toEqual([...b.entries()].sort());
+  it("is order-independent: two source copies written in opposite order produce byte-identical artifacts", () => {
+    // Traversal order — not just function purity — is what the "byte-identical output" invariant is
+    // exposed to: `readdirSync` under Bun returns raw dirent order (creation order on tmpfs,
+    // name-hash order on ext4/btrfs), and parse order becomes rule-index and agent-map key order.
+    // So build two copies of the same fixture whose entries were created in opposite order, and do
+    // NOT sort the entry lists here — sorting would normalize away the thing under test.
+    const names = ["alpha", "bravo", "delta", "mike", "zeta"];
+    const forward = materializeOrderingFixture(names);
+    const reversed = materializeOrderingFixture([...names].reverse());
+
+    for (const platform of PLATFORMS) {
+      const a = [...runProject(platform, forward).entries()];
+      const b = [...runProject(platform, reversed).entries()];
+      expect(a).toEqual(b);
+    }
   });
 
   it("returns FileArtifact[] for every registered platform", () => {
