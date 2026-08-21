@@ -28,10 +28,17 @@ import {
 
 const SPINNER_INTERVAL_MS = 120;
 const MAX_RETAINED_LOGS = 80;
+// Twice actions.ts's 5s child SIGINT-to-SIGKILL grace. Remote clones have their own 60s timeout;
+// shutdown waits for those unbounded so it never strands a partial credential-bearing clone.
+const SHUTDOWN_GRACE_MS = 10_000;
 
 export interface TuiControllerOptions {
   /** Overrides process exit so tests can observe the requested code. */
   readonly exit?: (code: number) => void;
+  /** Overrides stderr writes so tests can observe the final shutdown summary. */
+  readonly writeStderr?: (message: string) => void;
+  /** Overrides the graceful shutdown bound for deterministic controller tests. */
+  readonly shutdownGraceMs?: number;
   /** Overrides preset discovery; defaults to scanning the real preset roots. */
   readonly listPresets?: typeof listTuiPresets;
   /** Overrides clipboard reads for the explicit Ctrl+V paste path. */
@@ -84,6 +91,11 @@ export class TuiController {
   private readonly canSavePreferences: boolean;
   private lastSavedPreferences: string;
   private runAbortController: AbortController | undefined;
+  private runPromise: Promise<void> | undefined;
+  private lastRunOutcome: "ok" | "stopped" | "failed" | undefined;
+  private shutdownStarted = false;
+  private shutdownFinished = false;
+  private shutdownCode = 0;
   /** Clone backing the review screen. Reused by the install so what ran is what was shown. */
   private preparedRemote: PreparedReview | undefined;
   private prepareGeneration = 0;
@@ -239,22 +251,28 @@ export class TuiController {
 
     this.startSpinner();
 
+    const running = (async () => run(this.createLogger(), abortController.signal))();
+    this.runPromise = running;
     try {
-      await run(this.createLogger(), abortController.signal);
+      await running;
+      this.lastRunOutcome = "ok";
       this.state.resultTitle = `${title} Complete`;
       this.state.resultMessage = successMessage;
     } catch (error) {
       if (abortController.signal.aborted) {
+        this.lastRunOutcome = "stopped";
         this.state.resultTitle = `${title} Stopped`;
         this.state.resultMessage = `${title} stopped by user.`;
         this.pushLog(`[warn] ${this.state.resultMessage}`);
       } else {
+        this.lastRunOutcome = "failed";
         this.state.resultTitle = `${title} Failed`;
         this.state.resultMessage = error instanceof Error ? error.message : String(error);
         this.pushLog(`[error] ${this.state.resultMessage}`);
       }
     } finally {
       if (this.runAbortController === abortController) this.runAbortController = undefined;
+      if (this.runPromise === running) this.runPromise = undefined;
       this.clearSpinner();
       this.state.screen = "result";
       this.render();
@@ -480,23 +498,62 @@ export class TuiController {
   }
 
   async shutdown(code: number): Promise<void> {
+    if (this.shutdownStarted) {
+      if (this.preparePromises.size === 0) this.finishShutdown();
+      return;
+    }
+
+    this.shutdownStarted = true;
+    const run = this.runPromise;
+    const incomplete =
+      run != null ||
+      this.preparePromises.size > 0 ||
+      this.lastRunOutcome === "stopped" ||
+      this.lastRunOutcome === "failed";
+    this.shutdownCode = code === 0 && incomplete ? 1 : code;
     this.runAbortController?.abort();
-    this.runAbortController = undefined;
     this.prepareAbort?.abort();
-    this.prepareAbort = undefined;
-    // Aborting only *starts* the clone's teardown, and its temp root is removed by the resolver as
-    // it unwinds. Exiting synchronously here would kill the process first and strand a partial,
-    // credential-bearing clone, so wait for preparation to finish before tearing anything down.
-    // `allSettled`: preparation reports its own failures; shutdown only needs each to have finished.
+
+    // Aborting only starts clone teardown. The resolver owns the temp root until it returns, so a
+    // timeout or second Ctrl+C here could strand a partial clone containing credentials.
     if (this.preparePromises.size > 0) await Promise.allSettled([...this.preparePromises]);
+
+    if (run) {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        Promise.allSettled([run]),
+        new Promise<void>((resolve) => {
+          timeout = setTimeout(resolve, this.options.shutdownGraceMs ?? SHUTDOWN_GRACE_MS);
+        }),
+      ]);
+      if (timeout != null) clearTimeout(timeout);
+    }
+
+    this.finishShutdown();
+  }
+
+  private finishShutdown(): void {
+    if (this.shutdownFinished) return;
+    this.shutdownFinished = true;
     for (const cleanup of [...this.inFlightCleanups]) cleanup();
     this.inFlightCleanups.clear();
     this.disposePreparedRemote();
     this.clearSpinner();
     this.app.destroy();
     this.renderer.destroy();
+    if (this.shutdownCode !== 0) {
+      const summary = [...this.state.logs]
+        .reverse()
+        .find((line) => line.includes("Install summary"))
+        ?.replace(/^\[[^\]]+\]\s*/u, "");
+      const message = summary || this.state.resultMessage || this.state.notice || "ULIS workflow interrupted.";
+      const writeStderr = this.options.writeStderr ?? ((value: string) => process.stderr.write(value));
+      try {
+        writeStderr(`${message}\n`);
+      } catch {}
+    }
     const exit = this.options.exit ?? ((value: number) => process.exit(value));
-    exit(code);
+    exit(this.shutdownCode);
   }
 }
 

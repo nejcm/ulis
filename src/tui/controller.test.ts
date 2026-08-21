@@ -66,6 +66,7 @@ async function createHarness(
   const exitCodes: number[] = [];
   const controller = new TuiController(setup.renderer, {
     exit: (code) => exitCodes.push(code),
+    writeStderr: () => {},
     listPresets: () => [],
     preferencesPath: options.preferencesPath ?? preferencesPath(),
     ...options,
@@ -979,7 +980,72 @@ describe("TUI workflow runs", () => {
     expect(harness.controller.state.resultTitle).toBe("Build Stopped");
   });
 
-  it("aborts active work and destroys the renderer on Ctrl+C", async () => {
+  it("exits non-zero after q stops an install and q quits the result", async () => {
+    const harness = await createHarness(100, 30, {
+      runAction: async (_state, _action, _logger, options) => {
+        await new Promise<void>((_resolve, reject) => {
+          options?.signal?.addEventListener("abort", () => reject(new Error("stopped")), { once: true });
+        });
+      },
+    });
+    const stopping = harness.controller.handleEffect({ type: "start", action: "install" });
+    await harness.controller.handleEffect(handleTuiKey(harness.controller.state, "q"));
+    await stopping;
+    expect(harness.controller.state.resultTitle).toBe("Install Stopped");
+    await harness.controller.handleEffect(handleTuiKey(harness.controller.state, "q"));
+
+    expect(harness.exitCodes).toEqual([1]);
+  });
+
+  it("exits non-zero after a failed install", async () => {
+    const harness = await createHarness(100, 30, {
+      runAction: async () => {
+        throw new Error("install broke");
+      },
+    });
+    await harness.controller.handleEffect({ type: "start", action: "install" });
+    expect(harness.controller.state.resultTitle).toBe("Install Failed");
+    await harness.controller.handleEffect({ type: "exit", code: 0 });
+
+    expect(harness.exitCodes).toEqual([1]);
+  });
+
+  it("exits zero after a successful run clears an earlier failure", async () => {
+    let fail = true;
+    const stderr: string[] = [];
+    const harness = await createHarness(100, 30, {
+      writeStderr: (message) => stderr.push(message),
+      runAction: async () => {
+        if (fail) throw new Error("first run failed");
+      },
+    });
+
+    await harness.controller.handleEffect({ type: "start", action: "install" });
+    fail = false;
+    await harness.controller.handleEffect({ type: "start", action: "install" });
+    await harness.controller.handleEffect({ type: "exit", code: 0 });
+
+    expect(harness.exitCodes).toEqual([0]);
+    expect(stderr).toEqual([]);
+  });
+
+  it("still exits when the shutdown summary write fails", async () => {
+    const harness = await createHarness(100, 30, {
+      writeStderr: () => {
+        throw new Error("stderr failed");
+      },
+      runAction: async () => {
+        throw new Error("install broke");
+      },
+    });
+
+    await harness.controller.handleEffect({ type: "start", action: "install" });
+    await harness.controller.handleEffect({ type: "exit", code: 0 });
+
+    expect(harness.exitCodes).toEqual([1]);
+  });
+
+  it("routes Ctrl+C from the running app to a non-zero shutdown", async () => {
     let actionSignal: AbortSignal | undefined;
     const harness = await createHarness(100, 30, {
       runAction: async (_state, _action, _logger, options) => {
@@ -991,6 +1057,38 @@ describe("TUI workflow runs", () => {
         });
       },
     });
+
+    const pending = harness.controller.handleEffect({ type: "start", action: "install" });
+    harness.mockInput.pressCtrlC();
+    await pending;
+    await Bun.sleep(0);
+
+    expect(actionSignal?.aborted).toBe(true);
+    expect(harness.exitCodes).toEqual([1]);
+  });
+
+  it("waits for an interrupted install before exiting non-zero", async () => {
+    let actionSignal: AbortSignal | undefined;
+    let markStarted: (() => void) | undefined;
+    let releaseRun: (() => void) | undefined;
+    const stderr: string[] = [];
+    const runStarted = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const holdRun = new Promise<void>((resolve) => {
+      releaseRun = resolve;
+    });
+    const harness = await createHarness(100, 30, {
+      writeStderr: (message) => stderr.push(message),
+      runAction: async (_state, _action, logger, options) => {
+        const signal = options?.signal;
+        if (signal == null) throw new Error("Expected action cancellation signal.");
+        actionSignal = signal;
+        logger.info("Install summary — installed: [claude]");
+        markStarted?.();
+        await holdRun;
+      },
+    });
     const originalDestroy = harness.renderer.destroy.bind(harness.renderer);
     let destroyCalls = 0;
     harness.renderer.destroy = () => {
@@ -999,12 +1097,78 @@ describe("TUI workflow runs", () => {
     };
 
     const pending = harness.controller.handleEffect({ type: "start", action: "install" });
-    harness.mockInput.pressCtrlC();
-    await pending;
+    await runStarted;
+    const shuttingDown = harness.controller.handleEffect({ type: "exit", code: 0 });
 
     expect(actionSignal?.aborted).toBe(true);
+    expect(harness.exitCodes).toEqual([]);
+    expect(destroyCalls).toBe(0);
+    expect(stderr).toEqual([]);
+
+    releaseRun?.();
+    await Promise.all([pending, shuttingDown]);
+
     expect(destroyCalls).toBe(1);
-    expect(harness.exitCodes).toEqual([0]);
+    expect(harness.exitCodes).toEqual([1]);
+    expect(stderr).toEqual(["Install summary — installed: [claude]\n"]);
+  });
+
+  it("exits promptly when Ctrl+C is pressed again", async () => {
+    let markStarted: (() => void) | undefined;
+    let releaseRun: (() => void) | undefined;
+    const runStarted = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const holdRun = new Promise<void>((resolve) => {
+      releaseRun = resolve;
+    });
+    const harness = await createHarness(100, 30, {
+      runAction: async () => {
+        markStarted?.();
+        await holdRun;
+      },
+    });
+    const originalDestroy = harness.renderer.destroy.bind(harness.renderer);
+    let destroyCalls = 0;
+    harness.renderer.destroy = () => {
+      destroyCalls += 1;
+      originalDestroy();
+    };
+
+    const running = harness.controller.handleEffect({ type: "start", action: "install" });
+    await runStarted;
+    const firstShutdown = harness.controller.handleEffect({ type: "exit", code: 0 });
+    expect(harness.exitCodes).toEqual([]);
+
+    await harness.controller.handleEffect({ type: "exit", code: 0 });
+
+    expect(destroyCalls).toBe(1);
+    expect(harness.exitCodes).toEqual([1]);
+
+    releaseRun?.();
+    await Promise.all([running, firstShutdown]);
+    expect(destroyCalls).toBe(1);
+    expect(harness.exitCodes).toEqual([1]);
+  });
+
+  it("bounds the graceful shutdown wait", async () => {
+    let markStarted: (() => void) | undefined;
+    const runStarted = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const harness = await createHarness(100, 30, {
+      shutdownGraceMs: 10,
+      runAction: async () => {
+        markStarted?.();
+        await new Promise<void>(() => {});
+      },
+    });
+
+    void harness.controller.handleEffect({ type: "start", action: "install" });
+    await runStarted;
+    await harness.controller.handleEffect({ type: "exit", code: 0 });
+
+    expect(harness.exitCodes).toEqual([1]);
   });
 
   it("initializes a missing source before resuming the pending action", async () => {
@@ -1059,6 +1223,54 @@ describe("remote install consent", () => {
 
   afterEach(() => {
     installTest.resetRuntimeDependencies();
+  });
+
+  it("disposes the reviewed clone once after an interrupted install settles", async () => {
+    const cloned = mockClone();
+    let markStarted: (() => void) | undefined;
+    let releaseRun: (() => void) | undefined;
+    const runStarted = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const holdRun = new Promise<void>((resolve) => {
+      releaseRun = resolve;
+    });
+    const harness = await createHarness(100, 30, {
+      runAction: async () => {
+        markStarted?.();
+        await holdRun;
+      },
+    });
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+    await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+
+    const internals = harness.controller as unknown as {
+      preparedRemote: { cleanup: () => void };
+    };
+    const cleanup = internals.preparedRemote.cleanup;
+    let cleanupCalls = 0;
+    internals.preparedRemote.cleanup = () => {
+      cleanupCalls += 1;
+      cleanup();
+    };
+
+    const running = harness.controller.handleEffect({ type: "start", action: "install" });
+    await runStarted;
+    const shuttingDown = harness.controller.handleEffect({ type: "exit", code: 0 });
+
+    expect(cleanupCalls).toBe(0);
+    expect(cloned.map(existsSync)).toEqual([true]);
+    expect(harness.exitCodes).toEqual([]);
+
+    releaseRun?.();
+    await Promise.all([running, shuttingDown]);
+
+    expect(cleanupCalls).toBe(1);
+    expect(cloned.map(existsSync)).toEqual([false]);
+    expect(harness.exitCodes).toEqual([1]);
   });
 
   it("lists the remote source's real commands on the review screen", async () => {
@@ -1431,7 +1643,7 @@ describe("remote install consent", () => {
     await harness.controller.shutdown(0);
   });
 
-  it("removes an in-flight clone before exiting", async () => {
+  it("waits unbounded for an in-flight clone before exiting", async () => {
     const cloned: string[] = [];
     let release: (() => void) | undefined;
     installTest.setRuntimeDependencies({
@@ -1451,7 +1663,7 @@ describe("remote install consent", () => {
         return { status: 0, stdout: "", stderr: "" };
       },
     } as never);
-    const harness = await createHarness();
+    const harness = await createHarness(100, 30, { shutdownGraceMs: 10 });
     const state = harness.controller.state;
     state.sourceMode = "custom";
     state.customSource = url;
@@ -1460,11 +1672,18 @@ describe("remote install consent", () => {
     const preparing = harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
     await Bun.sleep(10);
     const shutting = harness.controller.shutdown(0);
+    await Bun.sleep(20);
+    await harness.controller.shutdown(0);
+
+    expect(harness.exitCodes).toEqual([]);
+    expect(cloned.map(existsSync)).toEqual([true]);
+
     release?.();
     await Promise.all([preparing, shutting]);
 
     expect(cloned).toHaveLength(1);
     expect(cloned.map(existsSync)).toEqual([false]);
+    expect(harness.exitCodes).toEqual([1]);
   });
 
   /** Puts the plan screen's cursor on Install, so a real `enter` starts the remote flow. */
