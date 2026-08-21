@@ -286,6 +286,152 @@ describe("runInstall", () => {
     }
   });
 
+  it("fails and summarizes a thrown external skill spawn error", async () => {
+    const fixture = createPlatformReportFixture();
+    const logs: string[] = [];
+    write(join(fixture.sourceDir, "skills.yaml"), ["codex:", "  skills:", "    - name: skill/bad", ""].join("\n"));
+    __test.setRuntimeDependencies({
+      async runAsyncCommand() {
+        throw new Error("spawn failed");
+      },
+    });
+
+    const install = runInstall({
+      sourceDir: fixture.sourceDir,
+      outputDir: fixture.outputDir,
+      destBase: fixture.destBase,
+      userHome: fixture.homeDir,
+      platforms: ["codex"],
+      rebuild: false,
+      installExtensions: false,
+      logger: captureLogger(logs),
+    });
+
+    await expect(install).rejects.toThrow("1 external skill or extension command failed.");
+    expect(logs.filter((line) => line.startsWith("Install summary"))).toEqual([
+      "Install summary — installed: [codex], failed external skills: [codex: skill/bad]",
+    ]);
+    expect(logs).not.toContain("Installation Complete");
+  });
+
+  it("fails and summarizes extension non-zero exits and spawn errors", async () => {
+    const fixture = createPlatformReportFixture();
+    const logs: string[] = [];
+    write(
+      join(fixture.sourceDir, "extensions.yaml"),
+      ["codex:", "  extensions:", "    - name: extension/non-zero", "    - name: extension/spawn-error", ""].join("\n"),
+    );
+    __test.setRuntimeDependencies({
+      runCommand: () => ({ status: 0, stdout: "", stderr: "" }) as never,
+      async runAsyncCommand(_command, args) {
+        if (args.includes("extension/non-zero")) {
+          return { status: 7, stdout: "", stderr: "extension exited 7" };
+        }
+        throw new Error("spawn failed");
+      },
+    });
+
+    const install = runInstall({
+      sourceDir: fixture.sourceDir,
+      outputDir: fixture.outputDir,
+      destBase: fixture.destBase,
+      userHome: fixture.homeDir,
+      platforms: ["codex"],
+      rebuild: false,
+      installSkills: false,
+      logger: captureLogger(logs),
+      runner: "npx",
+    });
+
+    await expect(install).rejects.toThrow("2 external skill or extension commands failed.");
+    expect(logs.filter((line) => line.startsWith("Install summary"))).toEqual([
+      "Install summary — installed: [codex], failed extensions: [codex: extension/non-zero, codex: extension/spawn-error]",
+    ]);
+    expect(logs).not.toContain("Installation Complete");
+  });
+
+  it("fails named extensions when the runner is missing and names the skip flag", async () => {
+    const fixture = createPlatformReportFixture();
+    const logs: string[] = [];
+    write(
+      join(fixture.sourceDir, "extensions.yaml"),
+      ["codex:", "  extensions:", "    - name: extension/one", "    - name: extension/two", ""].join("\n"),
+    );
+    __test.setRuntimeDependencies({
+      runCommand: () => ({ status: 1, stdout: "", stderr: "" }) as never,
+      async runAsyncCommand() {
+        throw new Error("extension command must not run without a runner");
+      },
+    });
+
+    const install = runInstall({
+      sourceDir: fixture.sourceDir,
+      outputDir: fixture.outputDir,
+      destBase: fixture.destBase,
+      userHome: fixture.homeDir,
+      platforms: ["codex"],
+      rebuild: false,
+      installSkills: false,
+      logger: captureLogger(logs),
+      runner: "npx",
+    });
+
+    await expect(install).rejects.toThrow("2 external skill or extension commands failed.");
+    expect(logs).toContain(
+      "npx not found on PATH - failed to install codex extensions. Pass --skip-extensions to proceed without them.",
+    );
+    expect(logs.filter((line) => line.startsWith("Install summary"))).toEqual([
+      "Install summary — installed: [codex], failed extensions: [codex: extension/one, codex: extension/two]",
+    ]);
+    expect(logs).not.toContain("Installation Complete");
+  });
+
+  it("keeps skill and extension spawn aborts as interruptions", async () => {
+    for (const kind of ["skill", "extension"] as const) {
+      const fixture = createPlatformReportFixture();
+      const logs: string[] = [];
+      const controller = new AbortController();
+      write(
+        join(fixture.sourceDir, kind === "skill" ? "skills.yaml" : "extensions.yaml"),
+        ["codex:", `  ${kind}s:`, `    - name: ${kind}/aborted`, ""].join("\n"),
+      );
+      __test.setRuntimeDependencies({
+        runCommand: () => ({ status: 0, stdout: "", stderr: "" }) as never,
+        async runAsyncCommand() {
+          controller.abort();
+          throw new Error("spawn aborted");
+        },
+      });
+
+      let error: unknown;
+      try {
+        await runInstall({
+          sourceDir: fixture.sourceDir,
+          outputDir: fixture.outputDir,
+          destBase: fixture.destBase,
+          userHome: fixture.homeDir,
+          platforms: ["codex"],
+          rebuild: false,
+          installSkills: kind === "skill",
+          installExtensions: kind === "extension",
+          logger: captureLogger(logs),
+          runner: "npx",
+          signal: controller.signal,
+        });
+      } catch (caught) {
+        error = caught;
+      }
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe("Install stopped by user.");
+      expect(logs.filter((line) => line.startsWith("Install summary"))).toEqual([
+        "Install summary — installed: [codex]",
+      ]);
+      expect(logs.some((line) => line.includes(`failed ${kind}`))).toBe(false);
+      expect(logs).not.toContain("Installation Complete");
+    }
+  });
+
   it("installs Codex skill agent metadata from source skill directories globally", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, "source");
@@ -1087,6 +1233,17 @@ describe("runInstall", () => {
       join(sourceDir, "extensions.yaml"),
       ["forgecode:", "  extensions:", "    - name: this-package-does-not-exist@latest", ""].join("\n"),
     );
+    const commands: string[] = [];
+    __test.setRuntimeDependencies({
+      runCommand(command) {
+        commands.push(command);
+        return { status: 0, stdout: "", stderr: "" } as never;
+      },
+      async runAsyncCommand(command) {
+        commands.push(command);
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
 
     const logs: string[] = [];
     const recordingLogger: Logger = {
@@ -1111,10 +1268,12 @@ describe("runInstall", () => {
       rebuild: false,
       installExtensions: false,
       logger: recordingLogger,
+      runner: "npx",
     });
 
     expect(logs.some((line) => line.includes("Will run:"))).toBe(false);
     expect(logs.some((line) => line.includes("this-package-does-not-exist"))).toBe(false);
+    expect(commands).toHaveLength(0);
   });
 
   it("scopes wildcard skill installs to selected project platforms", async () => {
@@ -1396,7 +1555,7 @@ describe("runInstall", () => {
       },
     });
 
-    await runInstall({
+    const install = runInstall({
       sourceDir,
       outputDir,
       destBase: projectDir,
@@ -1406,8 +1565,10 @@ describe("runInstall", () => {
       logger: recordingLogger,
     });
 
+    await expect(install).rejects.toThrow("1 external skill or extension command failed.");
     expect(logs).toContain("warn:Failed to install codex skill: skill/bad (last detail)");
     expect(logs).toContain("success:codex skill: skill/good");
+    expect(logs).toContain("warn:Install summary — installed: [codex], failed external skills: [codex: skill/bad]");
     expect(logs.indexOf("warn:Failed to install codex skill: skill/bad (last detail)")).toBeLessThan(
       logs.indexOf("success:codex skill: skill/good"),
     );
@@ -3753,6 +3914,52 @@ describe("cross-run remote provenance", () => {
 });
 
 describe("runPresetInstall", () => {
+  it("counts failed skills and extensions in one summary and suppresses completion", async () => {
+    const root = createTempRoot();
+    const presetDir = join(root, "preset");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const logs: string[] = [];
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(presetDir, "config.yaml"), "version: 1\nname: preset\n");
+    write(join(presetDir, "skills.yaml"), ["codex:", "  skills:", "    - name: preset/skill", ""].join("\n"));
+    write(
+      join(presetDir, "extensions.yaml"),
+      ["codex:", "  extensions:", "    - name: preset/extension", ""].join("\n"),
+    );
+    __test.setRuntimeDependencies({
+      runCommand: () => ({ status: 0, stdout: "", stderr: "" }) as never,
+      async runAsyncCommand() {
+        return { status: 1, stdout: "", stderr: "install failed" };
+      },
+    });
+    const record = (message: string) => logs.push(message);
+    const logger: Logger = {
+      info: record,
+      success: record,
+      warn: record,
+      error: record,
+      dim: record,
+      header: record,
+    };
+
+    const install = runPresetInstall({
+      presets: [{ name: "preset", dir: presetDir }],
+      destBase: projectDir,
+      userHome,
+      platforms: ["codex"],
+      logger,
+      runner: "npx",
+    });
+
+    await expect(install).rejects.toThrow("2 external skill or extension commands failed.");
+    expect(logs.filter((line) => line.startsWith("Install summary"))).toEqual([
+      "Install summary — installed: [codex], failed external skills: [codex: preset/skill], failed extensions: [codex: preset/extension]",
+    ]);
+    expect(logs).not.toContain("Preset Installation Complete");
+  });
+
   it("installs selected presets without a base source or persistent generated output", async () => {
     const root = createTempRoot();
     const presetA = join(root, "preset-a");

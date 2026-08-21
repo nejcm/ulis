@@ -127,7 +127,7 @@ export interface AsyncCommandResult {
 
 type SkillInstallLog =
   | { readonly level: "success"; readonly message: string }
-  | { readonly level: "warn"; readonly message: string };
+  | { readonly level: "warn"; readonly message: string; readonly name: string };
 
 type RunAsyncCommand = (
   command: string,
@@ -376,7 +376,7 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
     });
     const runner = resolveRunner({ cliFlag: options.runner, configValue: ulisConfig.runner });
 
-    const installed = await installGeneratedOutput({
+    const failureCount = await installGeneratedOutput({
       outputDir,
       destBase,
       userHome,
@@ -397,7 +397,12 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
       signal: options.signal,
     });
 
-    if (!installed) return [];
+    if (failureCount === false) return [];
+    if (failureCount > 0) {
+      throw new InstallError(
+        `${failureCount} external skill or extension command${failureCount === 1 ? "" : "s"} failed.`,
+      );
+    }
     logHeader(logger, "Installation Complete");
     return platforms;
   } finally {
@@ -462,7 +467,7 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
     const skillsConfig = mergeSkillsConfigs(presets.map((preset) => loadSkills(preset.dir)));
     const extensionsConfig = mergeExtensionsConfigs(presets.map((preset) => loadExtensions(preset.dir)));
 
-    const installed = await installGeneratedOutput({
+    const failureCount = await installGeneratedOutput({
       outputDir,
       destBase,
       userHome,
@@ -484,7 +489,12 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
     });
 
     throwIfAborted(options.signal);
-    if (!installed) return [];
+    if (failureCount === false) return [];
+    if (failureCount > 0) {
+      throw new InstallError(
+        `${failureCount} external skill or extension command${failureCount === 1 ? "" : "s"} failed.`,
+      );
+    }
     logHeader(logger, "Preset Installation Complete");
     return platforms;
   } finally {
@@ -495,8 +505,8 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
   }
 }
 
-/** Returns false when the trust gate was declined, in which case nothing was installed. */
-async function installGeneratedOutput(options: GeneratedInstallOptions): Promise<boolean> {
+/** Returns false when the trust gate was declined, otherwise the failed post-install command count. */
+async function installGeneratedOutput(options: GeneratedInstallOptions): Promise<number | false> {
   // The trust gate, before anything reaches the destination. Everything below either spawns a
   // command the remote source chose or writes a file the host agent loads as behaviour - a `.mcp.json`
   // server it spawns on next launch, a `raw/` hook fragment it runs on next session start. Gating
@@ -531,6 +541,8 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
 
   const installed: Platform[] = [];
   const failures: { readonly platform: Platform; readonly error: unknown }[] = [];
+  const failedSkills: string[] = [];
+  const failedExtensions: string[] = [];
   try {
     for (const platform of options.platforms) {
       throwIfAborted(options.signal, failures[0]?.error);
@@ -562,62 +574,77 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
       }
     }
     throwIfAborted(options.signal, failures[0]?.error);
-  } finally {
-    if (installed.length > 0 || failures.length > 0) {
-      const summary = `Install summary — installed: [${installed.join(", ")}]${
-        failures.length > 0 ? `, failed: [${failures.map(({ platform }) => platform).join(", ")}]` : ""
-      }`;
-      if (failures.length > 0) logWarn(options.logger, summary);
-      else logInfo(options.logger, summary);
-    }
-  }
-  if (failures.length > 0) throw failures[0]!.error;
+    if (failures.length > 0) throw failures[0]!.error;
 
-  if (options.installSkillsEnabled) {
-    for (const platform of options.platforms) {
-      throwIfAborted(options.signal);
-      const platformSkills = options.skillsConfig[platform]?.skills ?? [];
-      if (platformSkills.length > 0) {
-        await installSkills(
-          platformSkills,
-          platform,
-          options.destBase,
-          options.globalInstall,
-          options.logger,
-          [],
-          options.signal,
+    if (options.installSkillsEnabled) {
+      for (const platform of options.platforms) {
+        throwIfAborted(options.signal);
+        const platformSkills = options.skillsConfig[platform]?.skills ?? [];
+        if (platformSkills.length > 0) {
+          failedSkills.push(
+            ...(await installSkills(
+              platformSkills,
+              platform,
+              options.destBase,
+              options.globalInstall,
+              options.logger,
+              [],
+              options.signal,
+            )),
+          );
+        }
+      }
+
+      const allSkills = options.skillsConfig["*"]?.skills ?? [];
+      if (allSkills.length > 0) {
+        logHeader(options.logger, "Installing External Skills");
+        failedSkills.push(
+          ...(await installSkills(
+            allSkills,
+            "*",
+            options.destBase,
+            options.globalInstall,
+            options.logger,
+            options.platforms,
+            options.signal,
+          )),
         );
       }
     }
 
-    const allSkills = options.skillsConfig["*"]?.skills ?? [];
-    if (allSkills.length > 0) {
-      logHeader(options.logger, "Installing External Skills");
-      await installSkills(
-        allSkills,
-        "*",
-        options.destBase,
-        options.globalInstall,
-        options.logger,
-        options.platforms,
-        options.signal,
-      );
+    if (options.installExtensionsEnabled) {
+      for (const platform of options.platforms) {
+        throwIfAborted(options.signal);
+        failedExtensions.push(...(await runPlatformExtensions(context, platform, options.signal)));
+      }
+
+      const allExtensions = options.extensionsConfig["*"]?.extensions ?? [];
+      if (allExtensions.length > 0) {
+        logHeader(options.logger, "Installing Extensions");
+        failedExtensions.push(
+          ...(await installExtensions(
+            allExtensions,
+            "*",
+            options.destBase,
+            options.runner,
+            options.logger,
+            options.signal,
+          )),
+        );
+      }
+    }
+    return failedSkills.length + failedExtensions.length;
+  } finally {
+    if (installed.length > 0 || failures.length > 0) {
+      const summary = `Install summary — installed: [${installed.join(", ")}]${
+        failures.length > 0 ? `, failed: [${failures.map(({ platform }) => platform).join(", ")}]` : ""
+      }${failedSkills.length > 0 ? `, failed external skills: [${failedSkills.join(", ")}]` : ""}${
+        failedExtensions.length > 0 ? `, failed extensions: [${failedExtensions.join(", ")}]` : ""
+      }`;
+      if (failures.length + failedSkills.length + failedExtensions.length > 0) logWarn(options.logger, summary);
+      else logInfo(options.logger, summary);
     }
   }
-
-  if (!options.installExtensionsEnabled) return true;
-
-  for (const platform of options.platforms) {
-    throwIfAborted(options.signal);
-    await runPlatformExtensions(context, platform, options.signal);
-  }
-
-  const allExtensions = options.extensionsConfig["*"]?.extensions ?? [];
-  if (allExtensions.length > 0) {
-    logHeader(options.logger, "Installing Extensions");
-    await installExtensions(allExtensions, "*", options.destBase, options.runner, options.logger, options.signal);
-  }
-  return true;
 }
 
 // map platform key to skills argument agent name
@@ -820,10 +847,10 @@ async function installSkills(
   logger?: Logger,
   selectedPlatforms: readonly Platform[] = [],
   signal?: AbortSignal,
-): Promise<void> {
-  if (skills.length === 0) return;
+): Promise<readonly string[]> {
+  if (skills.length === 0) return [];
   const agentNames = skillAgentNames(platform, selectedPlatforms);
-  if (agentNames.length === 0) return;
+  if (agentNames.length === 0) return [];
   const agentFlags = ["-a", ...agentNames];
 
   const results = await runBounded(
@@ -832,17 +859,31 @@ async function installSkills(
     async (skill): Promise<SkillInstallLog> => {
       throwIfAborted(signal);
       const npxArgs = skillNpxArgs(skill, agentFlags, globalInstall);
+      const name = `${platform}: ${skill.key ?? skill.name}`;
       logInfo(logger, `Installing ${platform} skill: ${skill.key ?? skill.name}`);
-      const result = await runSkillCommand("npx", npxArgs, {
-        stdio: ["ignore", "pipe", "pipe"],
-        cwd: installBaseDir,
-        shell: process.platform === "win32",
-        signal,
-      });
+      let result: AsyncCommandResult;
+      try {
+        result = await runSkillCommand("npx", npxArgs, {
+          stdio: ["ignore", "pipe", "pipe"],
+          cwd: installBaseDir,
+          shell: process.platform === "win32",
+          signal,
+        });
+      } catch (error) {
+        throwIfAborted(signal, error);
+        return {
+          level: "warn",
+          name,
+          message: `Failed to install ${platform} skill: ${skill.key ?? skill.name} (${formatCommandFailure({
+            error: error instanceof Error ? error : new Error(String(error)),
+          })})`,
+        };
+      }
       throwIfAborted(signal);
       if (result.status !== 0) {
         return {
           level: "warn",
+          name,
           message: `Failed to install ${platform} skill: ${skill.key ?? skill.name} (${formatCommandFailure(result)})`,
         };
       }
@@ -855,6 +896,7 @@ async function installSkills(
     if (result.level === "warn") logWarn(logger, result.message);
     else logSuccess(logger, result.message);
   }
+  return results.flatMap((result) => (result.level === "warn" ? [result.name] : []));
 }
 
 async function runBounded<T, U>(
@@ -879,11 +921,15 @@ async function runBounded<T, U>(
   return results;
 }
 
-async function runPlatformExtensions(context: InstallContext, platform: Platform, signal?: AbortSignal): Promise<void> {
-  if (!context.installExtensionsEnabled) return;
+async function runPlatformExtensions(
+  context: InstallContext,
+  platform: Platform,
+  signal?: AbortSignal,
+): Promise<readonly string[]> {
+  if (!context.installExtensionsEnabled) return [];
   const entries = context.extensions[platform]?.extensions ?? [];
-  if (entries.length === 0) return;
-  await installExtensions(entries, platform, context.destBase, context.runner, context.logger, signal);
+  if (entries.length === 0) return [];
+  return installExtensions(entries, platform, context.destBase, context.runner, context.logger, signal);
 }
 
 async function installExtensions(
@@ -893,11 +939,15 @@ async function installExtensions(
   runner: InstallRunner,
   logger?: Logger,
   signal?: AbortSignal,
-): Promise<void> {
-  if (extensions.length === 0) return;
+): Promise<readonly string[]> {
+  if (extensions.length === 0) return [];
+  const failed: string[] = [];
   if (!commandExists(runner)) {
-    logWarn(logger, `${runner} not found on PATH - skipping ${platform} extensions.`);
-    return;
+    logWarn(
+      logger,
+      `${runner} not found on PATH - failed to install ${platform} extensions. Pass --skip-extensions to proceed without them.`,
+    );
+    return extensions.map((extension) => `${platform}: ${extension.key ?? extension.name}`);
   }
 
   for (const extension of extensions) {
@@ -907,14 +957,29 @@ async function installExtensions(
     // terminal controls to erase the preview the user just approved.
     logInfo(logger, `Will run: ${formatCommandPreview([runner, ...args])}`);
 
-    const result = await runSkillCommand(runner, args, {
-      stdio: ["ignore", "pipe", "pipe"],
-      cwd: installBaseDir,
-      shell: process.platform === "win32",
-      signal,
-    });
+    const name = `${platform}: ${extension.key ?? extension.name}`;
+    let result: AsyncCommandResult;
+    try {
+      result = await runSkillCommand(runner, args, {
+        stdio: ["ignore", "pipe", "pipe"],
+        cwd: installBaseDir,
+        shell: process.platform === "win32",
+        signal,
+      });
+    } catch (error) {
+      throwIfAborted(signal, error);
+      failed.push(name);
+      logWarn(
+        logger,
+        `Failed to install ${platform} extension: ${extension.key ?? extension.name} (${formatCommandFailure({
+          error: error instanceof Error ? error : new Error(String(error)),
+        })})`,
+      );
+      continue;
+    }
     throwIfAborted(signal);
     if (result.status !== 0) {
+      failed.push(name);
       logWarn(
         logger,
         `Failed to install ${platform} extension: ${extension.key ?? extension.name} (${formatCommandFailure(result)})`,
@@ -923,6 +988,7 @@ async function installExtensions(
     }
     logSuccess(logger, `${platform} extension: ${extension.key ?? extension.name}`);
   }
+  return failed;
 }
 
 function throwIfAborted(signal?: AbortSignal, cause?: unknown): void {

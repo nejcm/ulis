@@ -177,10 +177,10 @@ ulis preset install <names...> [-g | --global] [--target <platforms>]
 
 ## Exit codes
 
-| Code | Meaning                                                                                                                                |
-| ---- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | Success. Also an interactive **no** at the [trust gate](/guide/remote-sources#the-trust-gate), which installs nothing but is a choice. |
-| 1    | Source missing, validation error, declined overwrite prompt, a trust gate that cannot be asked (no terminal, no `-y`), or I/O failure. |
+| Code | Meaning                                                                                                                                                                                              |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | Success. Also an interactive **no** at the [trust gate](/guide/remote-sources#the-trust-gate), which installs nothing but is a choice.                                                               |
+| 1    | Source missing, validation error, declined overwrite prompt, a trust gate that cannot be asked (no terminal, no `-y`), I/O failure, or one or more `skills.yaml`/`extensions.yaml` commands failing. |
 
 All errors print a single human-readable line on stderr before exiting.
 
