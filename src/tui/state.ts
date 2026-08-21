@@ -121,7 +121,7 @@ export interface PreparedRemoteInstall {
   readonly cleanup: () => void;
 }
 
-export type TuiEffect =
+export type TuiEffect = { readonly discardRemoteReview?: true } & (
   | { readonly type: "none" }
   | { readonly type: "exit"; readonly code: number }
   | { readonly type: "cancelRunning" }
@@ -129,7 +129,8 @@ export type TuiEffect =
   | { readonly type: "initSource" }
   | { readonly type: "loadCustomPresetSource"; readonly path: string }
   | { readonly type: "pasteClipboard" }
-  | { readonly type: "prepareRemoteInstall"; readonly action: "install" | "presetInstall" };
+  | { readonly type: "prepareRemoteInstall"; readonly action: "install" | "presetInstall" }
+);
 
 type NavigationDirection = "up" | "down";
 
@@ -649,18 +650,8 @@ function navigateBack(state: TuiState): TuiEffect {
     return { type: "none" };
   }
 
-  if (state.screen === "installReview") {
-    state.screen = "plan";
-    state.cursor = planItemCursor(state, "install");
-    state.notice = "";
-    return { type: "none" };
-  }
-
-  if (state.screen === "presetInstallReview") {
-    state.screen = "plan";
-    state.cursor = planItemCursor(state, "install");
-    state.notice = "";
-    return { type: "none" };
+  if (state.screen === "installReview" || state.screen === "presetInstallReview") {
+    return leaveReview(state);
   }
 
   if (state.screen === "result") {
@@ -679,29 +670,30 @@ function handleFlowKey(state: TuiState, key: string): TuiEffect {
   if (!isConfirmKey(key)) return { type: "none" };
 
   state.notice = "";
+  let effect: TuiEffect;
   if (state.cursor === 0) {
-    applyFlowDefaults(state, "project");
+    effect = applyFlowDefaults(state, "project");
     state.screen = "plan";
     state.cursor = 0;
   } else if (state.cursor === 1) {
-    applyFlowDefaults(state, "global");
+    effect = applyFlowDefaults(state, "global");
     state.screen = "plan";
     state.cursor = 0;
   } else if (state.cursor === 2) {
-    applyFlowDefaults(state, "custom");
+    effect = applyFlowDefaults(state, "custom");
     openCustomSourceInput(state);
   } else if (state.cursor === 3) {
-    applyFlowDefaults(state, "presetsOnly");
+    effect = applyFlowDefaults(state, "presetsOnly");
     state.screen = "presets";
     state.cursor = 0;
     if (state.presetSourceMode === "custom" && state.customPresetSource) {
-      return { type: "loadCustomPresetSource", path: state.customPresetSource };
+      return { type: "loadCustomPresetSource", path: state.customPresetSource, discardRemoteReview: true };
     }
   } else {
     return { type: "exit", code: 0 };
   }
 
-  return { type: "none" };
+  return effect;
 }
 
 function handlePlanKey(state: TuiState, key: string): TuiEffect {
@@ -801,8 +793,9 @@ function handlePlanKey(state: TuiState, key: string): TuiEffect {
   return { type: "none" };
 }
 
-function applyFlowDefaults(state: TuiState, flow: TuiFlow): void {
+function applyFlowDefaults(state: TuiState, flow: TuiFlow): TuiEffect {
   storeCurrentFlowPreferences(state);
+  clearRemoteReview(state);
   state.flow = flow;
   if (flow === "project") {
     state.sourceMode = "project";
@@ -823,6 +816,7 @@ function applyFlowDefaults(state: TuiState, flow: TuiFlow): void {
     state.customPresetSource = "";
   }
   applyFlowPreferences(state, flow);
+  return { type: "none", discardRemoteReview: true };
 }
 
 function handleSourceKey(state: TuiState, key: string): TuiEffect {
@@ -1050,11 +1044,8 @@ function handleInstallReviewKey(state: TuiState, key: string): TuiEffect {
 
   if (state.cursor === 0) {
     return { type: "start", action: "install" };
-  } else {
-    state.screen = "plan";
-    state.cursor = planItemCursor(state, "install");
   }
-  return { type: "none" };
+  return leaveReview(state);
 }
 
 function handlePresetInstallReviewKey(state: TuiState, key: string): TuiEffect {
@@ -1085,11 +1076,21 @@ function handlePresetInstallReviewKey(state: TuiState, key: string): TuiEffect {
       return { type: "none" };
     }
     return { type: "start", action: "presetInstall" };
-  } else {
-    state.screen = "plan";
-    state.cursor = planItemCursor(state, "install");
   }
-  return { type: "none" };
+  return leaveReview(state);
+}
+
+function leaveReview(state: TuiState): TuiEffect {
+  state.screen = "plan";
+  state.cursor = planItemCursor(state, "install");
+  state.notice = "";
+  clearRemoteReview(state);
+  return { type: "none", discardRemoteReview: true };
+}
+
+function clearRemoteReview(state: TuiState): void {
+  state.remoteCommands = [];
+  state.remoteCommandSource = "";
 }
 
 function planItemCursor(state: TuiState, id: PlanItemId): number {

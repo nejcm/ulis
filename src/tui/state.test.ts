@@ -465,6 +465,29 @@ describe("tui state", () => {
     expect(state.cursor).toBe(planCursor(state, "install"));
   });
 
+  it("clears remote review display when leaving review or resetting the flow", () => {
+    const reviewState = createInitialState();
+    reviewState.screen = "installReview";
+    reviewState.remoteCommands = ["bunx -- remote-extension"];
+    reviewState.remoteCommandSource = "https://github.com/o/remote";
+    const reviewEffect = handleTuiKey(reviewState, "backspace");
+
+    const flowState = createInitialState();
+    flowState.screen = "flow";
+    flowState.cursor = 0;
+    flowState.remoteCommands = ["bunx -- remote-extension"];
+    flowState.remoteCommandSource = "https://github.com/o/remote";
+    const flowEffect = handleTuiKey(flowState, "enter");
+
+    expect([
+      { effect: reviewEffect, commands: reviewState.remoteCommands, source: reviewState.remoteCommandSource },
+      { effect: flowEffect, commands: flowState.remoteCommands, source: flowState.remoteCommandSource },
+    ]).toEqual([
+      { effect: { type: "none", discardRemoteReview: true }, commands: [], source: "" },
+      { effect: { type: "none", discardRemoteReview: true }, commands: [], source: "" },
+    ]);
+  });
+
   it("presetInstallReview toggles extension installs with space", () => {
     const state = createInitialState();
     state.screen = "presetInstallReview";

@@ -504,6 +504,152 @@ describe("remote install consent", () => {
     expect(cloned.map(existsSync)).toEqual([false]);
   });
 
+  it("clears a remote install review before showing a local review", async () => {
+    const cloned = mockClone();
+    const harness = await createHarness();
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+
+    await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    const remoteFrame = await harness.frame();
+    const cloneExistsBeforeBack = cloned.map(existsSync);
+
+    await harness.press("BACKSPACE");
+    const localSource = mkdtempSync(join(tmpdir(), "ulis-tui-local-source-"));
+    tmpRoots.push(localSource);
+    writeFileSync(join(localSource, "config.yaml"), "version: 1\n", "utf-8");
+    state.customSource = localSource;
+    focusInstall(state);
+    await harness.controller.handleEffect(handleTuiKey(state, "enter"));
+
+    const localFrame = await harness.frame();
+    expect({
+      remoteFrameShowsSource: remoteFrame.includes(url),
+      remoteFrameShowsWarning: remoteFrame.includes("WILL take effect if you"),
+      cloneExistsBeforeBack,
+      screen: state.screen,
+      cloneExistsAfterBack: cloned.map(existsSync),
+      commandsAfterBack: state.remoteCommands,
+      commandSourceAfterBack: state.remoteCommandSource,
+      localFrameShowsSource: localFrame.includes(localSource),
+      localFrameShowsRemote: localFrame.includes(url),
+      localFrameShowsWarning: localFrame.includes("WILL take effect if you"),
+    }).toEqual({
+      remoteFrameShowsSource: true,
+      remoteFrameShowsWarning: true,
+      cloneExistsBeforeBack: [true],
+      screen: "installReview",
+      cloneExistsAfterBack: [false],
+      commandsAfterBack: [],
+      commandSourceAfterBack: "",
+      localFrameShowsSource: true,
+      localFrameShowsRemote: false,
+      localFrameShowsWarning: false,
+    });
+  });
+
+  it("keeps the prepared clone while a remote install handles a stray key", async () => {
+    const cloned = mockClone();
+    let releaseRun: (() => void) | undefined;
+    let markStarted: (() => void) | undefined;
+    const runStarted = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const holdRun = new Promise<void>((resolve) => {
+      releaseRun = resolve;
+    });
+    let receivedPrepared = false;
+    const harness = await createHarness(100, 30, {
+      runAction: (async (_state: TuiState, _action: string, _logger: unknown, options: { prepared?: unknown }) => {
+        receivedPrepared = options?.prepared != null;
+        markStarted?.();
+        await holdRun;
+      }) as never,
+    });
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+
+    await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    const running = harness.controller.handleEffect({ type: "start", action: "install" });
+    await runStarted;
+    const strayEffect = handleTuiKey(state, "down");
+    await harness.controller.handleEffect(strayEffect);
+    const cloneExistsDuringRun = cloned.map(existsSync);
+    releaseRun?.();
+    await running;
+    const cloneExistsAfterRun = cloned.map(existsSync);
+
+    expect({ strayEffect, receivedPrepared, cloneExistsDuringRun, cloneExistsAfterRun }).toEqual({
+      strayEffect: { type: "none" },
+      receivedPrepared: true,
+      cloneExistsDuringRun: [true],
+      cloneExistsAfterRun: [false],
+    });
+  });
+
+  it("clears a remote preset review on its Back row and re-prepares it when reopened", async () => {
+    const cloned = mockClone();
+    const runCalls: { prepared: unknown }[] = [];
+    const harness = await createHarness(100, 30, {
+      runAction: ((_state: TuiState, _action: string, _logger: unknown, opts: { prepared?: unknown }) => {
+        runCalls.push({ prepared: opts.prepared });
+        return Promise.resolve();
+      }) as never,
+    });
+    const state = harness.controller.state;
+    state.flow = "presetsOnly";
+    state.presetSourceMode = "custom";
+    state.customPresetSource = url;
+    state.platforms = ["claude"];
+
+    await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "presetInstall" });
+    expect(cloned.map(existsSync)).toEqual([true]);
+
+    state.cursor = PRESET_INSTALL_REVIEW_START_ROW + 1;
+    await harness.controller.handleEffect(handleTuiKey(state, "enter"));
+    expect(cloned.map(existsSync)).toEqual([false]);
+    expect(state.remoteCommands).toEqual([]);
+    expect(state.remoteCommandSource).toBe("");
+
+    focusInstall(state);
+    await Bun.sleep(KEY_DELAY_MS);
+    await harness.controller.handleEffect(handleTuiKey(state, "enter"));
+    expect(state.screen).toBe("presetInstallReview");
+    expect(cloned).toHaveLength(2);
+    expect(cloned.map(existsSync)).toEqual([false, true]);
+
+    state.cursor = PRESET_INSTALL_REVIEW_START_ROW;
+    await Bun.sleep(KEY_DELAY_MS);
+    await harness.controller.handleEffect(handleTuiKey(state, "enter"));
+    expect(runCalls[0]!.prepared).toBeDefined();
+    expect(cloned.map(existsSync)).toEqual([false, false]);
+  });
+
+  it("clears a prepared remote review when flow defaults are applied", async () => {
+    const cloned = mockClone();
+    const harness = await createHarness();
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+
+    await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    expect(cloned.map(existsSync)).toEqual([true]);
+
+    state.screen = "flow";
+    state.cursor = 0;
+    await harness.controller.handleEffect(handleTuiKey(state, "enter"));
+
+    expect(state.flow).toBe("project");
+    expect(cloned.map(existsSync)).toEqual([false]);
+    expect(state.remoteCommands).toEqual([]);
+    expect(state.remoteCommandSource).toBe("");
+  });
+
   it("disposes the previous clone when preparation runs again", async () => {
     const cloned = mockClone();
     const harness = await createHarness();

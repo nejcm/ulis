@@ -124,6 +124,7 @@ export class TuiController {
   }
 
   async handleEffect(effect: TuiEffect): Promise<void> {
+    if (effect.discardRemoteReview) this.disposePreparedRemote();
     if (effect.type === "none") return;
 
     if (effect.type === "exit") {
