@@ -314,6 +314,56 @@ Body.
     }
   });
 
+  it("localizes a malformed skills.yaml at parse time", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "ulis-test-"));
+    try {
+      writeBaseProjectConfig(tmp);
+      writeFileSync(join(tmp, "skills.yaml"), "claude:\n  skills:\n    - args: [--flag]\n");
+
+      let captured: unknown;
+      expect(() => {
+        try {
+          parseProject(tmp);
+        } catch (err) {
+          captured = err;
+          throw err;
+        }
+      }).toThrow(ParseAggregateError);
+
+      const diag = (captured as ParseAggregateError).errors[0]?.toDiagnostic();
+      expect(diag?.relativeFile).toBe("skills.yaml");
+      expect(diag?.fieldPath).toBe("claude.skills[].name");
+      expect(diag?.target).toBe("claude");
+    } finally {
+      rmSync(tmp, { recursive: true });
+    }
+  });
+
+  it("localizes a malformed extensions.yaml at parse time", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "ulis-test-"));
+    try {
+      writeBaseProjectConfig(tmp);
+      writeFileSync(join(tmp, "extensions.yaml"), "codex:\n  extensions:\n    - name: 12\n");
+
+      let captured: unknown;
+      expect(() => {
+        try {
+          parseProject(tmp);
+        } catch (err) {
+          captured = err;
+          throw err;
+        }
+      }).toThrow(ParseAggregateError);
+
+      const diag = (captured as ParseAggregateError).errors[0]?.toDiagnostic();
+      expect(diag?.relativeFile).toBe("extensions.yaml");
+      expect(diag?.fieldPath).toBe("codex.extensions[].name");
+      expect(diag?.target).toBe("codex");
+    } finally {
+      rmSync(tmp, { recursive: true });
+    }
+  });
+
   it("localizes platform-specific config fields to their target", () => {
     const tmp = mkdtempSync(join(tmpdir(), "ulis-test-"));
     try {

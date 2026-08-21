@@ -1,4 +1,6 @@
+import { mergeExtensionsConfigs } from "../parsers/extensions.js";
 import type { ParsedProject } from "../parsers/index.js";
+import { mergeSkillsConfigs } from "../parsers/skills.js";
 import type { McpConfig, PermissionsConfig } from "../schema.js";
 
 /**
@@ -91,6 +93,11 @@ export function mergeProjects(projects: readonly ParsedProject[]): ParsedProject
     rules: deduplicateByName(allRules),
     mcp: mergeMcp(projects.map((p) => p.mcp)),
     permissions: mergePermissions(projects.map((p) => p.permissions)),
+    // Reuse the install-path mergers rather than re-deriving the semantics here: install builds the
+    // same two configs directly from the loaders, and the two paths must not diverge. Note these
+    // concatenate across layers (additive), unlike the base-wins rule the permission lists follow.
+    skillsConfig: mergeSkillsConfigs(projects.map((p) => p.skillsConfig)),
+    extensionsConfig: mergeExtensionsConfigs(projects.map((p) => p.extensionsConfig)),
     ulisConfig: base.ulisConfig,
     sourceDir: base.sourceDir,
     sourceDirs: projects.flatMap((project) => project.sourceDirs ?? [project.sourceDir]),

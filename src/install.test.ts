@@ -21,6 +21,7 @@ import { InstallError } from "./install/errors.js";
 import { preflightOwnership } from "./install/manifest.js";
 import { detectInstallCollisions } from "./install/platforms.js";
 import { formatCommandPreview } from "./install/preview.js";
+import { ParseError } from "./parsers/index.js";
 import { platformConfigDir, PLATFORMS, type Platform } from "./platforms.js";
 import { PreservedNativeConfigParseError, readMergeableConfig } from "./utils/config-merger.js";
 
@@ -286,6 +287,33 @@ describe("runInstall", () => {
       expect(existsSync(join(fixture.destBase, ".codex", ".ulis-manifest.json"))).toBe(true);
       expect(existsSync(join(fixture.destBase, ".cursor"))).toBe(false);
     }
+  });
+
+  it("reports a malformed skills.yaml as a diagnostic when install reaches it first", async () => {
+    const fixture = createPlatformReportFixture();
+    write(join(fixture.sourceDir, "skills.yaml"), ["claude:", "  skills:", "    - args: [--flag]", ""].join("\n"));
+
+    let captured: unknown;
+    await expect(
+      runInstall({
+        sourceDir: fixture.sourceDir,
+        outputDir: fixture.outputDir,
+        destBase: fixture.destBase,
+        userHome: fixture.homeDir,
+        platforms: ["claude"],
+        rebuild: false,
+        installExtensions: false,
+        logger: captureLogger([]),
+      }).catch((err: unknown) => {
+        captured = err;
+        throw err;
+      }),
+    ).rejects.toThrow(ParseError);
+
+    const diag = (captured as ParseError).toDiagnostic();
+    expect(diag.relativeFile).toBe("skills.yaml");
+    expect(diag.fieldPath).toBe("claude.skills[].name");
+    expect(diag.target).toBe("claude");
   });
 
   it("fails and summarizes a thrown external skill spawn error", async () => {

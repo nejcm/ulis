@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { analyzeProject } from "./build.js";
+import { analyzePresets, analyzeProject } from "./build.js";
 
 const fixturesDir = resolve(join(import.meta.dirname, "../tests/fixtures"));
 const tmpRoots: string[] = [];
@@ -112,6 +112,27 @@ Body.
     expect(logger.errors.join("\n")).toContain("path: " + join(presetDir, "agents", "preset-agent.md"));
   });
 
+  it("reports a malformed preset-layer skills.yaml as a diagnostic", () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const presetDir = join(root, "preset");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(presetDir, { recursive: true });
+    writeFileSync(join(sourceDir, "config.yaml"), "version: 1\nname: base\n");
+    writeFileSync(join(presetDir, "config.yaml"), "version: 1\nname: preset\n");
+    writeFileSync(join(presetDir, "skills.yaml"), "claude:\n  skills:\n    - args: [--flag]\n");
+    const logger = captureLogger();
+
+    expect(() => analyzeProject({ sourceDir, logger, presets: [{ name: "team", dir: presetDir }] })).toThrow(
+      "Parsing failed: 1 error(s). No files written.",
+    );
+
+    const errors = logger.errors.join("\n");
+    expect(errors).toContain("source: preset:team");
+    expect(errors).toContain("path: " + join(presetDir, "skills.yaml"));
+    expect(errors).toContain("claude.skills[].name");
+  });
+
   it("collects parse diagnostics across presets and base before failing", () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
@@ -129,5 +150,48 @@ Body.
     const errors = logger.errors.join("\n");
     expect(errors).toContain("source: preset:team");
     expect(errors).toContain("source: base");
+  });
+});
+
+describe("analyzePresets", () => {
+  it("reports a malformed preset-only extensions.yaml as a diagnostic", () => {
+    const root = createTempRoot();
+    const presetDir = join(root, "preset");
+    mkdirSync(presetDir, { recursive: true });
+    writeFileSync(join(presetDir, "config.yaml"), "version: 1\nname: preset\n");
+    writeFileSync(join(presetDir, "extensions.yaml"), "codex:\n  extensions:\n    - name: 12\n");
+    const logger = captureLogger();
+
+    expect(() => analyzePresets({ presets: [{ name: "team", dir: presetDir }], logger })).toThrow(
+      "Parsing failed: 1 error(s). No files written.",
+    );
+
+    const errors = logger.errors.join("\n");
+    expect(errors).toContain("source: preset:team");
+    expect(errors).toContain("path: " + join(presetDir, "extensions.yaml"));
+    expect(errors).toContain("codex.extensions[].name");
+  });
+
+  it("merges preset skills and extensions manifests into the parsed project", () => {
+    const root = createTempRoot();
+    const first = join(root, "first");
+    const second = join(root, "second");
+    mkdirSync(first, { recursive: true });
+    mkdirSync(second, { recursive: true });
+    writeFileSync(join(first, "config.yaml"), "version: 1\nname: first\n");
+    writeFileSync(join(second, "config.yaml"), "version: 1\nname: second\n");
+    writeFileSync(join(first, "skills.yaml"), '"*":\n  skills:\n    - name: scope/one\n');
+    writeFileSync(join(second, "extensions.yaml"), '"*":\n  extensions:\n    - name: scope/two\n');
+
+    const analysis = analyzePresets({
+      presets: [
+        { name: "first", dir: first },
+        { name: "second", dir: second },
+      ],
+      logger: silentLogger,
+    });
+
+    expect(analysis.project.skillsConfig["*"]?.skills.map((s) => s.name)).toEqual(["scope/one"]);
+    expect(analysis.project.extensionsConfig["*"]?.extensions.map((e) => e.name)).toEqual(["scope/two"]);
   });
 });

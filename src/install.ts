@@ -17,7 +17,7 @@ import { loadSkills, mergeSkillsConfigs } from "./parsers/skills.js";
 import { isSamePath, PLATFORMS, uniquePlatforms, type Platform } from "./platforms.js";
 import { UlisConfigSchema, type ExtensionsConfig, type SkillsConfig } from "./schema.js";
 import { assertShellSafeArgv, commandExists as commandExistsOnPath } from "./utils/command.js";
-import { loadValidatedConfigFile } from "./utils/config-loader.js";
+import { loadValidatedConfigFile, type ConfigDiagnosticOptions } from "./utils/config-loader.js";
 import { logger as defaultLogger } from "./utils/logger.js";
 import { confirm } from "./utils/prompt.js";
 import { legacyRootRecordPath, readRecordedRemoteSources } from "./utils/provenance.js";
@@ -358,12 +358,12 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
     }
 
     const skillsConfig = mergeSkillsConfigs([
-      ...(options.presets ?? []).map((preset) => loadSkills(preset.dir)),
-      loadSkills(sourceDir),
+      ...(options.presets ?? []).map((preset) => loadSkills(preset.dir, presetDiagnostic(preset))),
+      loadSkills(sourceDir, { source: "base", sourceDir }),
     ]);
     const extensionsConfig = mergeExtensionsConfigs([
-      ...(options.presets ?? []).map((preset) => loadExtensions(preset.dir)),
-      loadExtensions(sourceDir),
+      ...(options.presets ?? []).map((preset) => loadExtensions(preset.dir, presetDiagnostic(preset))),
+      loadExtensions(sourceDir, { source: "base", sourceDir }),
     ]);
 
     const installExtensionsEnabled = options.installExtensions ?? true;
@@ -464,8 +464,10 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
     }
 
     throwIfAborted(options.signal);
-    const skillsConfig = mergeSkillsConfigs(presets.map((preset) => loadSkills(preset.dir)));
-    const extensionsConfig = mergeExtensionsConfigs(presets.map((preset) => loadExtensions(preset.dir)));
+    const skillsConfig = mergeSkillsConfigs(presets.map((preset) => loadSkills(preset.dir, presetDiagnostic(preset))));
+    const extensionsConfig = mergeExtensionsConfigs(
+      presets.map((preset) => loadExtensions(preset.dir, presetDiagnostic(preset))),
+    );
 
     const failureCount = await installGeneratedOutput({
       outputDir,
@@ -503,6 +505,14 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
       if (!preexistingEnvKeys.has(key)) delete process.env[key];
     }
   }
+}
+
+/**
+ * Diagnostic context for a preset layer, matching the `preset:<name>` source label
+ * `parseProject` uses, so a malformed manifest reads the same whichever path hit it first.
+ */
+function presetDiagnostic(preset: ResolvedPreset): Required<ConfigDiagnosticOptions> {
+  return { source: `preset:${preset.name}`, sourceDir: preset.dir };
 }
 
 /** Returns false when the trust gate was declined, otherwise the failed post-install command count. */
@@ -735,9 +745,9 @@ export function planRemoteCommands(options: {
 }): readonly string[] {
   const destBase = resolve(options.destBase);
   const userHome = resolve(options.userHome ?? homedir());
-  const dirs = [
-    ...(options.presets ?? []).map((preset) => preset.dir),
-    ...(options.sourceDir ? [options.sourceDir] : []),
+  const layers: readonly Required<ConfigDiagnosticOptions>[] = [
+    ...(options.presets ?? []).map((preset) => presetDiagnostic(preset)),
+    ...(options.sourceDir ? [{ source: "base", sourceDir: options.sourceDir }] : []),
   ];
   const ulisConfig = options.sourceDir
     ? loadValidatedConfigFile({
@@ -750,8 +760,8 @@ export function planRemoteCommands(options: {
 
   return renderCommandPlan({
     platforms: uniquePlatforms(options.platforms),
-    skillsConfig: mergeSkillsConfigs(dirs.map((dir) => loadSkills(dir))),
-    extensionsConfig: mergeExtensionsConfigs(dirs.map((dir) => loadExtensions(dir))),
+    skillsConfig: mergeSkillsConfigs(layers.map((layer) => loadSkills(layer.sourceDir, layer))),
+    extensionsConfig: mergeExtensionsConfigs(layers.map((layer) => loadExtensions(layer.sourceDir, layer))),
     previewInputs: {
       sourceDir: options.sourceDir,
       presets: options.presets ?? [],

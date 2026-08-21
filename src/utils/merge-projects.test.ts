@@ -11,6 +11,8 @@ function project(overrides: Partial<ParsedProject> = {}): ParsedProject {
     rules: [],
     mcp: { servers: {} },
     permissions: undefined,
+    skillsConfig: {},
+    extensionsConfig: {},
     ulisConfig: { version: 1, name },
     sourceDir: `/tmp/${name}`,
     ...overrides,
@@ -145,6 +147,26 @@ describe("mergeProjects", () => {
 
       const merged = mergeProjects([presetA, presetB, base]);
       expect(merged.permissions?.cursor?.terminalAllowlist).toEqual(["B"]);
+    });
+  });
+
+  describe("skills and extensions manifests", () => {
+    it("concatenates preset and base entries in install order", () => {
+      const preset = project({
+        skillsConfig: { "*": { skills: [{ name: "scope/preset" }] } },
+        extensionsConfig: { claude: { extensions: [{ name: "scope/preset-ext" }] } },
+      });
+      const base = project({
+        skillsConfig: { "*": { skills: [{ name: "scope/base" }] } },
+        extensionsConfig: { claude: { extensions: [{ name: "scope/base-ext" }] } },
+      });
+
+      const merged = mergeProjects([preset, base]);
+      expect(merged.skillsConfig["*"]?.skills.map((s) => s.name)).toEqual(["scope/preset", "scope/base"]);
+      expect(merged.extensionsConfig.claude?.extensions.map((e) => e.name)).toEqual([
+        "scope/preset-ext",
+        "scope/base-ext",
+      ]);
     });
   });
 });
