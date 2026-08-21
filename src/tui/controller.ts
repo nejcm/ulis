@@ -3,7 +3,7 @@ import type { CliRenderer } from "@opentui/core";
 import type { Logger } from "../build.js";
 import { planRemoteCommands } from "../install.js";
 import type { Platform } from "../platforms.js";
-import { redactUserinfo } from "../utils/redact.js";
+import { sanitizeConsentText } from "../utils/redact.js";
 import { resolvePresets, type ResolvedPreset } from "../utils/resolve-presets.js";
 import { resolveSourceOrRemote } from "../utils/resolve-source.js";
 import { initializeMissingSource, runTuiAction } from "./actions.js";
@@ -462,7 +462,7 @@ export class TuiController {
       cleanup: clone.cleanup,
     };
     this.state.remoteCommands = commands;
-    this.state.remoteCommandSource = redactUserinfo(plan.remote ? plan.sourceDir : (remoteRef ?? ""));
+    this.state.remoteCommandSource = sanitizeConsentText(plan.remote ? plan.sourceDir : (remoteRef ?? ""));
 
     const screen = action === "install" ? "installReview" : "presetInstallReview";
     if (this.state.screen !== screen) {

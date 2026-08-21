@@ -5,6 +5,11 @@ import { formatLogMessage, logger } from "./logger.js";
 const ANSI_REGEX = /\x1B\[[0-9;]*m/g;
 
 describe("formatLogMessage", () => {
+  it("preserves emoji ZWJ sequences and Persian ZWNJ in ordinary logs", () => {
+    const message = "family 👨‍👩‍👧‍👦 Persian می‌خواهم";
+    expect(formatLogMessage("info", message, false)).toBe(message);
+  });
+
   it("colors install stages and skill identities", () => {
     const message = formatLogMessage("info", "Installing * skill: microsoft/playwright-cli", true);
 

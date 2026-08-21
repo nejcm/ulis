@@ -270,7 +270,7 @@ function runsByDestination(destination: string): boolean {
 }
 
 function runsLine(platform: Platform, destination: string, finding: string): string {
-  return `${formatCommandPreview([`${platform}/${destination}`])} ${finding}`;
+  return `${formatCommandPreview([`${platform}/${destination}`])} ${sanitizeLogText(finding)}`;
 }
 
 /**
@@ -347,3 +347,5 @@ export function formatCommandPreview(argv: readonly string[]): string {
     })
     .join(" ");
 }
+
+export const __test = { runsLine };

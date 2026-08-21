@@ -183,6 +183,7 @@ describe("review controls", () => {
     state.screen = "installReview";
 
     expect(buildScreenView(state).controls).toContain("Enter: select");
+    expect(buildScreenView(state).controls).toContain("PgDn: review commands");
     expect(buildScreenView(state).controls.join(" ")).not.toMatch(/x\/space|Enter\/x\/space/u);
   });
 
@@ -211,17 +212,15 @@ describe("remote command consent", () => {
 
     const text = rowText(state);
 
-    expect(text).toContain("https://github.com/o/r");
+    expect(text).toContain("REMOTE: 2 entries WILL apply");
+    expect(text).toContain("@ github.com/o/r");
     // Framed by when an entry executes, not by what kind of entry it is: the planner adds classes
     // (config files a host agent runs later, an approval setting that widens what it may run
     // without asking, not only commands) and the wording must stay true - "WILL RUN" would be false
     // for an approval-setting entry, which never runs anything itself.
-    // Urgent, not jargon: "contributes the entries below", not "contributes the execution surface".
-    expect(text).toContain("contributes the entries below");
-    // The header must carry the warning, not just a neutral timing statement - this is the most
-    // safety-critical screen in the product.
-    expect(text).toContain("WILL take effect");
-    expect(text).toContain("runs later inside your agent");
+    // The fixed action row carries count, provenance, and urgency while the command pane scrolls.
+    expect(text).toContain("WILL apply");
+    expect(text).toContain("run later inside your agent");
     expect(text).toContain("npx skills@latest add acme/skill");
     expect(text).toContain("npx some-extension --flag");
   });

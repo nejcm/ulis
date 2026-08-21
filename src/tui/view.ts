@@ -1,5 +1,5 @@
 import { PLATFORM_DESCRIPTIONS, PLATFORM_LABELS, PLATFORMS, type Platform } from "../platforms.js";
-import { redactUserinfo } from "../utils/redact.js";
+import { redactUserinfo, sanitizeConsentText } from "../utils/redact.js";
 import {
   assertNeverPlanItemId,
   FLOW_ITEMS,
@@ -31,7 +31,13 @@ export interface ViewTag {
 export type ViewRow =
   | { readonly kind: "blank" }
   | { readonly kind: "heading"; readonly text: string }
-  | { readonly kind: "text"; readonly text: string; readonly tone?: Tone; readonly indent?: number }
+  | {
+      readonly kind: "text";
+      readonly text: string;
+      readonly tone?: Tone;
+      readonly indent?: number;
+      readonly consent?: "warning" | "command";
+    }
   | { readonly kind: "field"; readonly label: string; readonly value: string }
   | {
       readonly kind: "option";
@@ -71,6 +77,10 @@ export interface ScreenView {
 /** Terminal must be at least this large before the app renders its shell. */
 export const MIN_COLUMNS = 50;
 export const MIN_ROWS = 16;
+
+export function displayWidth(value: string): number {
+  return Bun.stringWidth(value);
+}
 /** At or above this width the plan screen splits into two side-by-side panes. */
 export const SPLIT_COLUMNS = 96;
 
@@ -78,10 +88,12 @@ const SPINNER_FRAMES = ["|", "/", "-", "\\"] as const;
 const MAX_VISIBLE_LOGS = 40;
 
 const NAV_CONTROLS = ["j/k or arrows: move", "Enter: select", "Backspace: back", "q: quit"];
+const REVIEW_CONTROLS = ["PgDn: review commands", "Enter: select", "Bksp: back", "q: quit"];
+const REVIEW_MOUSE_CONTROL = "wheel: review";
 const TOGGLE_CONTROLS = ["j/k or arrows: move", "Enter/x/space: toggle", "Backspace: back", "q: quit"];
 const MOUSE_CONTROL = "mouse: click rows, wheel scrolls";
 
-export function buildScreenView(state: TuiState, cwd?: string, userHome?: string): ScreenView {
+export function buildScreenView(state: TuiState, cwd?: string, userHome?: string, columns = MIN_COLUMNS): ScreenView {
   switch (state.screen) {
     case "flow":
       return flowView(state);
@@ -100,9 +112,9 @@ export function buildScreenView(state: TuiState, cwd?: string, userHome?: string
     case "missingSource":
       return missingSourceView(state, cwd, userHome);
     case "installReview":
-      return installReviewView(state, cwd, userHome);
+      return installReviewView(state, cwd, userHome, columns);
     case "presetInstallReview":
-      return presetInstallReviewView(state, cwd, userHome);
+      return presetInstallReviewView(state, cwd, userHome, columns);
     case "running":
       return runningView(state);
     case "result":
@@ -416,32 +428,93 @@ function missingSourceView(state: TuiState, cwd?: string, userHome?: string): Sc
 function remoteCommandRows(state: TuiState): ViewRow[] {
   if (state.remoteCommands.length === 0) return [];
   return [
-    { kind: "blank" },
     {
       kind: "text",
-      text: `${state.remoteCommandSource} contributes the entries below, and they WILL take effect if you continue. Review them first:`,
-      tone: "error",
-    },
-    {
-      kind: "text",
-      text: "Each entry runs during the install, runs later inside your agent, or widens what it may run without asking.",
+      text: "The remote entries below run during install, run later inside your agent, or widen what it may run without asking.",
       tone: "warn",
     },
-    ...state.remoteCommands.map((command): ViewRow => ({ kind: "text", text: `  ${command}`, tone: "muted" })),
+    ...state.remoteCommands.map(
+      (command): ViewRow => ({
+        kind: "text",
+        text: `  ${sanitizeConsentText(command)}`,
+        tone: "muted",
+        consent: "command",
+      }),
+    ),
   ];
 }
 
-function installReviewView(state: TuiState, cwd?: string, userHome?: string): ScreenView {
+function remoteWarningRows(state: TuiState, columns: number): ViewRow[] {
+  const source = formatRemoteSource(sanitizeConsentText(state.remoteCommandSource), columns);
+  return state.remoteCommands.length === 0
+    ? []
+    : [
+        {
+          kind: "text",
+          text: `REMOTE: ${state.remoteCommands.length} ${state.remoteCommands.length === 1 ? "entry" : "entries"} WILL apply`,
+          tone: "error",
+          consent: "warning",
+        },
+        { kind: "text", text: `@ ${source}`, tone: "error", consent: "warning" },
+      ];
+}
+
+function formatRemoteSource(value: string, columns: number): string {
+  const protocol = /^[a-z][a-z0-9+.-]*:\/\//iu.exec(value)?.[0];
+  const source = protocol
+    ? value.slice(protocol.length).replace(/^[^/@]+@/u, "")
+    : value.replace(/^(?:[^@/:]+@)?([^/:]+):/u, "$1/");
+  const slash = source.indexOf("/");
+  const sourceColumns = Math.max(1, columns - 7);
+  if (slash < 0) return middleElide(source, sourceColumns);
+  if (displayWidth(source) <= sourceColumns) return source;
+  const host = source.slice(0, slash);
+  const path = source.slice(slash);
+  const hostWidth = displayWidth(host);
+  if (hostWidth >= sourceColumns) return middleElide(host, sourceColumns);
+  return `${host}${middleElide(path, sourceColumns - hostWidth)}`;
+}
+
+function middleElide(value: string, columns: number): string {
+  if (displayWidth(value) <= columns) return value;
+  const graphemes = [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(value)].map(
+    ({ segment }) => segment,
+  );
+  const kept = columns - 1;
+  return `${takeColumns(graphemes, Math.ceil(kept / 2))}…${takeColumns(graphemes, Math.floor(kept / 2), true)}`;
+}
+
+function takeColumns(characters: string[], columns: number, fromEnd = false): string {
+  const kept: string[] = [];
+  let width = 0;
+  for (
+    let index = fromEnd ? characters.length - 1 : 0;
+    index >= 0 && index < characters.length;
+    index += fromEnd ? -1 : 1
+  ) {
+    const character = characters[index]!;
+    const nextWidth = displayWidth(character);
+    if (width + nextWidth > columns) break;
+    kept.push(character);
+    width += nextWidth;
+  }
+  return fromEnd ? kept.reverse().join("") : kept.join("");
+}
+
+function installReviewView(state: TuiState, cwd?: string, userHome?: string, columns = MIN_COLUMNS): ScreenView {
   const plan = planSource(state, cwd, userHome);
-  const rows: ViewRow[] = [
-    field("Source", redactUserinfo(plan.sourceDir)),
+  const reviewRows: ViewRow[] = [
+    field("Source", sanitizeConsentText(plan.sourceDir)),
     field("Destination", plan.destBase),
     field("Platforms", formatPlatforms(state.platforms)),
-    field("Presets", formatPresets(state)),
+    field("Presets", sanitizeConsentText(formatPresets(state))),
     { kind: "blank" },
     { kind: "text", text: formatInstallCommand(state, cwd, userHome), tone: "muted" },
-    ...remoteCommandRows(state),
     { kind: "blank" },
+    ...remoteCommandRows(state),
+  ];
+  const actionRows: ViewRow[] = [
+    ...remoteWarningRows(state, columns),
     option(state, 0, "Start install"),
     option(state, 1, "Back to plan"),
   ];
@@ -450,23 +523,28 @@ function installReviewView(state: TuiState, cwd?: string, userHome?: string): Sc
     title: "Review install",
     subtitle: "Confirm install settings before anything is written.",
     breadcrumbs: ["Start", formatFlow(state.flow), "Plan", "Review install"],
-    panes: [pane("review", "Install plan", rows)],
+    panes: [pane("review", "Install plan", reviewRows), pane("review-actions", "Actions", actionRows, 0)],
     notice: notice(state, "Nothing is written until you start the install."),
-    controls: [...NAV_CONTROLS, MOUSE_CONTROL],
+    controls: [...REVIEW_CONTROLS, REVIEW_MOUSE_CONTROL],
   };
 }
 
-function presetInstallReviewView(state: TuiState, cwd?: string, userHome?: string): ScreenView {
+function presetInstallReviewView(state: TuiState, cwd?: string, userHome?: string, columns = MIN_COLUMNS): ScreenView {
   const plan = planSource(state, cwd, userHome);
-  const rows: ViewRow[] = [
-    field("Preset location", formatPresetSourceMode(state.presetSourceMode, state.customPresetSource)),
+  const reviewRows: ViewRow[] = [
+    field(
+      "Preset location",
+      sanitizeConsentText(formatPresetSourceMode(state.presetSourceMode, state.customPresetSource)),
+    ),
     field("Destination", plan.destBase),
     field("Platforms", formatPlatforms(state.platforms)),
-    field("Presets", formatPresets(state)),
+    field("Presets", sanitizeConsentText(formatPresets(state))),
     { kind: "blank" },
     { kind: "text", text: "Action: install the selected preset directories resolved by the TUI.", tone: "muted" },
-    ...remoteCommandRows(state),
     { kind: "blank" },
+    ...remoteCommandRows(state),
+  ];
+  const actionRows: ViewRow[] = [
     option(state, 0, "Backup existing configs before install", { checked: state.backup }),
     option(state, 1, "Prune removed agents and skills", { checked: state.prune }),
     option(state, 2, "Run preset extensions", { checked: state.presetInstallExtensions }),
@@ -480,6 +558,7 @@ function presetInstallReviewView(state: TuiState, cwd?: string, userHome?: strin
         ]
       : []),
     { kind: "blank" },
+    ...remoteWarningRows(state, columns),
     option(state, PRESET_INSTALL_REVIEW_START_ROW, "Start preset install"),
     option(state, PRESET_INSTALL_REVIEW_BACK_ROW, "Back to presets"),
   ];
@@ -488,9 +567,9 @@ function presetInstallReviewView(state: TuiState, cwd?: string, userHome?: strin
     title: "Review preset install",
     subtitle: "Confirm preset install settings before anything is written.",
     breadcrumbs: ["Start", formatFlow(state.flow), "Plan", "Review preset install"],
-    panes: [pane("review", "Preset install plan", rows)],
-    notice: notice(state, "Preset install does not read or merge the current source."),
-    controls: [...NAV_CONTROLS, "x/space: toggle", MOUSE_CONTROL],
+    panes: [pane("review", "Preset install plan", reviewRows), pane("review-actions", "Actions", actionRows, 0)],
+    notice: notice(state, "Preset install ignores the current source."),
+    controls: [...REVIEW_CONTROLS, "x/space: toggle", REVIEW_MOUSE_CONTROL],
   };
 }
 
@@ -582,13 +661,14 @@ function formatInstallCommand(state: TuiState, cwd?: string, userHome?: string):
     "ulis",
     "install",
     "--source",
-    redactUserinfo(plan.sourceDir),
+    sanitizeConsentText(plan.sourceDir),
     "--target",
     state.platforms.join(","),
     "--yes",
   ];
   if (state.destinationMode === "global") args.push("--global");
-  if (state.selectedPresetNames.length > 0) args.push("--preset", state.selectedPresetNames.join(","));
+  if (state.selectedPresetNames.length > 0)
+    args.push("--preset", sanitizeConsentText(state.selectedPresetNames.join(",")));
   if (!state.rebuild) args.push("--skip-rebuild");
   if (state.backup) args.push("--backup");
   if (!state.prune) args.push("--no-prune");

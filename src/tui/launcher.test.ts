@@ -251,5 +251,6 @@ describe("Node CLI isolation", () => {
     if (!existsSync(bundle)) return; // dist is only present after `bun run build`.
 
     expect(readFileSync(bundle, "utf-8")).not.toContain("@opentui/core");
+    expect(readFileSync(bundle, "utf-8")).not.toMatch(/\bBun\.[A-Za-z_$][\w$]*/u);
   });
 });

@@ -1,5 +1,6 @@
 import {
   BoxRenderable,
+  CliRenderEvents,
   InputRenderable,
   InputRenderableEvents,
   ScrollBoxRenderable,
@@ -16,12 +17,14 @@ import {
   applyCustomSourceTextInputChange,
   handleCustomSourceTextInputKey,
   handleTuiKey,
+  PRESET_INSTALL_REVIEW_START_ROW,
   type TuiEffect,
   type TuiState,
 } from "./state.js";
 import { THEME, toneColor } from "./theme.js";
 import {
   buildScreenView,
+  displayWidth,
   MIN_COLUMNS,
   MIN_ROWS,
   SPLIT_COLUMNS,
@@ -41,6 +44,8 @@ const LOGO_HEIGHT = 5;
 const LOGO_SPACING = 2;
 const COMPACT_HEADER_HEIGHT = 3;
 const LOGO_HEADER_HEIGHT = LOGO_HEIGHT + LOGO_SPACING + 2;
+const MINIMUM_REVIEW_ACTION_HEIGHT = 6;
+const REVIEW_RESTORE_COOLDOWN_MS = 400;
 
 export interface TuiAppOptions {
   readonly state: TuiState;
@@ -79,6 +84,14 @@ export class TuiApp {
   private readonly resizeHint: BoxRenderable;
 
   private paneScrolls = new Map<string, ScrollBoxRenderable>();
+  private selectedRow?: [ScrollBoxRenderable, string];
+  private consentCommandRows: [ScrollBoxRenderable, string][] = [];
+  private consentWarningRows: [ScrollBoxRenderable, string][] = [];
+  private consentSeenUntil = new Map<string, number>();
+  private consentSignature = "";
+  private consentRestoredAt = Number.NEGATIVE_INFINITY;
+  private consentPaintedAfterRestore = false;
+  private consentGateNotice = "";
   private lastPaneSignature = "";
   private disposed = false;
 
@@ -222,6 +235,7 @@ export class TuiApp {
     renderer.root.add(this.root);
     renderer.root.add(this.resizeHint);
 
+    renderer.on(CliRenderEvents.FRAME, this.onFrame);
     this.attachInputHandlers();
     this.update();
   }
@@ -238,7 +252,7 @@ export class TuiApp {
       return;
     }
 
-    const view = buildScreenView(this.options.state, this.options.cwd, this.options.userHome);
+    const view = buildScreenView(this.options.state, this.options.cwd, this.options.userHome, this.renderer.width);
 
     const showLogo = view.title === "ULIS";
     this.headerTitle.content = showLogo ? ULIS_LOGO : view.title;
@@ -259,6 +273,7 @@ export class TuiApp {
   destroy(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.renderer.off(CliRenderEvents.FRAME, this.onFrame);
     this.renderer.keyInput.off("keypress", this.onKeyPress);
     this.renderer.keyInput.off("paste", this.onPaste);
     this.root.destroyRecursively();
@@ -276,6 +291,12 @@ export class TuiApp {
       this.commit();
     });
   }
+
+  private readonly onFrame = (): void => {
+    if (this.disposed) return;
+    this.consentPaintedAfterRestore = true;
+    this.markVisibleConsentRows();
+  };
 
   private readonly onKeyPress = (event: KeyEvent): void => {
     if (this.disposed) return;
@@ -306,6 +327,23 @@ export class TuiApp {
       this.commit();
       this.options.onEffect(effect);
       return;
+    }
+
+    if (key === "pagedown" && this.hasRemoteReviewConsent(state)) {
+      event.preventDefault();
+      this.update();
+      this.scrollToFirstUnseenConsentRow();
+      this.renderer.requestRender();
+      return;
+    }
+
+    if (key === "enter" && this.isReviewStart(state)) {
+      this.update();
+      if (!this.reviewStartCanProceed()) {
+        event.preventDefault();
+        this.blockReviewStart();
+        return;
+      }
     }
 
     const effect = handleTuiKey(state, key);
@@ -348,6 +386,13 @@ export class TuiApp {
       this.commit();
       return;
     }
+    if (this.isReviewStart(state)) {
+      this.update();
+      if (!this.reviewStartCanProceed()) {
+        this.blockReviewStart();
+        return;
+      }
+    }
     const effect = handleTuiKey(state, "enter");
     this.commit();
     this.options.onEffect(effect);
@@ -360,6 +405,106 @@ export class TuiApp {
 
   private isTooSmall(): boolean {
     return this.renderer.width < MIN_COLUMNS || this.renderer.height < MIN_ROWS;
+  }
+
+  private isReviewStart(state: TuiState): boolean {
+    return (
+      (state.screen === "installReview" && state.cursor === 0) ||
+      (state.screen === "presetInstallReview" && state.cursor === PRESET_INSTALL_REVIEW_START_ROW)
+    );
+  }
+
+  private hasRemoteReviewConsent(state: TuiState): boolean {
+    return (
+      (state.screen === "installReview" || state.screen === "presetInstallReview") && this.consentCommandRows.length > 0
+    );
+  }
+
+  private currentConsentSignature(): string {
+    const { state } = this.options;
+    if (state.screen !== "installReview" && state.screen !== "presetInstallReview") return "";
+    return JSON.stringify([this.renderer.width, state.screen, state.remoteCommandSource, state.remoteCommands]);
+  }
+
+  private blockReviewStart(): void {
+    const count = this.consentCommandRows.length;
+    const allSeen = this.allConsentCommandsSeen();
+    const nextNotice =
+      count === 0
+        ? "Start action restored. Press Enter again to continue."
+        : allSeen
+          ? "Remote command review restored. Press Enter again to start."
+          : `Review all ${count} remote command${count === 1 ? "" : "s"} before starting.`;
+    const { state } = this.options;
+    if (state.notice === "" || state.notice === this.consentGateNotice) {
+      state.notice = nextNotice;
+      this.consentGateNotice = nextNotice;
+    }
+
+    this.consentRestoredAt = performance.now();
+    this.consentPaintedAfterRestore = false;
+    this.update();
+    if (count > 0 && !allSeen) this.scrollToFirstUnseenConsentRow();
+    this.renderer.requestRender();
+  }
+
+  private scrollToFirstUnseenConsentRow(): void {
+    const row = this.consentCommandRows.find((candidate) => !this.consentRowWasSeen(candidate[1]));
+    if (!row) return;
+    const [scroll, id] = row;
+    const target = scroll.getRenderable(id);
+    if (!target) return;
+    scroll.scrollTop += target.screenY + (this.consentSeenUntil.get(id) ?? 0) - scroll.viewport.screenY;
+  }
+
+  private rowIsFullyVisible(row: [ScrollBoxRenderable, string] | undefined): boolean {
+    if (!row) return false;
+    const [scroll, id] = row;
+    const target = scroll.getRenderable(id);
+    if (!target) return false;
+    return (
+      target.screenY >= scroll.viewport.screenY &&
+      target.screenY + target.height <= scroll.viewport.screenY + scroll.viewport.height
+    );
+  }
+
+  private markVisibleConsentRows(): void {
+    for (const [scroll, id] of this.consentCommandRows) {
+      const target = scroll.getRenderable(id);
+      if (!target) continue;
+      const viewportTop = scroll.viewport.screenY;
+      const viewportBottom = viewportTop + scroll.viewport.height;
+      const targetTop = target.screenY;
+      const targetBottom = targetTop + target.height;
+      if (targetTop >= viewportBottom || targetBottom <= viewportTop) continue;
+      const visibleStart = Math.max(0, viewportTop - targetTop);
+      const visibleEnd = Math.min(target.height, viewportBottom - targetTop);
+      const seenUntil = this.consentSeenUntil.get(id) ?? 0;
+      if (visibleStart <= seenUntil) this.consentSeenUntil.set(id, Math.max(seenUntil, visibleEnd));
+    }
+  }
+
+  private consentRowWasSeen(id: string): boolean {
+    const row = this.consentCommandRows.find((candidate) => candidate[1] === id);
+    if (!row) return false;
+    const target = row[0].getRenderable(id);
+    return target != null && (this.consentSeenUntil.get(id) ?? 0) >= target.height;
+  }
+
+  private allConsentCommandsSeen(): boolean {
+    return this.consentCommandRows.length > 0 && this.consentCommandRows.every(([, id]) => this.consentRowWasSeen(id));
+  }
+
+  private reviewStartCanProceed(): boolean {
+    const hasRemoteConsent = this.consentWarningRows.length > 0 || this.consentCommandRows.length > 0;
+    if (!this.rowIsFullyVisible(this.selectedRow)) return false;
+    if (!hasRemoteConsent) return true;
+    return (
+      this.consentWarningRows.every((row) => this.rowIsFullyVisible(row)) &&
+      this.allConsentCommandsSeen() &&
+      this.consentPaintedAfterRestore &&
+      performance.now() - this.consentRestoredAt >= REVIEW_RESTORE_COOLDOWN_MS
+    );
   }
 
   private syncInput(view: ScreenView): void {
@@ -377,13 +522,25 @@ export class TuiApp {
   }
 
   private syncPanes(view: ScreenView): void {
-    const split = view.panes.length > 1 && this.renderer.width >= SPLIT_COLUMNS;
+    const consentSignature = this.currentConsentSignature();
+    if (consentSignature !== this.consentSignature) {
+      this.consentSignature = consentSignature;
+      this.consentSeenUntil.clear();
+      this.consentRestoredAt = Number.NEGATIVE_INFINITY;
+      this.consentPaintedAfterRestore = false;
+      this.consentGateNotice = "";
+    }
+
+    const compact = view.panes.some((pane) => pane.grow === 0);
+    const split = !compact && view.panes.length > 1 && this.renderer.width >= SPLIT_COLUMNS;
     const panes = split ? [...view.panes].reverse() : view.panes;
     this.body.flexDirection = split ? "row" : "column";
+    this.body.paddingTop = compact ? 0 : 1;
+    this.body.gap = compact ? 0 : 1;
 
     // Reuse pane boxes while the screen shape is stable so scroll offsets and
     // focus survive routine re-renders; rebuild whenever the shape changes.
-    const signature = `${view.panes.map((p) => p.id).join("|")}:${split ? "row" : "column"}`;
+    const signature = `${view.panes.map((p) => p.id).join("|")}:${split ? "row" : "column"}:${compact}`;
     if (signature !== this.lastPaneSignature) {
       for (const child of this.body.getChildren().slice()) {
         this.body.remove(child);
@@ -391,21 +548,29 @@ export class TuiApp {
       }
       this.paneScrolls = new Map();
       for (const paneView of panes) {
-        this.body.add(this.createPane(paneView, split));
+        this.body.add(this.createPane(paneView, split, compact));
       }
       this.lastPaneSignature = signature;
     }
 
     let selected: [ScrollBoxRenderable, string] | undefined;
+    this.consentCommandRows = [];
+    this.consentWarningRows = [];
     for (const paneView of view.panes) {
       const scroll = this.paneScrolls.get(paneView.id);
       if (!scroll) continue;
       const box = scroll.parent;
       if (box instanceof BoxRenderable) box.title = ` ${paneView.title} `;
       this.fillPane(scroll, paneView);
+      paneView.rows.forEach((row, position) => {
+        if (row.kind !== "text" || row.consent == null) return;
+        const target = row.consent === "command" ? this.consentCommandRows : this.consentWarningRows;
+        target.push([scroll, this.rowId(paneView.id, position)]);
+      });
       const position = paneView.rows.findIndex((row) => row.kind === "option" && row.selected);
       if (position >= 0) selected = [scroll, this.rowId(paneView.id, position)];
     }
+    this.selectedRow = selected;
     if (selected) {
       this.renderer.root.calculateLayout();
       this.renderer.root.updateLayout(0);
@@ -413,13 +578,22 @@ export class TuiApp {
     }
   }
 
-  private createPane(paneView: ViewPane, split: boolean): BoxRenderable {
+  private createPane(paneView: ViewPane, split: boolean, compact: boolean): BoxRenderable {
+    const actionHeight =
+      compact && paneView.grow === 0
+        ? Math.min(
+            this.estimatedPaneLines(paneView) + 2,
+            this.renderer.height - MIN_ROWS + MINIMUM_REVIEW_ACTION_HEIGHT,
+          )
+        : undefined;
     const box = new BoxRenderable(this.renderer, {
       id: `ulis-pane-${paneView.id}`,
       flexGrow: paneView.grow,
+      height: actionHeight,
+      flexShrink: actionHeight == null ? undefined : 0,
       flexBasis: split ? 0 : undefined,
       width: split ? undefined : "100%",
-      minHeight: 3,
+      minHeight: actionHeight == null ? 3 : Math.min(4, actionHeight),
       border: true,
       borderColor: THEME.border,
       title: ` ${paneView.title} `,
@@ -434,13 +608,26 @@ export class TuiApp {
       scrollY: true,
       scrollX: false,
       focusable: true,
-      contentOptions: { flexDirection: "column", padding: 1 },
+      contentOptions: { flexDirection: "column", padding: compact ? 0 : 1 },
       scrollbarOptions: { visible: true },
     });
 
     box.add(scroll);
     this.paneScrolls.set(paneView.id, scroll);
     return box;
+  }
+
+  private estimatedPaneLines(paneView: ViewPane): number {
+    const contentWidth = Math.max(1, this.renderer.width - 5);
+    return paneView.rows.reduce((lines, row) => {
+      if (row.kind !== "text") return lines + 1;
+      return (
+        lines +
+        row.text
+          .split("\n")
+          .reduce((wrapped, line) => wrapped + Math.max(1, Math.ceil(displayWidth(line) / contentWidth)), 0)
+      );
+    }, 0);
   }
 
   private fillPane(scroll: ScrollBoxRenderable, paneView: ViewPane): void {
@@ -630,12 +817,14 @@ export function keyEventToKey(event: KeyEvent): string | undefined {
     case "backspace":
     case "delete":
     case "tab":
+    case "pagedown":
       return name;
     default:
       break;
   }
 
   if (name && name.length === 1) return name;
+  if (event.sequence === "\x1b[6~") return "pagedown";
   if (event.sequence && event.sequence.length === 1) return event.sequence;
   return undefined;
 }
