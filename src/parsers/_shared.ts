@@ -84,6 +84,11 @@ export class ParseAggregateError extends Error {
  * ParseErrors so callers can choose to fail-fast or collect-all.
  *
  * Missing directory → { items: [], errors: [] } (uniform across all parsers).
+ *
+ * Entries are sorted byte-wise (default `Array.sort`, not `localeCompare`) because parse order
+ * becomes output order — rule index bullets, agent-map key order — and `readdirSync` returns raw
+ * dirent order under Bun. That order varies by filesystem and by checkout, which would break the
+ * byte-identical-output invariant.
  */
 export function readMarkdownDir<TFrontmatter, TItem>(
   dir: string,
@@ -98,9 +103,12 @@ export function readMarkdownDir<TFrontmatter, TItem>(
   if (opts?.recursive) {
     files = (readdirSync(dir, { recursive: true }) as string[])
       .map((f) => f.replace(/\\/g, "/"))
-      .filter((f) => f.endsWith(".md") && basename(f).toLowerCase() !== "readme.md");
+      .filter((f) => f.endsWith(".md") && basename(f).toLowerCase() !== "readme.md")
+      .sort();
   } else {
-    files = readdirSync(dir).filter((f) => f.endsWith(".md") && f.toLowerCase() !== "readme.md");
+    files = readdirSync(dir)
+      .filter((f) => f.endsWith(".md") && f.toLowerCase() !== "readme.md")
+      .sort();
   }
 
   const items: TItem[] = [];

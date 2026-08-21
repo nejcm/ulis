@@ -27,7 +27,11 @@ export function collectSkills(
   opts: { readonly sourceDir?: string; readonly source?: string } = {},
 ): { items: readonly ParsedSkill[]; errors: readonly ParseError[] } {
   if (!fileExists(skillsDir)) return { items: [], errors: [] };
-  const entries = readdirSync(skillsDir, { withFileTypes: true }).filter((d) => d.isDirectory());
+  // Byte-wise sort: parse order becomes output order, and Bun's readdirSync returns raw dirent
+  // order, which varies by filesystem and checkout. See readMarkdownDir in ./_shared.ts.
+  const entries = readdirSync(skillsDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const skills: ParsedSkill[] = [];
   const errors: ParseError[] = [];
 
