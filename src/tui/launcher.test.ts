@@ -249,7 +249,18 @@ describe("Node CLI isolation", () => {
   it("emits a dist/cli.js bundle with no OpenTUI reference", async () => {
     const { existsSync, readFileSync } = await import("node:fs");
     const bundle = join(import.meta.dir, "..", "..", "dist", "cli.js");
-    if (!existsSync(bundle)) return; // dist is only present after `bun run build`.
+    if (!existsSync(bundle)) {
+      // CI builds before it tests, so a missing bundle there means the invariant
+      // went unchecked — fail instead of passing silently. Locally the bundle is
+      // optional, but say loudly that the assertion did not run.
+      if (process.env.CI) {
+        throw new Error(
+          "dist/cli.js is missing. CI must run `bun run build` before `bun run test` so this bundle invariant is actually asserted.",
+        );
+      }
+      console.warn("[launcher.test] SKIPPED bundle assertion: dist/cli.js not built. Run `bun run build` first.");
+      return;
+    }
 
     expect(readFileSync(bundle, "utf-8")).not.toContain("@opentui/core");
     expect(readFileSync(bundle, "utf-8")).not.toMatch(/\bBun\.[A-Za-z_$][\w$]*/u);
