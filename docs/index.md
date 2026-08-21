@@ -82,8 +82,7 @@ const targets = [
 ]
 const steps = [
   { cmd: 'ulis init', title: 'Scaffold', body: 'Creates the canonical .ulis/ tree with sane defaults for agents, skills, MCP and permissions.' },
-  { cmd: 'ulis check', title: 'Validate', body: 'Schema parse, collision detection and reference resolution — fails fast before anything is written.' },
-  { cmd: 'ulis build', title: 'Compile', body: 'Emits native config for every target into /generated/ so you can diff before you ship.' },
+  { cmd: 'ulis build', title: 'Compile', body: 'Schema parse, collision detection and reference resolution, then native config for every target into /generated/ so you can diff before you ship.' },
   { cmd: 'ulis install', title: 'Deploy', body: 'Writes each output into the directory layout the tool expects. Idempotent and reversible.' },
 ]
 
@@ -284,7 +283,7 @@ body:has(.ulis-landing-page) {
 }
 .ul-pipeline { max-width: 1280px; margin: 0 auto; padding: 56px 24px 60px; }
 .ul-eyebrow { font-size: 11.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ul-dim); margin-bottom: 26px; }
-.ul-pipe-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border: 1px solid var(--ul-line); }
+.ul-pipe-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--ul-line); }
 .ul-pipe-step {
   padding: 28px 24px 32px; border-right: 1px solid var(--ul-line); display: flex; flex-direction: column; gap: 10px;
   background: rgba(255,255,255,0.015); transition: background-color .15s;

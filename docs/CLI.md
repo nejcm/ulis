@@ -6,7 +6,11 @@ title: CLI Reference
 
 `ulis <command> [options]`
 
-Running `ulis` with no command prints help. All commands exit non-zero on error with a message on stderr.
+Running `ulis` with no command prints help and exits 0. An unrecognised command exits 1 with a message on
+stderr. All commands exit non-zero on error with a message on stderr.
+
+`--target` must name at least one platform: an empty or comma-only value (`--target ""`, `--target ","`)
+is rejected with a non-zero exit rather than building nothing.
 
 ---
 
@@ -45,7 +49,7 @@ ulis build [-g | --global] [--source <path>] [--target <platforms>] [--preset <n
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `-g`, `--global`       | Read from `~/.ulis/` instead of `./.ulis/`.                                                                                                                                                                                                |
 | `--source <path>`      | Explicit source path. Takes precedence over `--global`. A git URL is refused here — see [Remote Sources](/guide/remote-sources).                                                                                                           |
-| `--target <platforms>` | Comma-separated subset of `claude,codex,cursor,opencode,forgecode`. Default: all.                                                                                                                                                          |
+| `--target <platforms>` | Comma-separated subset of `claude,codex,cursor,opencode,forgecode`. Default: all. Must name at least one platform.                                                                                                                         |
 | `--preset <names>`     | Apply preset(s) before the base source (comma-separated). Resolved from `~/.ulis/presets/<name>/` first, then bundled presets shipped with the CLI. A name may also be a git repository URL — see [Remote Sources](/guide/remote-sources). |
 
 Output is always written under `<source>/generated/<platform>/`. Existing contents there are cleared before each build.
