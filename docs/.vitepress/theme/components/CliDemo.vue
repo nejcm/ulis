@@ -1,18 +1,20 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick, watch } from "vue";
 
+import { version } from "../../../../package.json";
+
 const SCRIPT = [
   { kind: "cmd", text: "bun add -g @nejcm/ulis" },
-  { kind: "dim", text: "installed @nejcm/ulis@0.0.30 · 12 packages · 840ms" },
+  { kind: "dim", text: `installed @nejcm/ulis@${version}` },
   { kind: "cmd", text: "ulis init" },
-  { kind: "ok", text: "scaffolded .ulis/ — agents, skills, mcp, permissions.yaml" },
+  { kind: "ok", text: "scaffolded .ulis/ — agents, skills, commands, raw, rules, config.yaml, mcp.yaml, …" },
   { kind: "cmd", text: "ulis build" },
-  { kind: "ok", text: "claude-code   → generated/.claude/" },
-  { kind: "ok", text: "codex         → generated/.codex/" },
-  { kind: "ok", text: "cursor        → generated/.cursor/" },
-  { kind: "ok", text: "opencode      → generated/.opencode/" },
-  { kind: "ok", text: "forgecode     → generated/.forge/" },
-  { kind: "dim", text: "5 targets · 24 files · 0 collisions · schema valid" },
+  { kind: "ok", text: "opencode      → generated/opencode/" },
+  { kind: "ok", text: "claude        → generated/claude/" },
+  { kind: "ok", text: "codex         → generated/codex/" },
+  { kind: "ok", text: "cursor        → generated/cursor/" },
+  { kind: "ok", text: "forgecode     → generated/forgecode/" },
+  { kind: "dim", text: "validation passed · 0 warning(s)" },
   { kind: "cmd", text: "ulis install --yes" },
   { kind: "ok", text: "installed into every tool. one source of truth." },
 ];

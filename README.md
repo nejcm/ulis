@@ -301,6 +301,7 @@ bun run build      # bundles dist/cli.js + regenerates dist/schemas + schemas/ (
 | ------------------------ | ---------------------------------------------------------------------------- |
 | `bun run build`          | Bundle CLI (`tsup`) and regenerate JSON schemas                              |
 | `bun run dev`            | Run `ulis build` against the `example/` directory                            |
+| `bun run dev:install`    | Run `ulis install` against a temp copy of `example/` (never the repo itself) |
 | `bun run ulis <args>`    | Run the CLI from source (`tsx src/cli.ts …`)                                 |
 | `bun run tui`            | Launch the interactive TUI from source (Bun only)                            |
 | `bun run gen:screenshot` | Regenerate `tui.svg` from a deterministic OpenTUI frame                      |
@@ -324,7 +325,7 @@ src/
   utils/                   # config-loader, resolve-source, fs, logger, …
   validators/              # cross-ref + collision checks
   tui.ts                   # Bun-only TUI entrypoint (compiled to dist/tui.js)
-  tools/                   # gen-json-schema, gen-reference
+  tools/                   # gen-json-schema, gen-reference, dev-install, copy-presets
 example/                   # reference example config
 tests/
 docs/
@@ -335,7 +336,10 @@ docs/
 ### Testing
 
 The `bun run dev` command builds against `example/` so the CLI works without any `.ulis/` in the current directory.
-The `bun run dev:install --source example` command installs the example into global configs.
+The `bun run dev:install` command copies `example/` into a fresh temp directory and runs a real
+`ulis install --yes` against it, so prune and overwrite stay inside that temp directory and never
+touch this repo's own `.claude/`, `.codex/` or `.cursor/`. It prints the directory it wrote to.
+Extra flags are forwarded (`bun run dev:install --skip-external-skills`).
 
 ---
 

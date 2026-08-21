@@ -111,6 +111,36 @@ Install records generated agents, local skills, and root entries in `.ulis-manif
 
 For Codex `config.toml`, Claude `settings.json` / `settings.local.json`, and global `.claude.json`, the existing file is the base: generated values overwrite only matching paths, while absent values remain. Other native configs retain their allowlisted preservation rules. Raw fragments win through the generated output because raw is merged during build. If `--backup` is set, backups include the previous manifest and managed entries before pruning.
 
+### `.env` loading
+
+Before it runs anything, install loads `.env` files into its **own** environment. The child processes it
+later spawns for `extensions.yaml` and `skills.yaml` entries inherit that environment.
+
+Two files are read, in this order (`src/install.ts`, `loadDotEnv`):
+
+1. `<destBase>/.env` — the destination base, i.e. the current directory for a project install or your home directory for `--global`.
+2. `<source>/.env` — the source tree being installed.
+
+Precedence, in full:
+
+- A variable already present in the environment always wins. `.env` only ever **adds** keys, never overwrites one.
+- Because of that, `<destBase>/.env` is read first and therefore wins over `<source>/.env` for the same key.
+- Keys added by either file are removed again when the install finishes, so an in-process install (the TUI) does not leak them into the rest of the session.
+
+Parsing is deliberately minimal: `KEY=value` per line, `#` comments and blank lines skipped, lines with
+no `=` skipped, and one matching pair of surrounding single or double quotes stripped. There is no
+variable expansion, no `export` prefix and no multi-line values.
+
+**Remote sources:** when the source was cloned from a git URL, its `.env` is **not read at all**, and
+the install logs `Skipped the source tree's .env: a remote source's .env is never read.` A cloned `.env`
+is written by whoever owns that repository; reading it would let a repository author set the variables
+that decide where `npx`/`bunx` find and fetch code — `PATH`, `HOME`, `NODE_*`, `npm_*`, `BUN_*`,
+`GIT_*`, `SSH_*`, proxy variables — and so hijack the very commands you approved at the trust gate.
+`<destBase>/.env` is still read, since that file is yours. The same denylist is applied defensively to a
+**local** source's `.env` whenever any remote preset is part of the run.
+
+Preset-only install (`ulis preset install <names...>`) reads `<destBase>/.env` only — it has no single source tree.
+
 ---
 
 ## `ulis tui`
