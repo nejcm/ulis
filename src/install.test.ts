@@ -20,7 +20,7 @@ import { __test, loadDotEnv, planRemoteCommands, resolveRunner, runInstall, runP
 import { InstallError } from "./install/errors.js";
 import { detectInstallCollisions } from "./install/platforms.js";
 import { platformConfigDir, PLATFORMS, type Platform } from "./platforms.js";
-import { readMergeableConfig } from "./utils/config-merger.js";
+import { PreservedNativeConfigParseError, readMergeableConfig } from "./utils/config-merger.js";
 
 const tmpRoots: string[] = [];
 
@@ -109,6 +109,183 @@ describe("loadDotEnv", () => {
 });
 
 describe("runInstall", () => {
+  function createPlatformReportFixture() {
+    const root = createTempRoot();
+    const sourceDir = join(root, "source");
+    const outputDir = join(sourceDir, "generated");
+    const destBase = join(root, "destination");
+    const homeDir = join(root, "home");
+    write(join(sourceDir, "config.yaml"), "version: 1\nname: test\n");
+    write(join(outputDir, "claude", "agents", "worker.md"), "Claude worker.\n");
+    write(join(outputDir, "codex", "AGENTS.md"), "Codex instructions.\n");
+    mkdirSync(homeDir, { recursive: true });
+    return { sourceDir, outputDir, destBase, homeDir };
+  }
+
+  function captureLogger(logs: string[], onHeader?: (message: string) => void): Logger {
+    const record = (message: string) => logs.push(message);
+    return {
+      info: record,
+      success: record,
+      warn: record,
+      error: record,
+      dim: record,
+      header(message) {
+        record(message);
+        onHeader?.(message);
+      },
+    };
+  }
+
+  it("summarizes successful platform installs without an empty failure list", async () => {
+    const fixture = createPlatformReportFixture();
+    const logs: string[] = [];
+
+    await runInstall({
+      sourceDir: fixture.sourceDir,
+      outputDir: fixture.outputDir,
+      destBase: fixture.destBase,
+      userHome: fixture.homeDir,
+      platforms: ["claude", "codex"],
+      rebuild: false,
+      installExtensions: false,
+      installSkills: false,
+      logger: captureLogger(logs),
+    });
+
+    expect(logs).toContain("Install summary — installed: [claude, codex]");
+    expect(logs.some((line) => line.includes("failed: ["))).toBe(false);
+  });
+
+  it("continues after a platform failure, preserves its error, and does not write its manifest", async () => {
+    const fixture = createPlatformReportFixture();
+    const logs: string[] = [];
+    let error: unknown;
+    write(join(fixture.destBase, ".mcp.json"), "{invalid");
+
+    try {
+      await runInstall({
+        sourceDir: fixture.sourceDir,
+        outputDir: fixture.outputDir,
+        destBase: fixture.destBase,
+        userHome: fixture.homeDir,
+        platforms: ["claude", "codex"],
+        rebuild: false,
+        installExtensions: false,
+        installSkills: false,
+        logger: captureLogger(logs),
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(InstallError);
+    expect((error as Error).message).toBe(
+      `Failed to parse existing native config at ${join(fixture.destBase, ".mcp.json")}`,
+    );
+    expect((error as Error).cause).toBeInstanceOf(PreservedNativeConfigParseError);
+    expect(logs).toContain("Install summary — installed: [codex], failed: [claude]");
+    expect(read(join(fixture.destBase, ".codex", "AGENTS.md"))).toBe("Codex instructions.\n");
+    expect(existsSync(join(fixture.destBase, ".codex", ".ulis-manifest.json"))).toBe(true);
+    expect(existsSync(join(fixture.destBase, ".claude", ".ulis-manifest.json"))).toBe(false);
+  });
+
+  it("propagates an interrupt during the platform loop without reporting a platform failure", async () => {
+    const fixture = createPlatformReportFixture();
+    const logs: string[] = [];
+    const controller = new AbortController();
+    write(join(fixture.destBase, ".codex", "config.toml"), "[");
+    const logger = captureLogger(logs, (message) => {
+      if (message === "Installing Codex") controller.abort();
+    });
+
+    let error: unknown;
+    try {
+      await runInstall({
+        sourceDir: fixture.sourceDir,
+        outputDir: fixture.outputDir,
+        destBase: fixture.destBase,
+        userHome: fixture.homeDir,
+        platforms: ["claude", "codex"],
+        rebuild: false,
+        installExtensions: false,
+        installSkills: false,
+        logger,
+        signal: controller.signal,
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    const cause = error instanceof Error ? error.cause : undefined;
+    expect({
+      error: error instanceof Error ? error.message : String(error),
+      cause: cause instanceof Error ? cause.message : String(cause),
+      failureSummary: logs.find((line) => line.includes("failed: [")),
+      summary: logs.find((line) => line.startsWith("Install summary")),
+    }).toEqual({
+      error: "Install stopped by user.",
+      cause: `Failed to parse existing native config at ${join(fixture.destBase, ".codex", "config.toml")}`,
+      failureSummary: undefined,
+      summary: "Install summary — installed: [claude]",
+    });
+    expect((cause as Error).cause).toBeInstanceOf(PreservedNativeConfigParseError);
+    expect(read(join(fixture.destBase, ".claude", "agents", "worker.md"))).toBe("Claude worker.\n");
+    expect(existsSync(join(fixture.destBase, ".claude", ".ulis-manifest.json"))).toBe(true);
+    expect(read(join(fixture.destBase, ".codex", "config.toml"))).toBe("[");
+    expect(existsSync(join(fixture.destBase, ".codex", "AGENTS.md"))).toBe(false);
+    expect(existsSync(join(fixture.destBase, ".codex", ".ulis-manifest.json"))).toBe(false);
+  });
+
+  it("reports recorded failures when a later platform is interrupted", async () => {
+    for (const platforms of [
+      ["claude", "codex"],
+      ["claude", "codex", "cursor"],
+    ] as const) {
+      const fixture = createPlatformReportFixture();
+      const logs: string[] = [];
+      const controller = new AbortController();
+      write(join(fixture.destBase, ".mcp.json"), "{invalid");
+      const logger = captureLogger(logs, (message) => {
+        if (message === "Installing Codex") controller.abort();
+      });
+
+      let error: unknown;
+      try {
+        await runInstall({
+          sourceDir: fixture.sourceDir,
+          outputDir: fixture.outputDir,
+          destBase: fixture.destBase,
+          userHome: fixture.homeDir,
+          platforms,
+          rebuild: false,
+          installExtensions: false,
+          installSkills: false,
+          logger,
+          signal: controller.signal,
+        });
+      } catch (caught) {
+        error = caught;
+      }
+
+      const cause = error instanceof Error ? error.cause : undefined;
+      expect({
+        error: error instanceof Error ? error.message : String(error),
+        cause: cause instanceof Error ? cause.message : String(cause),
+        summary: logs.find((line) => line.startsWith("Install summary")),
+      }).toEqual({
+        error: "Install stopped by user.",
+        cause: `Failed to parse existing native config at ${join(fixture.destBase, ".mcp.json")}`,
+        summary: "Install summary — installed: [codex], failed: [claude]",
+      });
+      expect(cause).toBeInstanceOf(InstallError);
+      expect((cause as Error).cause).toBeInstanceOf(PreservedNativeConfigParseError);
+      expect(existsSync(join(fixture.destBase, ".claude", ".ulis-manifest.json"))).toBe(false);
+      expect(existsSync(join(fixture.destBase, ".codex", ".ulis-manifest.json"))).toBe(true);
+      expect(existsSync(join(fixture.destBase, ".cursor"))).toBe(false);
+    }
+  });
+
   it("installs Codex skill agent metadata from source skill directories globally", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, "source");

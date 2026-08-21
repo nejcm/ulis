@@ -529,29 +529,49 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
     logger: options.logger,
   };
 
-  for (const platform of options.platforms) {
-    throwIfAborted(options.signal);
-    const platformOwnership = ownership.get(platform);
-    if (!platformOwnership) throw new InstallError(`Missing ownership preflight data for ${platform}`);
-    switch (platform) {
-      case "opencode":
-        await installOpencode(context, platformOwnership.previous?.rootEntries);
-        break;
-      case "claude":
-        await installClaude(context);
-        break;
-      case "codex":
-        await installCodex(context);
-        break;
-      case "cursor":
-        await installCursor(context);
-        break;
-      case "forgecode":
-        await installForgecode(context);
-        break;
+  const installed: Platform[] = [];
+  const failures: { readonly platform: Platform; readonly error: unknown }[] = [];
+  try {
+    for (const platform of options.platforms) {
+      throwIfAborted(options.signal, failures[0]?.error);
+      const platformOwnership = ownership.get(platform);
+      if (!platformOwnership) throw new InstallError(`Missing ownership preflight data for ${platform}`);
+      try {
+        switch (platform) {
+          case "opencode":
+            await installOpencode(context, platformOwnership.previous?.rootEntries);
+            break;
+          case "claude":
+            await installClaude(context);
+            break;
+          case "codex":
+            await installCodex(context);
+            break;
+          case "cursor":
+            await installCursor(context);
+            break;
+          case "forgecode":
+            await installForgecode(context);
+            break;
+        }
+        reconcileOwnership(platform, platformOwnership, context.prune, context.logger);
+        installed.push(platform);
+      } catch (error) {
+        throwIfAborted(options.signal, failures[0]?.error ?? error);
+        failures.push({ platform, error });
+      }
     }
-    reconcileOwnership(platform, platformOwnership, context.prune, context.logger);
+    throwIfAborted(options.signal, failures[0]?.error);
+  } finally {
+    if (installed.length > 0 || failures.length > 0) {
+      const summary = `Install summary — installed: [${installed.join(", ")}]${
+        failures.length > 0 ? `, failed: [${failures.map(({ platform }) => platform).join(", ")}]` : ""
+      }`;
+      if (failures.length > 0) logWarn(options.logger, summary);
+      else logInfo(options.logger, summary);
+    }
   }
+  if (failures.length > 0) throw failures[0]!.error;
 
   if (options.installSkillsEnabled) {
     for (const platform of options.platforms) {
@@ -905,9 +925,9 @@ async function installExtensions(
   }
 }
 
-function throwIfAborted(signal?: AbortSignal): void {
+function throwIfAborted(signal?: AbortSignal, cause?: unknown): void {
   // Shared by both install paths, so the wording cannot name one of them.
-  if (signal?.aborted) throw new Error("Install stopped by user.");
+  if (signal?.aborted) throw new Error("Install stopped by user.", { cause });
 }
 
 /**
