@@ -1046,7 +1046,7 @@ function handleMissingSourceKey(state: TuiState, key: string): TuiEffect {
 
 function handleInstallReviewKey(state: TuiState, key: string): TuiEffect {
   moveCursor(state, key, 1);
-  if (!isConfirmKey(key) && !isToggleKey(key)) return { type: "none" };
+  if (!isConfirmKey(key)) return { type: "none" };
 
   if (state.cursor === 0) {
     return { type: "start", action: "install" };
@@ -1059,7 +1059,9 @@ function handleInstallReviewKey(state: TuiState, key: string): TuiEffect {
 
 function handlePresetInstallReviewKey(state: TuiState, key: string): TuiEffect {
   moveCursor(state, key, PRESET_INSTALL_REVIEW_BACK_ROW);
-  if (!isConfirmKey(key) && !isToggleKey(key)) return { type: "none" };
+  if (!(state.cursor < PRESET_INSTALL_REVIEW_START_ROW ? isToggleKey(key) : isConfirmKey(key))) {
+    return { type: "none" };
+  }
 
   // Every toggle on this screen is part of {@link reviewFingerprint}, so flipping one would
   // invalidate the very review it is displayed on. Re-preparing regenerates the command list from

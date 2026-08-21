@@ -177,6 +177,24 @@ describe("preset install review rows", () => {
   });
 });
 
+describe("review controls", () => {
+  it("shows confirm-only controls on the install review", () => {
+    const state = createInitialState();
+    state.screen = "installReview";
+
+    expect(buildScreenView(state).controls).toContain("Enter: select");
+    expect(buildScreenView(state).controls.join(" ")).not.toMatch(/x\/space|Enter\/x\/space/u);
+  });
+
+  it("distinguishes preset review confirmation from toggling", () => {
+    const state = createInitialState();
+    state.screen = "presetInstallReview";
+
+    expect(buildScreenView(state).controls).toContain("Enter: select");
+    expect(buildScreenView(state).controls).toContain("x/space: toggle");
+  });
+});
+
 describe("remote command consent", () => {
   function rowText(state: ReturnType<typeof createInitialState>): string {
     return buildScreenView(state)

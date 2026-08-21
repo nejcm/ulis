@@ -438,6 +438,22 @@ describe("tui state", () => {
     expect(handleTuiKey(state, "enter")).toEqual({ type: "start", action: "install" });
   });
 
+  it.each([
+    [0, " "],
+    [0, "space"],
+    [0, "x"],
+    [1, " "],
+    [1, "space"],
+    [1, "x"],
+  ] as const)("installReview action row %i ignores toggle key %j", (cursor, key) => {
+    const state = createInitialState();
+    state.screen = "installReview";
+    state.cursor = cursor;
+
+    expect(handleTuiKey(state, key)).toEqual({ type: "none" });
+    expect(state.screen).toBe("installReview");
+  });
+
   it("installReview back navigates to plan", () => {
     const state = createInitialState();
     state.screen = "installReview";
@@ -458,6 +474,22 @@ describe("tui state", () => {
     handleTuiKey(state, " ");
 
     expect(state.presetInstallExtensions).toBe(false);
+  });
+
+  it.each([
+    [0, "backup"],
+    [1, "prune"],
+    [2, "presetInstallExtensions"],
+  ] as const)("presetInstallReview row %i toggles with space and x", (cursor, field) => {
+    for (const key of [" ", "space", "x"]) {
+      const state = createInitialState();
+      state.screen = "presetInstallReview";
+      state.cursor = cursor;
+      const before = state[field];
+
+      expect(handleTuiKey(state, key)).toEqual({ type: "none" });
+      expect(state[field]).toBe(!before);
+    }
   });
 
   it("presetInstallReview toggles re-prepare a remote review instead of invalidating it", () => {
@@ -501,6 +533,22 @@ describe("tui state", () => {
     state.cursor = 3;
 
     expect(handleTuiKey(state, "enter")).toEqual({ type: "start", action: "presetInstall" });
+  });
+
+  it.each([
+    [3, " "],
+    [3, "space"],
+    [3, "x"],
+    [4, " "],
+    [4, "space"],
+    [4, "x"],
+  ] as const)("presetInstallReview action row %i ignores toggle key %j", (cursor, key) => {
+    const state = createInitialState();
+    state.screen = "presetInstallReview";
+    state.cursor = cursor;
+
+    expect(handleTuiKey(state, key)).toEqual({ type: "none" });
+    expect(state.screen).toBe("presetInstallReview");
   });
 
   it("presetInstallReview blocks start when no platforms are selected", () => {

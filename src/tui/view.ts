@@ -490,7 +490,7 @@ function presetInstallReviewView(state: TuiState, cwd?: string, userHome?: strin
     breadcrumbs: ["Start", formatFlow(state.flow), "Plan", "Review preset install"],
     panes: [pane("review", "Preset install plan", rows)],
     notice: notice(state, "Preset install does not read or merge the current source."),
-    controls: [...TOGGLE_CONTROLS, MOUSE_CONTROL],
+    controls: [...NAV_CONTROLS, "x/space: toggle", MOUSE_CONTROL],
   };
 }
 
