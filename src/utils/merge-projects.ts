@@ -94,8 +94,9 @@ export function mergeProjects(projects: readonly ParsedProject[]): ParsedProject
     mcp: mergeMcp(projects.map((p) => p.mcp)),
     permissions: mergePermissions(projects.map((p) => p.permissions)),
     // Reuse the install-path mergers rather than re-deriving the semantics here: install builds the
-    // same two configs directly from the loaders, and the two paths must not diverge. Note these
-    // concatenate across layers (additive), unlike the base-wins rule the permission lists follow.
+    // same two configs directly from the loaders, and the two paths must not diverge. These merge
+    // per-entry by identity (key ?? name), base-wins on conflict — see mergeSkillsConfigs/
+    // mergeExtensionsConfigs for the full rationale.
     skillsConfig: mergeSkillsConfigs(projects.map((p) => p.skillsConfig)),
     extensionsConfig: mergeExtensionsConfigs(projects.map((p) => p.extensionsConfig)),
     ulisConfig: base.ulisConfig,
