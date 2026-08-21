@@ -34,6 +34,8 @@ export interface RunTuiActionOptions {
   readonly prepared?: PreparedRemoteInstall;
   /** Working directory used for plan resolution; must match the one used at review time. */
   readonly cwd?: string;
+  /** Home directory override used with cwd in tests. */
+  readonly userHome?: string;
 }
 
 /**
@@ -54,7 +56,7 @@ function requireReviewedRemote(
   if (prepared.action !== action) {
     throw new Error("A remote review may only start the action it was generated for.");
   }
-  if (prepared.fingerprint !== reviewFingerprint(state, action, options.cwd)) {
+  if (prepared.fingerprint !== reviewFingerprint(state, action, options.cwd, options.userHome)) {
     throw new Error("Settings changed since the remote commands were reviewed. Review them again before installing.");
   }
 }
@@ -73,7 +75,7 @@ export async function runTuiAction(
 ): Promise<void> {
   // Same cwd the review screen planned with. Without it an injected cwd would show one destination
   // and install to another, and the fingerprint below would still match.
-  const planned = planSource(state, options.cwd);
+  const planned = planSource(state, options.cwd, options.userHome);
   const localPresets = selectedPresets(state);
   const remoteRef = remotePresetRef(state);
 
@@ -163,6 +165,7 @@ export async function runTuiAction(
         remoteSources: remoteRef ? [remoteRef] : undefined,
         approvedCommands: options.prepared?.commands,
         destBase: planned.destBase,
+        userHome: options.userHome,
         globalInstall: planned.globalInstall,
         platforms: state.platforms,
         backup: state.backup,
@@ -210,6 +213,7 @@ export async function runTuiAction(
       // source's `.env` too - only `planned.remote` says whether the base source itself is a clone.
       sourceIsRemote: planned.remote,
       destBase: planned.destBase,
+      userHome: options.userHome,
       globalInstall: planned.globalInstall,
       platforms: state.platforms,
       backup: state.backup,
@@ -235,6 +239,7 @@ export async function runTuiAction(
     localPresets.map((preset) => preset.name),
     options.signal,
     options.cwd,
+    options.userHome,
   );
 }
 
@@ -281,6 +286,7 @@ async function runActionInChildProcess(
   presetNames: readonly string[],
   signal?: AbortSignal,
   cwd?: string,
+  userHome?: string,
 ): Promise<void> {
   const entryScript = process.env[ULIS_CLI_ENTRY_ENV] || process.argv[1];
   if (!entryScript) {
@@ -288,7 +294,7 @@ async function runActionInChildProcess(
   }
 
   // Same cwd the plan was resolved with, or the child would install somewhere the plan never showed.
-  const planned = planSource(state, cwd);
+  const planned = planSource(state, cwd, userHome);
   const args = [...process.execArgv, entryScript, action, "--source", planned.sourceDir];
   args.push("--target", state.platforms.join(","));
   if (presetNames.length > 0) args.push("--preset", presetNames.join(","));

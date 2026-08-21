@@ -253,6 +253,14 @@ export function loadDotEnv(
   }
 }
 
+export function resolveGlobalInstall(options: {
+  readonly globalInstall?: boolean;
+  readonly destBase: string;
+  readonly userHome: string;
+}): boolean {
+  return options.globalInstall ?? isSamePath(options.destBase, options.userHome);
+}
+
 /**
  * Install generated per-platform configs from source to destination base directory.
  */
@@ -263,7 +271,7 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
   const outputDir = resolve(options.outputDir ?? join(sourceDir, ULIS_GENERATED_DIRNAME));
   const platforms = options.platforms ? uniquePlatforms(options.platforms) : [...PLATFORMS];
   const userHome = resolve(options.userHome ?? homedir());
-  const globalInstall = options.globalInstall ?? isSamePath(destBase, userHome);
+  const globalInstall = resolveGlobalInstall({ ...options, destBase, userHome });
   const backup = options.backup ?? false;
   const prune = options.prune ?? true;
   // A remote source never gets to skip the build. The trust gate previews what `generate()` would
@@ -412,7 +420,7 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
   const destBase = resolve(options.destBase);
   const platforms = options.platforms ? uniquePlatforms(options.platforms) : [...PLATFORMS];
   const userHome = resolve(options.userHome ?? homedir());
-  const globalInstall = options.globalInstall ?? isSamePath(destBase, userHome);
+  const globalInstall = resolveGlobalInstall({ ...options, destBase, userHome });
   const backup = options.backup ?? false;
   const prune = options.prune ?? true;
   const installExtensionsEnabled = options.installExtensions ?? true;
@@ -671,11 +679,15 @@ export function planRemoteCommands(options: {
   readonly sourceDir?: string;
   readonly presets?: readonly ResolvedPreset[];
   readonly platforms: readonly Platform[];
+  readonly destBase: string;
+  readonly userHome?: string;
   readonly globalInstall?: boolean;
   readonly runner?: InstallRunner;
   readonly installExtensions?: boolean;
   readonly installSkills?: boolean;
 }): readonly string[] {
+  const destBase = resolve(options.destBase);
+  const userHome = resolve(options.userHome ?? homedir());
   const dirs = [
     ...(options.presets ?? []).map((preset) => preset.dir),
     ...(options.sourceDir ? [options.sourceDir] : []),
@@ -699,7 +711,7 @@ export function planRemoteCommands(options: {
       platforms: uniquePlatforms(options.platforms),
     },
     runner: resolveRunner({ cliFlag: options.runner, configValue: ulisConfig?.runner }),
-    globalInstall: options.globalInstall ?? false,
+    globalInstall: resolveGlobalInstall({ ...options, destBase, userHome }),
     installExtensionsEnabled: options.installExtensions ?? true,
     installSkillsEnabled: options.installSkills ?? true,
   });

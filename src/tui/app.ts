@@ -52,6 +52,8 @@ export interface TuiAppOptions {
   readonly readClipboard?: () => string;
   /** Overrides the working directory used in rendered plan paths. */
   readonly cwd?: string;
+  /** Overrides the home directory used in rendered plan paths. */
+  readonly userHome?: string;
 }
 
 /**
@@ -236,7 +238,7 @@ export class TuiApp {
       return;
     }
 
-    const view = buildScreenView(this.options.state, this.options.cwd);
+    const view = buildScreenView(this.options.state, this.options.cwd, this.options.userHome);
 
     const showLogo = view.title === "ULIS";
     this.headerTitle.content = showLogo ? ULIS_LOGO : view.title;

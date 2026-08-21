@@ -53,7 +53,7 @@ describe("tui state", () => {
       sourceMode: "project",
       destinationMode: "project",
       sourceExists: true,
-      globalInstall: false,
+      globalInstall: undefined,
     });
   });
 

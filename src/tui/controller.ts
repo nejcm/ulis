@@ -44,6 +44,8 @@ export interface TuiControllerOptions {
   readonly initializeSource?: typeof initializeMissingSource;
   /** Overrides the working directory shown in rendered plans. */
   readonly cwd?: string;
+  /** Overrides the home directory used in rendered plans and workflow execution. */
+  readonly userHome?: string;
 }
 
 type ActionTitleKey = Exclude<TuiEffect & { type: "start" }, never>["action"];
@@ -110,6 +112,7 @@ export class TuiController {
       onStateChanged: () => this.persistPreferences(),
       readClipboard: options.readClipboard ?? readClipboardText,
       cwd: options.cwd,
+      userHome: options.userHome,
     });
   }
 
@@ -169,6 +172,7 @@ export class TuiController {
           await (this.options.runAction ?? runTuiAction)(this.state, pendingAction, logger, {
             signal,
             cwd: this.options.cwd,
+            userHome: this.options.userHome,
           });
         }
       });
@@ -193,7 +197,8 @@ export class TuiController {
     // into a different action or a plan that has since been edited.
     const prepared =
       this.preparedRemote?.action === effect.action &&
-      this.preparedRemote.fingerprint === reviewFingerprint(this.state, this.preparedRemote.action, this.options.cwd)
+      this.preparedRemote.fingerprint ===
+        reviewFingerprint(this.state, this.preparedRemote.action, this.options.cwd, this.options.userHome)
         ? this.preparedRemote
         : undefined;
     if (this.preparedRemote && !prepared) this.disposePreparedRemote();
@@ -206,6 +211,7 @@ export class TuiController {
             signal,
             prepared,
             cwd: this.options.cwd,
+            userHome: this.options.userHome,
           }),
       );
     } finally {
@@ -301,7 +307,7 @@ export class TuiController {
    * will run. The clone is kept and handed to the install, so consent applies to what executes.
    */
   private async prepareRemoteInstall(action: "install" | "presetInstall"): Promise<void> {
-    const plan = planSource(this.state, this.options.cwd);
+    const plan = planSource(this.state, this.options.cwd, this.options.userHome);
     const remoteRef = remotePresetRef(this.state);
     // `action` rides along even though `publishReview` replans for whichever action is asked for:
     // it costs one string and removes any need to reason about cross-action reuse at all.
@@ -409,7 +415,7 @@ export class TuiController {
 
   private snapshotPrepareInputs(action: "install" | "presetInstall"): PrepareSnapshot {
     return {
-      fingerprint: reviewFingerprint(this.state, action, this.options.cwd),
+      fingerprint: reviewFingerprint(this.state, action, this.options.cwd, this.options.userHome),
       platforms: [...this.state.platforms],
       presetInstallExtensions: this.state.presetInstallExtensions,
       skipExternalSkills: this.state.skipExternalSkills,
@@ -431,6 +437,8 @@ export class TuiController {
       sourceDir: action === "install" ? (clone.sourceDir ?? plan.sourceDir) : undefined,
       presets,
       platforms: snapshot.platforms,
+      destBase: plan.destBase,
+      userHome: this.options.userHome,
       globalInstall: plan.globalInstall,
       installExtensions: action === "presetInstall" ? snapshot.presetInstallExtensions : true,
       installSkills: !snapshot.skipExternalSkills,

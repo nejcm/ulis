@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { EventEmitter } from "node:events";
 import { cpSync, existsSync, mkdirSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 
-import { __test as installTest } from "../install.js";
+import { __test as installTest, runPresetInstall } from "../install.js";
+import { createTempRoot, writeTextFile } from "../test-utils/fs.js";
 import { createInitialState, reviewFingerprint } from "./state.js";
 
 const fixturesDir = resolve(import.meta.dirname, "../../tests/fixtures");
@@ -148,6 +149,7 @@ function createLogger() {
 describe("tui actions child process flow", () => {
   afterEach(() => {
     __test.resetRuntimeDependencies();
+    installTest.resetRuntimeDependencies();
   });
 
   it("build action spawns current CLI entry with source, targets, and presets", async () => {
@@ -276,6 +278,37 @@ describe("tui actions child process flow", () => {
         { name: "b", dir: "/project/presets/b" },
       ],
     });
+  });
+
+  it("preset install derives global skill scope when the project destination is the user home", async () => {
+    const home = createTempRoot("ulis-tui-actions-");
+    const presetDir = join(home, "preset");
+    writeTextFile(join(presetDir, "config.yaml"), "version: 1\nname: team\n");
+    writeTextFile(join(presetDir, "skills.yaml"), ['"*":', "  skills:", "    - name: test/skill", ""].join("\n"));
+    const commands: Array<{ command: string; args: readonly string[] }> = [];
+    installTest.setRuntimeDependencies({
+      async runAsyncCommand(command, args) {
+        commands.push({ command, args });
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+    __test.setRuntimeDependencies({ runPresetInstall });
+    const state = createInitialState([
+      { name: "team", displayName: "Team", description: "", source: "project", dir: presetDir },
+    ]);
+    state.flow = "presetsOnly";
+    state.selectedPresetNames = ["project:team"];
+    state.platforms = ["claude"];
+    state.presetInstallExtensions = false;
+
+    await runTuiAction(state, "presetInstall", createLogger(), { cwd: home, userHome: home });
+
+    expect(commands.filter((command) => command.command === "npx")).toEqual([
+      {
+        command: "npx",
+        args: ["skills@latest", "add", "test/skill", "-a", "claude-code", "-g", "--yes"],
+      },
+    ]);
   });
 
   it("preset install action forwards cancellation to the installer", async () => {

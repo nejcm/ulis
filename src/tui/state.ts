@@ -36,7 +36,7 @@ export interface PlannedSource {
   readonly sourceMode: SourceMode;
   readonly destinationMode: DestinationMode;
   readonly sourceExists: boolean;
-  readonly globalInstall: boolean;
+  readonly globalInstall?: boolean;
   /** True when `sourceDir` is a git URL to clone rather than a path on disk. */
   readonly remote: boolean;
 }
@@ -257,7 +257,7 @@ export function planSource(state: TuiState, cwd: string = process.cwd(), userHom
     sourceMode: state.sourceMode,
     destinationMode: state.destinationMode,
     sourceExists: remote || existsSync(sourceDir),
-    globalInstall: state.destinationMode === "global",
+    globalInstall: state.destinationMode === "global" ? true : undefined,
     remote,
   };
 }
@@ -291,8 +291,13 @@ export function remotePresetRef(state: TuiState): string | undefined {
  * for the exact settings it was generated from; if any of these change, the displayed commands may
  * no longer match what would execute, so the run must be refused until it is reviewed again.
  */
-export function reviewFingerprint(state: TuiState, action: "install" | "presetInstall", cwd?: string): string {
-  const plan = planSource(state, cwd);
+export function reviewFingerprint(
+  state: TuiState,
+  action: "install" | "presetInstall",
+  cwd?: string,
+  userHome?: string,
+): string {
+  const plan = planSource(state, cwd, userHome);
   return JSON.stringify([
     action,
     state.flow,

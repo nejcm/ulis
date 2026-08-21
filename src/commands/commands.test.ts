@@ -248,6 +248,29 @@ describe("commands", () => {
     expect(existsSync(join(home, ".mcp.json"))).toBe(false);
   });
 
+  it("installCmd uses global skill scope when the project destination is the user home", async () => {
+    const home = createTempRoot();
+    const sourceDir = copyFixtureSource(home);
+    writeFileSync(join(sourceDir, "skills.yaml"), ['"*":', "  skills:", "    - name: test/skill", ""].join("\n"));
+    process.chdir(home);
+    const commands: Array<{ command: string; args: readonly string[] }> = [];
+    __test.setRuntimeDependencies({
+      async runAsyncCommand(command, args) {
+        commands.push({ command, args });
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    await installCmd({ yes: true, target: "claude", homeDir: home, extensions: false });
+
+    expect(commands).toEqual([
+      {
+        command: "npx",
+        args: ["skills@latest", "add", "test/skill", "-a", "claude-code", "-g", "--yes"],
+      },
+    ]);
+  });
+
   it("installCmd leaves SIGINT alone for a local source", async () => {
     const projectRoot = createTempRoot();
     copyFixtureSource(projectRoot);
@@ -422,6 +445,41 @@ describe("commands", () => {
     expect(existsSync(join(projectRoot, ".claude", "agents", "worker.md"))).toBe(true);
     expect(existsSync(join(projectRoot, ".ulis"))).toBe(false);
     expect(existsSync(join(presetDir, "generated"))).toBe(false);
+  });
+
+  it("presetInstallCmd uses global skill scope when the project destination is the user home", async () => {
+    const home = createTempRoot();
+    const presetsRoot = join(home, "presets");
+    const bundledPresetsRoot = join(home, "bundled-presets");
+    const presetDir = join(presetsRoot, "team");
+    mkdirSync(presetDir, { recursive: true });
+    mkdirSync(bundledPresetsRoot, { recursive: true });
+    writeFileSync(join(presetDir, "config.yaml"), "version: 1\nname: team\n");
+    writeFileSync(join(presetDir, "skills.yaml"), ['"*":', "  skills:", "    - name: test/skill", ""].join("\n"));
+    process.chdir(home);
+    const commands: Array<{ command: string; args: readonly string[] }> = [];
+    __test.setRuntimeDependencies({
+      async runAsyncCommand(command, args) {
+        commands.push({ command, args });
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    await presetInstallCmd("team", {
+      yes: true,
+      target: "claude",
+      userHome: home,
+      presetsRoot,
+      bundledPresetsRoot,
+      extensions: false,
+    });
+
+    expect(commands).toEqual([
+      {
+        command: "npx",
+        args: ["skills@latest", "add", "test/skill", "-a", "claude-code", "-g", "--yes"],
+      },
+    ]);
   });
 
   it("presetInstallCmd accepts comma-separated and repeated names in order", async () => {

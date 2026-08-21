@@ -95,7 +95,7 @@ export async function presetInstallCmd(
 
     await runPresetInstall({
       destBase,
-      globalInstall: Boolean(options.global),
+      globalInstall: options.global === true ? true : undefined,
       platforms: targets,
       backup: options.backup ?? false,
       prune: options.prune ?? true,

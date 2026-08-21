@@ -16,8 +16,9 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { runBuild, type Logger } from "./build.js";
-import { __test, loadDotEnv, resolveRunner, runInstall, runPresetInstall } from "./install.js";
+import { __test, loadDotEnv, planRemoteCommands, resolveRunner, runInstall, runPresetInstall } from "./install.js";
 import { InstallError } from "./install/errors.js";
+import { detectInstallCollisions } from "./install/platforms.js";
 import { platformConfigDir, PLATFORMS, type Platform } from "./platforms.js";
 import { readMergeableConfig } from "./utils/config-merger.js";
 
@@ -1023,7 +1024,7 @@ describe("runInstall", () => {
     expect(commands.filter((command) => command.command === "npx")).toHaveLength(0);
   });
 
-  it("scopes wildcard skill installs to selected global platforms", async () => {
+  it("keeps preview and execution skill argv aligned for an inferred home-layout scope", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -1045,6 +1046,14 @@ describe("runInstall", () => {
       },
     });
 
+    const preview = planRemoteCommands({
+      sourceDir,
+      platforms: ["claude"],
+      destBase: userHome,
+      userHome,
+      globalInstall: undefined,
+    });
+
     await runInstall({
       sourceDir,
       outputDir,
@@ -1055,14 +1064,13 @@ describe("runInstall", () => {
       logger: silentLogger,
     });
 
-    const skillsCommands = commands.filter((command) => command.command === "npx");
-    expect(skillsCommands).toHaveLength(1);
-    expect(skillsCommands[0]!.args).toContain("claude-code");
-    expect(skillsCommands[0]!.args).toContain("-g");
-    expect(skillsCommands[0]!.args).not.toContain("--project");
-    expect(skillsCommands[0]!.args).not.toContain("opencode");
-    expect(skillsCommands[0]!.args).not.toContain("codex");
-    expect(skillsCommands[0]!.args).not.toContain("cursor");
+    expect(preview).toEqual(["npx skills@latest add test/skill -a claude-code -g --yes"]);
+    expect(commands.filter((command) => command.command === "npx")).toEqual([
+      {
+        command: "npx",
+        args: ["skills@latest", "add", "test/skill", "-a", "claude-code", "-g", "--yes"],
+      },
+    ]);
   });
 
   it("splits each skill argument line into command arguments", async () => {
@@ -2091,36 +2099,55 @@ describe("runInstall", () => {
     });
   });
 
-  it("backs up the Claude root config selected by home-path equality", async () => {
-    const root = createTempRoot();
-    const sourceDir = join(root, ".ulis");
-    const outputDir = join(sourceDir, "generated");
-    const userHome = join(root, "home");
-    const targetConfig = join(userHome, ".claude.json");
-    const original = JSON.stringify({ mcpServers: { existing: { command: "existing" } } });
-    mkdirSync(userHome, { recursive: true });
-    write(join(outputDir, "claude", "settings.json"), "{}");
-    write(join(outputDir, "claude", ".claude.json"), JSON.stringify({ mcpServers: {} }));
-    write(targetConfig, original);
+  it.each([
+    ["home layout with explicit global scope", true, true],
+    ["project layout with explicit global scope", true, false],
+    ["home layout with inferred scope", undefined, true],
+    ["project layout with inferred scope", undefined, false],
+  ] as const)(
+    "selects the Claude root config from destination layout for %s",
+    async (_name, globalInstall, homeLayout) => {
+      const root = createTempRoot();
+      const sourceDir = join(root, ".ulis");
+      const outputDir = join(sourceDir, "generated");
+      const userHome = join(root, "home");
+      const destBase = homeLayout ? userHome : join(root, "project");
+      const targetConfig = join(destBase, homeLayout ? ".claude.json" : ".mcp.json");
+      const otherConfig = join(destBase, homeLayout ? ".mcp.json" : ".claude.json");
+      const original = JSON.stringify({ mcpServers: { existing: { command: "existing" } } });
+      mkdirSync(userHome, { recursive: true });
+      write(join(outputDir, "claude", "settings.json"), "{}");
+      write(join(outputDir, "claude", ".claude.json"), JSON.stringify({ mcpServers: {} }));
+      write(targetConfig, original);
+      write(otherConfig, original);
 
-    await runInstall({
-      sourceDir,
-      outputDir,
-      destBase: userHome,
-      userHome,
-      globalInstall: false,
-      platforms: ["claude"],
-      rebuild: false,
-      backup: true,
-      logger: silentLogger,
-    });
+      expect(detectInstallCollisions(destBase, ["claude"], userHome)).toEqual([targetConfig]);
 
-    const backup = readdirSync(userHome).find(
-      (entry) => entry.startsWith(".claude.json.") && entry.endsWith(".backup"),
-    );
-    expect(backup).toBeDefined();
-    expect(read(join(userHome, backup!))).toBe(original);
-  });
+      await runInstall({
+        sourceDir,
+        outputDir,
+        destBase,
+        userHome,
+        globalInstall,
+        platforms: ["claude"],
+        rebuild: false,
+        backup: true,
+        installSkills: false,
+        logger: silentLogger,
+      });
+
+      const backup = readdirSync(destBase).find(
+        (entry) => entry.startsWith(`${homeLayout ? ".claude.json" : ".mcp.json"}.`) && entry.endsWith(".backup"),
+      );
+      expect(backup).toBeDefined();
+      expect(read(join(destBase, backup!))).toBe(original);
+      expect(
+        readdirSync(destBase).some(
+          (entry) => entry.startsWith(`${homeLayout ? ".mcp.json" : ".claude.json"}.`) && entry.endsWith(".backup"),
+        ),
+      ).toBe(false);
+    },
+  );
 
   it("overlays generated MCP servers into ~/.claude.json without removing unmanaged servers", async () => {
     // Regression: ULIS used to capture only the `mcpServers` slice of an

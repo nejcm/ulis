@@ -81,12 +81,12 @@ const NAV_CONTROLS = ["j/k or arrows: move", "Enter: select", "Backspace: back",
 const TOGGLE_CONTROLS = ["j/k or arrows: move", "Enter/x/space: toggle", "Backspace: back", "q: quit"];
 const MOUSE_CONTROL = "mouse: click rows, wheel scrolls";
 
-export function buildScreenView(state: TuiState, cwd?: string): ScreenView {
+export function buildScreenView(state: TuiState, cwd?: string, userHome?: string): ScreenView {
   switch (state.screen) {
     case "flow":
       return flowView(state);
     case "plan":
-      return planView(state, cwd);
+      return planView(state, cwd, userHome);
     case "source":
       return sourceView(state);
     case "customSource":
@@ -98,11 +98,11 @@ export function buildScreenView(state: TuiState, cwd?: string): ScreenView {
     case "platforms":
       return platformsView(state);
     case "missingSource":
-      return missingSourceView(state, cwd);
+      return missingSourceView(state, cwd, userHome);
     case "installReview":
-      return installReviewView(state, cwd);
+      return installReviewView(state, cwd, userHome);
     case "presetInstallReview":
-      return presetInstallReviewView(state, cwd);
+      return presetInstallReviewView(state, cwd, userHome);
     case "running":
       return runningView(state);
     case "result":
@@ -133,8 +133,8 @@ function flowView(state: TuiState): ScreenView {
   };
 }
 
-function planView(state: TuiState, cwd?: string): ScreenView {
-  const plan = planSource(state, cwd);
+function planView(state: TuiState, cwd?: string, userHome?: string): ScreenView {
+  const plan = planSource(state, cwd, userHome);
   const presetLabel = state.flow === "presetsOnly" ? "Preset sources" : "Preset layers";
 
   const overview: ViewRow[] = [{ kind: "heading", text: "Input" }];
@@ -372,8 +372,8 @@ function platformsView(state: TuiState): ScreenView {
   };
 }
 
-function missingSourceView(state: TuiState, cwd?: string): ScreenView {
-  const plan = planSource(state, cwd);
+function missingSourceView(state: TuiState, cwd?: string, userHome?: string): ScreenView {
+  const plan = planSource(state, cwd, userHome);
   const rows: ViewRow[] = [
     { kind: "text", text: `Missing source: ${redactUserinfo(plan.sourceDir)}`, tone: "error" },
     { kind: "blank" },
@@ -431,15 +431,15 @@ function remoteCommandRows(state: TuiState): ViewRow[] {
   ];
 }
 
-function installReviewView(state: TuiState, cwd?: string): ScreenView {
-  const plan = planSource(state, cwd);
+function installReviewView(state: TuiState, cwd?: string, userHome?: string): ScreenView {
+  const plan = planSource(state, cwd, userHome);
   const rows: ViewRow[] = [
     field("Source", redactUserinfo(plan.sourceDir)),
     field("Destination", plan.destBase),
     field("Platforms", formatPlatforms(state.platforms)),
     field("Presets", formatPresets(state)),
     { kind: "blank" },
-    { kind: "text", text: formatInstallCommand(state, cwd), tone: "muted" },
+    { kind: "text", text: formatInstallCommand(state, cwd, userHome), tone: "muted" },
     ...remoteCommandRows(state),
     { kind: "blank" },
     option(state, 0, "Start install"),
@@ -456,8 +456,8 @@ function installReviewView(state: TuiState, cwd?: string): ScreenView {
   };
 }
 
-function presetInstallReviewView(state: TuiState, cwd?: string): ScreenView {
-  const plan = planSource(state, cwd);
+function presetInstallReviewView(state: TuiState, cwd?: string, userHome?: string): ScreenView {
+  const plan = planSource(state, cwd, userHome);
   const rows: ViewRow[] = [
     field("Preset location", formatPresetSourceMode(state.presetSourceMode, state.customPresetSource)),
     field("Destination", plan.destBase),
@@ -575,8 +575,8 @@ function formatPlatforms(platforms: readonly Platform[]): string {
   return platforms.length > 0 ? platforms.map((platform) => PLATFORM_LABELS[platform]).join(", ") : "none";
 }
 
-function formatInstallCommand(state: TuiState, cwd?: string): string {
-  const plan = planSource(state, cwd);
+function formatInstallCommand(state: TuiState, cwd?: string, userHome?: string): string {
+  const plan = planSource(state, cwd, userHome);
   // Redacted, so a copied command may need its credentials re-added - better than showing them.
   const args = [
     "ulis",
