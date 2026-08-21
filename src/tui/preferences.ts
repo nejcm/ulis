@@ -49,8 +49,8 @@ export function snapshotTuiPreferences(state: TuiState): TuiPreferences {
   };
 }
 
-export function applyTuiPreferences(state: TuiState, preferences: TuiPreferences): void {
-  if (typeof preferences.version === "number" && preferences.version > TUI_PREFERENCES_VERSION) return;
+export function applyTuiPreferences(state: TuiState, preferences: TuiPreferences): boolean {
+  if (typeof preferences.version === "number" && preferences.version > TUI_PREFERENCES_VERSION) return false;
 
   state.flowPreferences = parsePreferenceScopes(preferences.scopes);
 
@@ -67,6 +67,7 @@ export function applyTuiPreferences(state: TuiState, preferences: TuiPreferences
   }
 
   applyFlowPreferences(state, state.flow);
+  return true;
 }
 
 function legacyFlowPreferences(state: TuiState, preferences: TuiPreferences): TuiFlowPreferences | undefined {
@@ -113,18 +114,32 @@ function legacyFlowPreferences(state: TuiState, preferences: TuiPreferences): Tu
   return Object.keys(next).length > 0 ? next : undefined;
 }
 
-export function loadTuiPreferences(state: TuiState, filePath: string = getTuiPreferencesPath()): string | undefined {
-  if (!existsSync(filePath)) return;
+export function loadTuiPreferences(
+  state: TuiState,
+  filePath: string = getTuiPreferencesPath(),
+): { readonly canSave: boolean; readonly notice?: string } {
+  if (!existsSync(filePath)) return { canSave: true };
 
   try {
     const raw = JSON.parse(readFileSync(filePath, "utf-8")) as unknown;
     if (!isRecord(raw)) {
-      return `Ignored TUI preferences at ${filePath} because the file is not a JSON object.`;
+      return {
+        canSave: true,
+        notice: `Ignored TUI preferences at ${filePath} because the file is not a JSON object.`,
+      };
     }
-    applyTuiPreferences(state, raw);
-    return;
+    if (!applyTuiPreferences(state, raw)) {
+      return {
+        canSave: false,
+        notice: `TUI preferences at ${filePath} use version ${String(raw.version)}, which is newer than this ULIS understands. Your preferences will not be changed this session.`,
+      };
+    }
+    return { canSave: true };
   } catch (error) {
-    return `Unable to load TUI preferences from ${filePath}: ${formatError(error)}`;
+    return {
+      canSave: true,
+      notice: `Unable to load TUI preferences from ${filePath}: ${formatError(error)}`,
+    };
   }
 }
 

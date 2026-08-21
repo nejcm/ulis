@@ -81,6 +81,7 @@ export class TuiController {
   private readonly options: TuiControllerOptions;
   private readonly app: TuiApp;
 
+  private readonly canSavePreferences: boolean;
   private lastSavedPreferences: string;
   private runAbortController: AbortController | undefined;
   /** Clone backing the review screen. Reused by the install so what ran is what was shown. */
@@ -102,8 +103,9 @@ export class TuiController {
 
     this.state = createInitialState();
     this.state.availablePresets = (options.listPresets ?? listTuiPresets)({ cwd: options.cwd });
-    const loadError = loadTuiPreferences(this.state, options.preferencesPath);
-    if (loadError) this.state.notice = loadError;
+    const loadedPreferences = loadTuiPreferences(this.state, options.preferencesPath);
+    this.canSavePreferences = loadedPreferences.canSave;
+    if (loadedPreferences.notice) this.state.notice = loadedPreferences.notice;
     this.lastSavedPreferences = JSON.stringify(snapshotTuiPreferences(this.state));
 
     this.app = new TuiApp(renderer, {
@@ -277,6 +279,10 @@ export class TuiController {
   private persistPreferences(): void {
     const nextSnapshot = JSON.stringify(snapshotTuiPreferences(this.state));
     if (nextSnapshot === this.lastSavedPreferences) return;
+    if (!this.canSavePreferences) {
+      this.state.notice ||= "Preferences are newer than this ULIS; changes are not being saved.";
+      return;
+    }
 
     const error = saveTuiPreferences(this.state, this.options.preferencesPath);
     if (error == null) {

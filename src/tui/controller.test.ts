@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -325,6 +325,34 @@ describe("TUI text input", () => {
 
     expect(harness.controller.state.notice).toContain("No presets found");
     expect(harness.controller.state.notice).toContain("C:\\empty-presets");
+  });
+});
+
+describe("TUI preference persistence", () => {
+  it("leaves future-version preferences untouched for the session", async () => {
+    const filePath = preferencesPath();
+    const contents = '{\n  "version": 3,\n  "futureField": "preserve me"\n}\n';
+    const reminder = "Preferences are newer than this ULIS; changes are not being saved.";
+    writeFileSync(filePath, contents);
+    const harness = await createHarness(100, 30, { preferencesPath: filePath });
+
+    expect(harness.controller.state.notice).toBe(
+      `TUI preferences at ${filePath} use version 3, which is newer than this ULIS understands. Your preferences will not be changed this session.`,
+    );
+
+    await harness.press("ARROW_DOWN", "RETURN");
+
+    expect(harness.controller.state.screen).toBe("plan");
+    expect(harness.controller.state.notice).toBe(reminder);
+    expect(readFileSync(filePath, "utf-8")).toBe(contents);
+
+    harness.controller.state.flow = "presetsOnly";
+    await harness.controller.handleEffect({ type: "loadCustomPresetSource", path: "/tmp/presets" });
+    expect(harness.controller.state.notice).toBe("No presets found in custom directory: /tmp/presets");
+    expect(readFileSync(filePath, "utf-8")).toBe(contents);
+
+    await harness.press("BACKSPACE");
+    expect(harness.controller.state.notice).toBe(reminder);
   });
 });
 

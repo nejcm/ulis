@@ -18,6 +18,7 @@ import { dirname, join } from "node:path";
 import { runBuild, type Logger } from "./build.js";
 import { __test, loadDotEnv, planRemoteCommands, resolveRunner, runInstall, runPresetInstall } from "./install.js";
 import { InstallError } from "./install/errors.js";
+import { preflightOwnership } from "./install/manifest.js";
 import { detectInstallCollisions } from "./install/platforms.js";
 import { formatCommandPreview } from "./install/preview.js";
 import { platformConfigDir, PLATFORMS, type Platform } from "./platforms.js";
@@ -2101,6 +2102,22 @@ describe("runInstall", () => {
       expect(existsSync(join(projectDir, ".claude", ".ulis-manifest.json"))).toBe(false);
     });
   }
+
+  it("rejects a future ownership manifest version during preflight", () => {
+    const root = createTempRoot();
+    const outputDir = join(root, ".ulis", "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const manifestPath = join(projectDir, ".claude", ".ulis-manifest.json");
+    write(manifestPath, JSON.stringify({ version: 3, agents: [], skills: [], rootEntries: [] }));
+
+    const preflight = () => preflightOwnership(["claude"], outputDir, projectDir, userHome, true);
+
+    expect(preflight).toThrow(InstallError);
+    expect(preflight).toThrow(
+      `Unsupported ULIS ownership manifest for claude at ${manifestPath}: expected version 1 or 2, received 3`,
+    );
+  });
 
   it("backs up the ownership manifest and stale entries before pruning", async () => {
     const root = createTempRoot();
