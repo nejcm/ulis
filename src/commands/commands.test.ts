@@ -315,6 +315,75 @@ describe("commands", () => {
     expect(exit.exits).toHaveLength(1);
   });
 
+  it("installCmd finishes the current platform and aborts at a write checkpoint", async () => {
+    const projectRoot = createTempRoot();
+    const homeDir = join(projectRoot, "home");
+    process.chdir(projectRoot);
+    const cloned = mockClone();
+    const originalHeader = log.header;
+    const originalDim = log.dim;
+    let writingClaude = false;
+    let interrupted = false;
+    let copiedAfterInterrupt = 0;
+    let clonePresentAtInterrupt = false;
+    const clonePresentAtExit: boolean[] = [];
+    const exit = captureExit({ onExit: () => clonePresentAtExit.push(cloned.some(existsSync)) });
+
+    log.header = (message: string) => {
+      writingClaude = message === "Installing Claude Code";
+    };
+    log.dim = () => {
+      // Platform copies are synchronous, so this directly reaches the handler state a real signal
+      // reaches only at the next await.
+      if (!writingClaude) return;
+      if (interrupted) {
+        copiedAfterInterrupt += 1;
+        return;
+      }
+      interrupted = true;
+      pressCtrlC();
+      clonePresentAtInterrupt = cloned.some(existsSync);
+    };
+
+    try {
+      await expect(
+        installCmd({
+          yes: true,
+          target: ["claude", "codex"],
+          source: "https://github.com/o/r",
+          homeDir,
+          extensions: false,
+          skipExternalSkills: true,
+        }),
+      ).rejects.toThrow("Install stopped by user.");
+    } finally {
+      log.header = originalHeader;
+      log.dim = originalDim;
+      exit.restore();
+    }
+
+    expect(clonePresentAtInterrupt).toBe(true);
+    expect(copiedAfterInterrupt).toBeGreaterThan(0);
+    expect(existsSync(join(projectRoot, ".claude", "agents", "worker.md"))).toBe(true);
+    expect(existsSync(join(projectRoot, ".claude", "skills", "my-skill", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(projectRoot, ".claude", ".ulis-manifest.json"))).toBe(true);
+    expect(existsSync(join(projectRoot, ".codex"))).toBe(false);
+    expect(cloned.map(existsSync)).toEqual([false]);
+    expect(clonePresentAtExit).toEqual([false]);
+    expect(exit.exits).toHaveLength(1);
+
+    await installCmd({
+      yes: true,
+      target: ["claude", "codex"],
+      source: "https://github.com/o/r",
+      homeDir,
+      extensions: false,
+      skipExternalSkills: true,
+    });
+    expect(existsSync(join(projectRoot, ".codex", "agents", "worker.toml"))).toBe(true);
+    expect(cloned.map(existsSync)).toEqual([false, false]);
+  });
+
   // "Press again to force quit". The first press defers its exit until the clone unwinds; a second
   // one must not be swallowed, or SIGINT, SIGTERM and SIGHUP would all be ignored until a wedged
   // clone times out, leaving SIGKILL as the only way out. Stopping at once can leave the temp

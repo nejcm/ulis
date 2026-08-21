@@ -93,22 +93,24 @@ export async function presetInstallCmd(
       }
     }
 
-    await runPresetInstall({
-      destBase,
-      globalInstall: options.global === true ? true : undefined,
-      platforms: targets,
-      backup: options.backup ?? false,
-      prune: options.prune ?? true,
-      logger: log,
-      presets,
-      runner: options.runner,
-      installExtensions: options.extensions ?? true,
-      installSkills: !options.skipExternalSkills,
-      userHome,
-      remoteSources: presets.flatMap((preset) => (preset.remoteUrl ? [preset.remoteUrl] : [])),
-      nonInteractive: options.yes ?? false,
-      signal: guard.signal,
-    });
+    await guard.track(() =>
+      runPresetInstall({
+        destBase,
+        globalInstall: options.global === true ? true : undefined,
+        platforms: targets,
+        backup: options.backup ?? false,
+        prune: options.prune ?? true,
+        logger: log,
+        presets,
+        runner: options.runner,
+        installExtensions: options.extensions ?? true,
+        installSkills: !options.skipExternalSkills,
+        userHome,
+        remoteSources: presets.flatMap((preset) => (preset.remoteUrl ? [preset.remoteUrl] : [])),
+        nonInteractive: options.yes ?? false,
+        signal: guard.signal,
+      }),
+    );
   } finally {
     guard.release();
   }

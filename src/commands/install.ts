@@ -74,29 +74,31 @@ export async function installCmd(options: InstallCmdOptions = {}): Promise<void>
       }
     }
 
-    await runInstall({
-      sourceDir,
-      sourceLabel: remoteLabel,
-      sourceIsRemote: mode === "remote",
-      destBase,
-      userHome: options.homeDir,
-      globalInstall,
-      platforms: targets,
-      backup: options.backup ?? false,
-      prune: options.prune ?? true,
-      rebuild: options.rebuild ?? true,
-      logger: log,
-      presets,
-      runner: options.runner,
-      installExtensions: options.extensions ?? true,
-      installSkills: !options.skipExternalSkills,
-      remoteSources: [
-        ...(remoteLabel ? [remoteLabel] : []),
-        ...presets.flatMap((preset) => (preset.remoteUrl ? [preset.remoteUrl] : [])),
-      ],
-      nonInteractive: options.yes ?? false,
-      signal: guard.signal,
-    });
+    await guard.track(() =>
+      runInstall({
+        sourceDir,
+        sourceLabel: remoteLabel,
+        sourceIsRemote: mode === "remote",
+        destBase,
+        userHome: options.homeDir,
+        globalInstall,
+        platforms: targets,
+        backup: options.backup ?? false,
+        prune: options.prune ?? true,
+        rebuild: options.rebuild ?? true,
+        logger: log,
+        presets,
+        runner: options.runner,
+        installExtensions: options.extensions ?? true,
+        installSkills: !options.skipExternalSkills,
+        remoteSources: [
+          ...(remoteLabel ? [remoteLabel] : []),
+          ...presets.flatMap((preset) => (preset.remoteUrl ? [preset.remoteUrl] : [])),
+        ],
+        nonInteractive: options.yes ?? false,
+        signal: guard.signal,
+      }),
+    );
   } finally {
     guard.release();
   }

@@ -4,9 +4,9 @@
  */
 
 export interface InterruptGuard {
-  /** Threaded into anything that clones, so Ctrl-C can abort it. `undefined` for local-only runs. */
+  /** Threaded through remote-source resolution and install. `undefined` for local-only runs. */
   readonly signal: AbortSignal | undefined;
-  /** Marks work that may own a not-yet-published temp directory (i.e. an in-flight clone). */
+  /** Marks work that still depends on an owned temporary source. */
   track<T>(work: () => Promise<T>): Promise<T>;
   onCleanup(cleanup: () => void): void;
   /** Runs every cleanup, deregisters, and performs a deferred interrupt exit. Call in `finally`. */
@@ -18,7 +18,7 @@ const TERMINATION_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
 
 /**
  * Ctrl-C would otherwise kill the process before a `finally` runs and leak a clone. When `active`,
- * take over the termination signals: abort an in-flight clone and exit only once it has unwound, or
+ * take over the termination signals: abort tracked work and exit only once it has unwound, or
  * clean up and stop the run immediately when nothing is in flight. A second signal arriving while
  * that abort is still unwinding force-quits, so the process is never unstoppable. Local-only runs
  * register nothing and keep the default behaviour.
@@ -49,8 +49,8 @@ export function createInterruptGuard(active: boolean): InterruptGuard {
 
   const onInterrupt = () => {
     if (controller && inFlight > 0 && !controller.signal.aborted) {
-      // A clone is running and still owns a temp directory nobody else can see. Aborting kills git
-      // and lets fetchRemoteSource remove it; exiting now would kill the process first.
+      // Tracked work still depends on a temp source. Abort and let its checkpoints unwind before
+      // cleanup removes that source; exiting now would kill the process first.
       controller.abort();
       interrupted = true;
       return;
@@ -88,7 +88,7 @@ export function createInterruptGuard(active: boolean): InterruptGuard {
         runCleanups();
       } finally {
         if (controller) offInterrupt();
-        // A Ctrl-C that landed mid-clone deferred its exit to here, so cleanup has already run.
+        // A Ctrl-C during tracked work deferred its exit here, so cleanup has already run.
         if (interrupted) __test.exitOnInterrupt();
       }
     },
