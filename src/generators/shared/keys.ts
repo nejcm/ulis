@@ -23,7 +23,9 @@ export function yamlScalarResolvesNonString(value: string): boolean {
  * through here, or a `]`, a newline or a quote in it opens a table the user never wrote.
  */
 export function toTomlKey(segment: string): string {
-  return BARE_KEY.test(segment) && !/^-+$/u.test(segment) ? segment : JSON.stringify(segment);
+  return BARE_KEY.test(segment) && !/^-+$/u.test(segment)
+    ? segment
+    : JSON.stringify(segment).replaceAll("\u007f", "\\u007f");
 }
 
 /** A dotted TOML table header, each segment quoted independently: `[a.b]`, `[a."odd key"]`. */
@@ -37,5 +39,10 @@ export function toTomlTableHeader(...segments: readonly string[]): string {
  * is how an unknown `platforms.claude` key smuggled a whole `hooks:` block into an agent file.
  */
 export function toYamlKey(key: string): string {
-  return BARE_KEY.test(key) && !/^-+$/u.test(key) && !yamlScalarResolvesNonString(key) ? key : JSON.stringify(key);
+  return BARE_KEY.test(key) && !/^-+$/u.test(key) && !yamlScalarResolvesNonString(key)
+    ? key
+    : JSON.stringify(key).replace(
+        /[\u007f-\u009f]/gu,
+        (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+      );
 }

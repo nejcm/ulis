@@ -1,6 +1,7 @@
 import { join } from "node:path";
 
 import type { ParsedRule } from "../../parsers/rule.js";
+import { sanitizeInstructionText } from "../../utils/policy-comments.js";
 import type { FileArtifact } from "../types.js";
 
 export interface RulesIndexOptions {
@@ -52,10 +53,10 @@ export function buildRulesIndex(
   for (const rule of enabledRules) {
     const referencePrefix = opts.referencePrefix ?? opts.artifactPrefix;
     const referencedRulePath = join(referencePrefix, rule.filename).replaceAll("\\", "/");
-    let line = `- **${rule.name}** (\`${referencedRulePath}\`)`;
-    if (rule.frontmatter.description) line += `: ${rule.frontmatter.description}`;
+    let line = `- **${sanitizeInstructionText(rule.name)}** (\`${sanitizeInstructionText(referencedRulePath)}\`)`;
+    if (rule.frontmatter.description) line += `: ${sanitizeInstructionText(rule.frontmatter.description)}`;
     if (rule.frontmatter.paths?.length) {
-      line += ` — apply when working in ${rule.frontmatter.paths.join(", ")}`;
+      line += ` — apply when working in ${rule.frontmatter.paths.map(sanitizeInstructionText).join(", ")}`;
     }
     indexLines.push(line);
   }

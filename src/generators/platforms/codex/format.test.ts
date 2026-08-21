@@ -1,8 +1,27 @@
 import { expect, it } from "bun:test";
 
 import { parse as parseToml } from "smol-toml";
+import { parse as parseYaml } from "yaml";
 
-import { toTomlMultilineString } from "./format.js";
+import { toTomlMultilineString, toTomlString, toYamlString } from "./format.js";
+
+it.each([
+  ["NUL", "\u0000"],
+  ["CR", "\r"],
+  ["ESC", "\u001b"],
+  ["DEL", "\u007f"],
+])("toTomlString round-trips %s byte-for-byte", (_label, value) => {
+  const parsed = parseToml(`value = ${toTomlString(value)}`) as Record<string, unknown>;
+  expect(parsed.value).toBe(value);
+});
+
+it("toYamlString escapes C1 controls and round-trips them", () => {
+  const value = "\u007f\u0085\u009f";
+  const encoded = toYamlString(value);
+
+  expect(encoded).not.toMatch(/[\u007f-\u009f]/u);
+  expect(parseYaml(`value: ${encoded}`)).toEqual({ value });
+});
 
 it.each([
   ["composite", `\nline """\r\nslash: \\ and sequence: \\n\r\ntrailing slash\\\n`],
