@@ -19,6 +19,7 @@ import { runBuild, type Logger } from "./build.js";
 import { __test, loadDotEnv, planRemoteCommands, resolveRunner, runInstall, runPresetInstall } from "./install.js";
 import { InstallError } from "./install/errors.js";
 import { detectInstallCollisions } from "./install/platforms.js";
+import { formatCommandPreview } from "./install/preview.js";
 import { platformConfigDir, PLATFORMS, type Platform } from "./platforms.js";
 import { PreservedNativeConfigParseError, readMergeableConfig } from "./utils/config-merger.js";
 
@@ -3251,13 +3252,35 @@ describe("remote trust gate", () => {
 
   it("accepting runs the commands", async () => {
     const run = await runWithRemote({ remoteSources: ["https://github.com/o/r"], answer: true });
+    const disclosed = run.logs.filter((line) => line.startsWith("  ")).map((line) => line.slice(2));
+    const spawned = run.commands
+      .filter(({ command }) => command === "npx" || command === "bunx")
+      .map(({ command, args }) => formatCommandPreview([command, ...args]));
     expect(run.questions).toHaveLength(1);
+    expect(run.logs.filter((line) => line === "Remote Source Commands")).toHaveLength(1);
+    expect(disclosed.filter((line) => spawned.includes(line))).toEqual(spawned);
     expect(run.commands.some((call) => call.command === "npx")).toBe(true);
   });
 
   it("-y runs the commands without prompting", async () => {
-    const run = await runWithRemote({ remoteSources: ["https://github.com/o/r"], nonInteractive: true });
+    const run = await runWithRemote({
+      remoteSources: ["https://github.com/o/r"],
+      nonInteractive: true,
+      mcpYaml: ["servers:", "  audit:", '    type: "remote"', '    url: "https://audit.example/mcp"', ""].join("\n"),
+      permissionsYaml: ["codex:", "  approvalMode: never", ""].join("\n"),
+    });
+    const disclosed = run.logs.filter((line) => line.startsWith("  ")).map((line) => line.slice(2));
+    const spawned = run.commands
+      .filter(({ command }) => command === "npx" || command === "bunx")
+      .map(({ command, args }) => formatCommandPreview([command, ...args]));
     expect(run.questions).toHaveLength(0);
+    expect(run.logs.filter((line) => line === "Remote Source Commands")).toHaveLength(1);
+    expect(disclosed).toContain("codex/config.toml connects to https://audit.example/mcp");
+    expect(disclosed).toContain("sets approval policy codex.approvalMode = never");
+    expect(disclosed.filter((line) => spawned.includes(line))).toEqual(spawned);
+    expect(run.logs.indexOf("Remote Source Commands")).toBeLessThan(
+      run.logs.findIndex((line) => line.startsWith("Install summary")),
+    );
     expect(run.commands.some((call) => call.command === "npx")).toBe(true);
   });
 
@@ -3914,6 +3937,62 @@ describe("cross-run remote provenance", () => {
 });
 
 describe("runPresetInstall", () => {
+  it("-y discloses remote preset commands without prompting", async () => {
+    const root = createTempRoot();
+    const presetDir = join(root, "preset");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const logs: string[] = [];
+    const questions: string[] = [];
+    const commands: Array<{ command: string; args: readonly string[] }> = [];
+    const record = (message: string) => logs.push(message);
+    const logger: Logger = {
+      info: record,
+      success: record,
+      warn: record,
+      error: record,
+      dim: record,
+      header: record,
+    };
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(presetDir, "config.yaml"), "version: 1\nname: preset\n");
+    write(join(presetDir, "skills.yaml"), ["codex:", "  skills:", "    - name: preset/skill", ""].join("\n"));
+    write(
+      join(presetDir, "extensions.yaml"),
+      ["codex:", "  extensions:", "    - name: preset/extension", ""].join("\n"),
+    );
+    __test.setRuntimeDependencies({
+      runCommand: () => ({ status: 0, stdout: "", stderr: "" }) as never,
+      async runAsyncCommand(command, args) {
+        commands.push({ command, args });
+        return { status: 0, stdout: "", stderr: "" };
+      },
+      async confirm(question) {
+        questions.push(question);
+        return false;
+      },
+    });
+
+    await runPresetInstall({
+      presets: [{ name: "preset", dir: presetDir, remoteUrl: "https://github.com/o/preset" }],
+      destBase: projectDir,
+      userHome,
+      platforms: ["codex"],
+      remoteSources: ["https://github.com/o/preset"],
+      nonInteractive: true,
+      logger,
+      runner: "npx",
+    });
+
+    const disclosed = logs.filter((line) => line.startsWith("  ")).map((line) => line.slice(2));
+    const spawned = commands.map(({ command, args }) => formatCommandPreview([command, ...args]));
+    expect(questions).toHaveLength(0);
+    expect(spawned).toHaveLength(2);
+    expect(logs.filter((line) => line === "Remote Source Commands")).toHaveLength(1);
+    expect(disclosed.filter((line) => spawned.includes(line))).toEqual(spawned);
+  });
+
   it("counts failed skills and extensions in one summary and suppresses completion", async () => {
     const root = createTempRoot();
     const presetDir = join(root, "preset");

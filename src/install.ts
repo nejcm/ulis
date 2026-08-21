@@ -820,11 +820,10 @@ async function confirmRemoteCommands(options: GeneratedInstallOptions): Promise<
     throw new InstallError("Refusing to run remote commands that differ from the ones reviewed. Review them again.");
   }
 
-  if (options.nonInteractive) return true;
-
   logHeader(options.logger, "Remote Source Commands");
   for (const url of remoteSources) logInfo(options.logger, `From ${url}`);
   for (const command of commands) logInfo(options.logger, `  ${command}`);
+  if (options.nonInteractive) return true;
   if (commands.length > 0) return await runtimeDependencies.confirm("Run these commands?");
 
   // Never claim there is nothing to run. Every bypass found so far printed a confident "nothing
@@ -835,7 +834,7 @@ async function confirmRemoteCommands(options: GeneratedInstallOptions): Promise<
 }
 
 function commandsMatch(approved: readonly string[], planned: readonly string[]): boolean {
-  // Order matters: it is the order they will be spawned in.
+  // Display order matters for consent. Spawn groups follow it; concurrent skills within a group may not.
   return approved.length === planned.length && approved.every((command, index) => command === planned[index]);
 }
 
