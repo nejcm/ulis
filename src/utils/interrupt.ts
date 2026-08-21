@@ -13,17 +13,26 @@ export interface InterruptGuard {
   release(): void;
 }
 
-/** Ctrl-C, plus the signals a terminal close or a `kill` sends; all leak a temp clone the same way. */
-const TERMINATION_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+/**
+ * Ctrl-C, plus the signals a terminal close or a `kill` sends; all leak a temp clone the same way.
+ * SIGABRT, SIGBUS and SIGPIPE are deliberately absent: they are raised by the runtime or ignored by
+ * default, and handling them in JS would convert a crash or a closed pipe into a cleanup path that
+ * keeps running on a process that is no longer sound.
+ */
+const TERMINATION_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const;
 
 /**
  * Ctrl-C would otherwise kill the process before a `finally` runs and leak a clone. When `active`,
  * take over the termination signals: abort tracked work and exit only once it has unwound, or
- * clean up and stop the run immediately when nothing is in flight. A second signal arriving while
- * that abort is still unwinding force-quits, so the process is never unstoppable. Local-only runs
- * register nothing and keep the default behaviour.
+ * clean up and stop the run immediately when nothing is in flight. In the default CLI mode, a
+ * second signal force-quits. `handleInterrupt` gives a long-lived owner every signal instead; the
+ * TUI deliberately keeps waiting for clone preparation because forced exit would strand it.
+ * Local-only runs register nothing and keep the default behaviour.
  */
-export function createInterruptGuard(active: boolean): InterruptGuard {
+export function createInterruptGuard(
+  active: boolean,
+  handleInterrupt?: (signal: (typeof TERMINATION_SIGNALS)[number]) => void,
+): InterruptGuard {
   const controller = active ? new AbortController() : undefined;
   const cleanups: (() => void)[] = [];
   let inFlight = 0;
@@ -47,7 +56,11 @@ export function createInterruptGuard(active: boolean): InterruptGuard {
     for (const signal of TERMINATION_SIGNALS) process.off(signal, onInterrupt);
   };
 
-  const onInterrupt = () => {
+  const onInterrupt = (signal: (typeof TERMINATION_SIGNALS)[number]) => {
+    if (handleInterrupt) {
+      handleInterrupt(signal);
+      return;
+    }
     if (controller && inFlight > 0 && !controller.signal.aborted) {
       // Tracked work still depends on a temp source. Abort and let its checkpoints unwind before
       // cleanup removes that source; exiting now would kill the process first.
@@ -56,7 +69,7 @@ export function createInterruptGuard(active: boolean): InterruptGuard {
       return;
     }
     // Nothing in flight, or the abort is already out and this is the user asking again. Either way
-    // stop here: these handlers cover SIGINT, SIGTERM and SIGHUP, so ignoring a repeat would leave
+    // stop here: these handlers cover every termination signal, so ignoring a repeat would leave
     // the process unstoppable short of SIGKILL while a wedged clone times out. A temp directory the
     // clone has not released yet is the accepted cost of the second press.
     interrupted = false; // The exit happens here, so `release` must not repeat it.

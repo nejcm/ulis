@@ -3,8 +3,12 @@ import { describe, expect, it } from "bun:test";
 import { createInterruptGuard, __test } from "./interrupt.js";
 
 /** Fire the handler the guard registered, without raising a real signal. */
+function fireSignal(signal: NodeJS.Signals): void {
+  (process.listeners(signal).at(-1) as ((value: string) => void) | undefined)?.(signal);
+}
+
 function pressCtrlC(): void {
-  (process.listeners("SIGINT").at(-1) as ((signal: string) => void) | undefined)?.("SIGINT");
+  fireSignal("SIGINT");
 }
 
 /** Record interrupt exits instead of stopping the test runner. */
@@ -55,7 +59,7 @@ describe("createInterruptGuard", () => {
     }
   });
 
-  // The handlers cover SIGINT, SIGTERM and SIGHUP, so a swallowed repeat leaves the process
+  // The handlers cover every termination signal, so a swallowed repeat leaves the process
   // stoppable only by SIGKILL while a wedged clone runs down its timeout.
   it("force-quits on a second interrupt while the first is still unwinding", async () => {
     const before = process.listenerCount("SIGINT");
@@ -76,6 +80,24 @@ describe("createInterruptGuard", () => {
       guard.release();
       expect(exit.exits).toBe(1);
     } finally {
+      exit.restore();
+    }
+  });
+
+  // Without the early return the delegating branch falls through to the default handler, which
+  // aborts and exits the process behind the owner's back.
+  it("delegates every termination signal instead of aborting or exiting", () => {
+    const exit = captureExit();
+    const signals: string[] = [];
+    const guard = createInterruptGuard(true, (signal) => signals.push(signal));
+
+    try {
+      for (const signal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"] as const) fireSignal(signal);
+      expect(signals).toEqual(["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"]);
+      expect(guard.signal?.aborted).toBe(false);
+      expect(exit.exits).toBe(0);
+    } finally {
+      guard.release();
       exit.restore();
     }
   });

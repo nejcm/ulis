@@ -4,7 +4,7 @@ import { constants, homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const SIGNALS: readonly NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
+const SIGNALS: readonly NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP", "SIGQUIT"];
 export const ULIS_CLI_ENTRY_ENV = "ULIS_CLI_ENTRY";
 
 export const BUN_REQUIRED_MESSAGE = [

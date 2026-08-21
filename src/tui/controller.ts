@@ -3,6 +3,7 @@ import type { CliRenderer } from "@opentui/core";
 import type { Logger } from "../build.js";
 import { planRemoteCommands } from "../install.js";
 import type { Platform } from "../platforms.js";
+import type { InterruptGuard } from "../utils/interrupt.js";
 import { sanitizeConsentText } from "../utils/redact.js";
 import { resolvePresets, type ResolvedPreset } from "../utils/resolve-presets.js";
 import { resolveSourceOrRemote } from "../utils/resolve-source.js";
@@ -39,6 +40,12 @@ export interface TuiControllerOptions {
   readonly writeStderr?: (message: string) => void;
   /** Overrides the graceful shutdown bound for deterministic controller tests. */
   readonly shutdownGraceMs?: number;
+  /**
+   * Teardown hooks owned by the Bun TUI entrypoint. Only the cleanup stack and release are handed
+   * over: in delegating mode the guard's own abort signal never fires, so threading it into remote
+   * resolution here would look like cancellation and silently do nothing.
+   */
+  readonly interruptGuard?: Pick<InterruptGuard, "onCleanup" | "release">;
   /** Overrides preset discovery; defaults to scanning the real preset roots. */
   readonly listPresets?: typeof listTuiPresets;
   /** Overrides clipboard reads for the explicit Ctrl+V paste path. */
@@ -128,6 +135,20 @@ export class TuiController {
       cwd: options.cwd,
       userHome: options.userHome,
     });
+    if (options.interruptGuard) {
+      options.interruptGuard.onCleanup(() => this.renderer.destroy());
+      options.interruptGuard.onCleanup(() => this.app.destroy());
+      options.interruptGuard.onCleanup(() => this.clearSpinner());
+      options.interruptGuard.onCleanup(() => this.disposePreparedRemote());
+      options.interruptGuard.onCleanup(() => {
+        for (const cleanup of [...this.inFlightCleanups]) {
+          try {
+            cleanup();
+          } catch {}
+        }
+        this.inFlightCleanups.clear();
+      });
+    }
   }
 
   /** Re-renders the current state. */
@@ -498,18 +519,22 @@ export class TuiController {
   }
 
   async shutdown(code: number): Promise<void> {
+    this.clearSpinner();
     if (this.shutdownStarted) {
       if (this.preparePromises.size === 0) this.finishShutdown();
       return;
     }
 
     this.shutdownStarted = true;
+    this.app.freeze();
     const run = this.runPromise;
     const incomplete =
       run != null ||
       this.preparePromises.size > 0 ||
       this.lastRunOutcome === "stopped" ||
       this.lastRunOutcome === "failed";
+    // `q` (code 0) with work still unfinished exits 1, and that first code stands: a signal
+    // arriving later reports the interrupted quit, not its own 128 + n.
     this.shutdownCode = code === 0 && incomplete ? 1 : code;
     this.runAbortController?.abort();
     this.prepareAbort?.abort();
@@ -535,12 +560,16 @@ export class TuiController {
   private finishShutdown(): void {
     if (this.shutdownFinished) return;
     this.shutdownFinished = true;
-    for (const cleanup of [...this.inFlightCleanups]) cleanup();
-    this.inFlightCleanups.clear();
-    this.disposePreparedRemote();
-    this.clearSpinner();
-    this.app.destroy();
-    this.renderer.destroy();
+    if (this.options.interruptGuard) {
+      this.options.interruptGuard.release();
+    } else {
+      for (const cleanup of [...this.inFlightCleanups]) cleanup();
+      this.inFlightCleanups.clear();
+      this.disposePreparedRemote();
+      this.clearSpinner();
+      this.app.destroy();
+      this.renderer.destroy();
+    }
     if (this.shutdownCode !== 0) {
       const summary = [...this.state.logs]
         .reverse()

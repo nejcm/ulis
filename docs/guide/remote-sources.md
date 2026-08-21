@@ -35,7 +35,8 @@ Only **HTTPS and SSH** are accepted; `http://` and `git://` are refused.
 ## Requirements and behaviour
 
 - **`git` must be on `PATH`.** There is no archive fallback. If a `github.com` clone fails and the [`gh` CLI](https://cli.github.com/) is installed, ULIS retries once through `gh repo clone`, which carries your GitHub token — useful for private repositories where plain `git` is not signed in. `gh` is optional.
-- **Nothing is cached.** Every run clones fresh, and the temporary directory is removed on success, on failure, and on Ctrl-C.
+- **Nothing is cached.** Every run clones fresh, and the temporary directory is removed on success, on failure, and on `SIGINT` (Ctrl-C), `SIGTERM`, `SIGHUP` (terminal close) or `SIGQUIT`.
+- While a remote clone is still being prepared, the TUI waits for the abort and its cleanup even if you send a second termination signal. `SIGKILL` is the only immediate escape; it cannot be handled, so it runs no cleanup and leaves the clone in the OS temporary directory.
 - Clones are **shallow, single-branch, and time-limited** (60s). Credential and ssh prompts are disabled, so an unauthenticated private repository fails fast instead of hanging.
 - **Symlinks in the cloned tree are rejected** — a committed symlink could otherwise point outside the clone.
 - A remote source installs into the **current directory**, or into your **home directory with `--global`**. A temporary directory has no meaningful parent to install alongside.

@@ -94,6 +94,7 @@ export class TuiApp {
   private consentGateNotice = "";
   private lastPaneSignature = "";
   private disposed = false;
+  private frozen = false;
 
   constructor(renderer: CliRenderer, options: TuiAppOptions) {
     this.renderer = renderer;
@@ -240,9 +241,18 @@ export class TuiApp {
     this.update();
   }
 
+  /**
+   * Stops every repaint from here on. Shutdown tears the renderer down, and `update` is reached
+   * from key, input and commit paths that do not go through the controller, so `disposed` alone
+   * would leave a window where those still paint into a renderer that is being destroyed.
+   */
+  freeze(): void {
+    this.frozen = true;
+  }
+
   /** Rebuilds the visible frame from the current state. */
   update(): void {
-    if (this.disposed) return;
+    if (this.disposed || this.frozen) return;
 
     const tooSmall = this.renderer.width < MIN_COLUMNS || this.renderer.height < MIN_ROWS;
     this.root.visible = !tooSmall;

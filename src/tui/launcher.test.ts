@@ -171,6 +171,7 @@ describe("launchTuiWithBun", () => {
   for (const [signal, exitCode] of [
     ["SIGHUP", 129],
     ["SIGINT", 130],
+    ["SIGQUIT", 131],
     ["SIGTERM", 143],
   ] as const) {
     it(`maps ${signal} termination to exit code ${exitCode}`, async () => {
