@@ -338,7 +338,7 @@ export function filesystemIdentity(path: string): string | undefined {
  * which Node exposes no synchronous equivalent of. The one place it could be closed with a handle -
  * setting a directory's mode after its contents are written - is, in {@link applyMode}. The rest is
  * a race against a writer who already has write access to the platform's own config directory, and
- * it is deliberately left open - see CHANGELOG. The native config files that `config-merger.ts`
+ * it is deliberately left open - see CHANGELOG. The native config files that `preserved-native-configs.ts`
  * writes into the destination follow the same rule, and carry the same residual.
  */
 function copyIntoTarget(sourcePath: string, targetPath: string): void {

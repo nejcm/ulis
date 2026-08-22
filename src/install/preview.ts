@@ -8,7 +8,7 @@ import { analyzePresets, analyzeProject, type Logger } from "../build.js";
 import { generate, type GenerationResult, type ProjectBundle } from "../generators/index.js";
 import type { Platform } from "../platforms.js";
 import type { PermissionsConfig } from "../schema.js";
-import { NATIVE_CONFIG_FILENAMES } from "../utils/config-merger.js";
+import { NATIVE_CONFIG_FILENAMES } from "../utils/preserved-native-configs.js";
 import { sanitizeLogText } from "../utils/redact.js";
 import type { ResolvedPreset } from "../utils/resolve-presets.js";
 

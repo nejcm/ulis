@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { join } from "node:path";
 
 import { createTempRoot, readTextFile, writeTextFile } from "../test-utils/fs.js";
-import { readMergeableConfig } from "../utils/config-merger.js";
+import { readMergeableConfig } from "../utils/config-merge.js";
 import type { GenerationResult } from "./types.js";
 import { writeResult } from "./writer.js";
 

@@ -23,7 +23,8 @@ import { detectInstallCollisions } from "./install/platforms.js";
 import { formatCommandPreview } from "./install/preview.js";
 import { ParseError } from "./parsers/index.js";
 import { platformConfigDir, PLATFORMS, type Platform } from "./platforms.js";
-import { PreservedNativeConfigParseError, readMergeableConfig } from "./utils/config-merger.js";
+import { readMergeableConfig } from "./utils/config-merge.js";
+import { PreservedNativeConfigParseError } from "./utils/preserved-native-configs.js";
 
 const tmpRoots: string[] = [];
 

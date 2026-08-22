@@ -19,7 +19,7 @@ import {
   UnsafeNativeConfigPathError,
   writePreservedNativeConfigs,
   type CapturedPreservedNativeConfig,
-} from "../utils/config-merger.js";
+} from "../utils/preserved-native-configs.js";
 import { InstallError } from "./errors.js";
 import { backupPath, copyPlatformContents, copyToNewPath, ensureDir, readDirectoryEntries } from "./fs.js";
 import { MANAGED_PLATFORM_LAYOUTS } from "./layouts.js";

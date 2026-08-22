@@ -2,7 +2,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 
 import type { Logger } from "../build.js";
 import type { Platform } from "../platforms.js";
-import { mergeOrCopyDir } from "../utils/config-merger.js";
+import { mergeOrCopyDir } from "../utils/config-merge.js";
 import { cleanDir, copyDir, copySkillDirs, fileExists, readFile, writeAgentsAliases, writeFile } from "../utils/fs.js";
 import { logger as defaultLogger } from "../utils/logger.js";
 import { isProvenanceMarkerPath, writeProvenanceMarker } from "../utils/provenance.js";
