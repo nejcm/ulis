@@ -4,14 +4,15 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { PLATFORMS } from "../platforms.js";
-import { snapshotTuiPreferences } from "./preferences.js";
 import {
   appendTextInput,
   applyCustomSourceTextInputChange,
-  createInitialState,
   handleCustomSourceTextInputKey,
-  formatSourceMode,
   handleTuiKey,
+} from "./keys.js";
+import { snapshotTuiPreferences } from "./preferences.js";
+import {
+  formatSourceMode,
   normalizeCustomSourceInput,
   planItems,
   planSource,
@@ -21,9 +22,8 @@ import {
   selectedPresets,
   togglePresetSelection,
   visiblePresetChoices,
-  type PlanItemId,
-  type TuiState,
-} from "./state.js";
+} from "./selectors.js";
+import { createInitialState, type PlanItemId, type TuiState } from "./state-model.js";
 
 const planCursor = (state: TuiState, id: PlanItemId) => planItems(state).findIndex((item) => item.id === id);
 
@@ -41,7 +41,7 @@ afterEach(() => {
   }
 });
 
-describe("tui state", () => {
+describe("tui keys", () => {
   it("defaults project source to a project destination", () => {
     const root = createTempRoot();
     mkdirSync(join(root, ".ulis"));
@@ -1043,6 +1043,29 @@ describe("tui state", () => {
     expect(state.screen as string).toBe("plan");
     expect(state.pendingAction).toBeUndefined();
   });
+
+  it("suppresses a duplicate key event inside the 35 ms debounce window", () => {
+    const state = createInitialState();
+    const originalNow = Date.now;
+    Date.now = () => 3_000;
+    try {
+      handleTuiKey(state, "down");
+      expect(state.cursor).toBe(1);
+
+      // Same key again inside the window: `isDuplicateKeyEvent` short-circuits before dispatch, so
+      // the cursor does not move a second time.
+      expect(handleTuiKey(state, "down")).toEqual({ type: "none" });
+      expect(state.cursor).toBe(1);
+
+      // A fresh state clears the tracker (createInitialState resets it), so the same key is
+      // handled normally again rather than staying suppressed forever.
+      const freshState = createInitialState();
+      expect(handleTuiKey(freshState, "down")).toEqual({ type: "none" });
+      expect(freshState.cursor).toBe(1);
+    } finally {
+      Date.now = originalNow;
+    }
+  });
 });
 
 describe("remote sources", () => {
@@ -1192,7 +1215,7 @@ describe("credential persistence", () => {
   });
 });
 
-// 3.2: nothing checked that plan item ids are unique within a flow. `planItemCursor` (state.ts:1085)
+// 3.2: nothing checked that plan item ids are unique within a flow. `planItemCursor` (keys.ts)
 // takes the first match on a duplicate, and the exhaustive `assertNeverPlanItemId` switch stays
 // happy either way, so a duplicate id would silently misroute cursor navigation with no type error.
 describe("planItems", () => {

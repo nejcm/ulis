@@ -10,22 +10,19 @@ import { resolveSourceOrRemote } from "../utils/resolve-source.js";
 import { initializeMissingSource, runTuiAction } from "./actions.js";
 import { TuiApp } from "./app.js";
 import { readClipboardText } from "./clipboard.js";
-import { loadTuiPreferences, saveTuiPreferences, snapshotTuiPreferences } from "./preferences.js";
+import { applyFlowPreferences, loadTuiPreferences, saveTuiPreferences, snapshotTuiPreferences } from "./preferences.js";
 import { listTuiPresets } from "./presets.js";
+import { planSource, remotePresetRef, reviewFingerprint, selectedPresets } from "./selectors.js";
 import {
-  applyFlowPreferences,
   createInitialState,
-  planSource,
-  remotePresetRef,
-  reviewFingerprint,
-  selectedPresets,
+  formatActionTitle,
   PRESET_INSTALL_REVIEW_START_ROW,
   type PlannedSource,
   type PreparedRemoteInstall,
   type TuiEffect,
   type TuiScreen,
   type TuiState,
-} from "./state.js";
+} from "./state-model.js";
 
 const SPINNER_INTERVAL_MS = 120;
 const MAX_RETAINED_LOGS = 80;
@@ -61,8 +58,6 @@ export interface TuiControllerOptions {
   /** Overrides the home directory used in rendered plans and workflow execution. */
   readonly userHome?: string;
 }
-
-type ActionTitleKey = Exclude<TuiEffect & { type: "start" }, never>["action"];
 
 /**
  * A prepared review plus the bookkeeping only the controller needs: what was fetched, so a review
@@ -584,12 +579,4 @@ export class TuiController {
     const exit = this.options.exit ?? ((value: number) => process.exit(value));
     exit(this.shutdownCode);
   }
-}
-
-export function formatActionTitle(action: ActionTitleKey): string {
-  if (action === "validate") return "Validate";
-  if (action === "presetValidate") return "Preset Validate";
-  if (action === "build") return "Build";
-  if (action === "presetInstall") return "Preset Install";
-  return "Install";
 }

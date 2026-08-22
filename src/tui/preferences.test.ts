@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { PLATFORMS } from "../platforms.js";
+import { handleTuiKey } from "./keys.js";
 import {
   applyTuiPreferences,
   getTuiPreferencesPath,
@@ -11,7 +12,7 @@ import {
   saveTuiPreferences,
   snapshotTuiPreferences,
 } from "./preferences.js";
-import { createInitialState, handleTuiKey } from "./state.js";
+import { createInitialState } from "./state-model.js";
 
 const tmpRoots: string[] = [];
 

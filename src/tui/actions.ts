@@ -8,15 +8,8 @@ import { redactUserinfo } from "../utils/redact.js";
 import { resolvePresets, type ResolvedPreset } from "../utils/resolve-presets.js";
 import { resolveSourceOrRemote } from "../utils/resolve-source.js";
 import { ULIS_CLI_ENTRY_ENV } from "./launcher.js";
-import {
-  planSource,
-  remotePresetRef,
-  reviewFingerprint,
-  selectedPresets,
-  type PreparedRemoteInstall,
-  type TuiAction,
-  type TuiState,
-} from "./state.js";
+import { planSource, remotePresetRef, reviewFingerprint, selectedPresets } from "./selectors.js";
+import { type PreparedRemoteInstall, type TuiAction, type TuiState } from "./state-model.js";
 
 interface RuntimeDependencies {
   spawn: typeof spawn;

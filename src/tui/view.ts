@@ -1,8 +1,6 @@
 import { PLATFORM_DESCRIPTIONS, PLATFORM_LABELS, PLATFORMS, type Platform } from "../platforms.js";
 import { redactUserinfo, sanitizeConsentText } from "../utils/redact.js";
 import {
-  assertNeverPlanItemId,
-  FLOW_ITEMS,
   formatDestinationMode,
   formatFlow,
   formatPresetSourceMode,
@@ -12,13 +10,17 @@ import {
   planItems,
   planSource,
   presetSelectionKey,
-  PRESET_INSTALL_REVIEW_BACK_ROW,
-  PRESET_INSTALL_REVIEW_START_ROW,
   showsPresetSourcePicker,
   visiblePresetChoices,
+} from "./selectors.js";
+import {
+  assertNeverPlanItemId,
+  FLOW_ITEMS,
+  PRESET_INSTALL_REVIEW_BACK_ROW,
+  PRESET_INSTALL_REVIEW_START_ROW,
   type PlanItem,
   type TuiState,
-} from "./state.js";
+} from "./state-model.js";
 
 /** Semantic color slots resolved to concrete colors by the theme. */
 export type Tone = "default" | "muted" | "accent" | "success" | "warn" | "error";

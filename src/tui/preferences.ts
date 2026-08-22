@@ -3,17 +3,16 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { PLATFORMS, uniquePlatforms, type Platform } from "../platforms.js";
+import { redactUserinfo } from "../utils/redact.js";
+import { presetSourceKey, rememberCustomSource } from "./selectors.js";
 import {
-  applyFlowPreferences,
-  rememberCustomSource,
-  storeCurrentFlowPreferences,
   type DestinationMode,
   type PresetSourceMode,
   type SourceMode,
   type TuiFlow,
   type TuiFlowPreferences,
   type TuiState,
-} from "./state.js";
+} from "./state-model.js";
 
 export interface TuiPreferences {
   readonly version?: number;
@@ -36,6 +35,99 @@ const TUI_PREFERENCES_VERSION = 2;
 type MutableFlowPreferences = {
   -readonly [Key in keyof TuiFlowPreferences]?: TuiFlowPreferences[Key];
 };
+
+/**
+ * In-memory half of flow preferences: reading the current session's settings into a
+ * {@link TuiFlowPreferences} snapshot and applying a stored one back onto {@link TuiState}. The
+ * disk-persistence half - load/save/parse against `.ulis-tui.json` - is the rest of this file.
+ */
+export function flowPreferencesFromState(state: TuiState): TuiFlowPreferences {
+  const preferences: MutableFlowPreferences = {
+    destinationMode: state.destinationMode,
+    recentCustomSources: [...state.recentCustomSources],
+    platforms: [...state.platforms],
+    selectedPresetNames: [...state.selectedPresetNames],
+    presetSourceMode: state.presetSourceMode,
+    backup: state.backup,
+    prune: state.prune,
+    rebuild: state.rebuild,
+    presetInstallExtensions: state.presetInstallExtensions,
+    skipExternalSkills: state.skipExternalSkills,
+  };
+
+  // Redacted on the way to disk: preferences outlive the session, a credential should not.
+  if (state.flow === "custom" && state.customSource) {
+    preferences.customSource = redactUserinfo(state.customSource);
+  }
+  if (state.flow === "presetsOnly" && state.customPresetSource) {
+    preferences.customPresetSource = redactUserinfo(state.customPresetSource);
+  }
+
+  return preferences;
+}
+
+export function storeCurrentFlowPreferences(state: TuiState): void {
+  state.flowPreferences = {
+    ...state.flowPreferences,
+    [state.flow]: flowPreferencesFromState(state),
+  };
+}
+
+export function applyFlowPreferences(
+  state: TuiState,
+  flow: TuiFlow = state.flow,
+  customPresetSourceLoaded = false,
+): void {
+  const preferences = state.flowPreferences[flow];
+  if (!preferences) return;
+
+  if ((flow === "custom" || flow === "presetsOnly") && preferences.destinationMode) {
+    state.destinationMode = preferences.destinationMode;
+  }
+
+  if (preferences.recentCustomSources) {
+    state.recentCustomSources = [...preferences.recentCustomSources];
+  }
+
+  if (flow === "custom" && preferences.customSource) {
+    state.customSource = preferences.customSource;
+    state.recentCustomSources = rememberCustomSource(state.recentCustomSources, preferences.customSource);
+  }
+  if (flow === "presetsOnly" && preferences.customPresetSource) {
+    state.customPresetSource = preferences.customPresetSource;
+  }
+  if (preferences.presetSourceMode) state.presetSourceMode = preferences.presetSourceMode;
+
+  if (preferences.platforms) {
+    const platforms = uniquePlatforms(preferences.platforms);
+    state.platforms = platforms.length > 0 ? platforms : [...PLATFORMS];
+  }
+  if (preferences.selectedPresetNames) {
+    const selectedPresetNames = [...new Set(preferences.selectedPresetNames)];
+    const customSourcePending =
+      flow === "presetsOnly" &&
+      state.presetSourceMode === "custom" &&
+      Boolean(state.customPresetSource) &&
+      !customPresetSourceLoaded;
+    if (customSourcePending) {
+      state.selectedPresetNames = selectedPresetNames;
+    } else {
+      const availablePresetNames = new Set(
+        state.availablePresets.flatMap((preset) => [preset.name, presetSourceKey(preset)]),
+      );
+      state.selectedPresetNames = selectedPresetNames.filter((name) => availablePresetNames.has(name));
+    }
+  }
+  if (typeof preferences.backup === "boolean") state.backup = preferences.backup;
+  if (typeof preferences.prune === "boolean") state.prune = preferences.prune;
+  if (typeof preferences.rebuild === "boolean") state.rebuild = preferences.rebuild;
+  if (typeof preferences.presetInstallExtensions === "boolean") {
+    state.presetInstallExtensions = preferences.presetInstallExtensions;
+  }
+  if (typeof preferences.skipExternalSkills === "boolean") {
+    state.skipExternalSkills = preferences.skipExternalSkills;
+  }
+}
 
 export function getTuiPreferencesPath(userHome: string = homedir()): string {
   return join(userHome, TUI_PREFERENCES_FILE);

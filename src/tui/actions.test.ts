@@ -5,7 +5,8 @@ import { join, resolve } from "node:path";
 
 import { __test as installTest, runPresetInstall } from "../install.js";
 import { createTempRoot, writeTextFile } from "../test-utils/fs.js";
-import { createInitialState, reviewFingerprint } from "./state.js";
+import { reviewFingerprint } from "./selectors.js";
+import { createInitialState } from "./state-model.js";
 
 const fixturesDir = resolve(import.meta.dirname, "../../tests/fixtures");
 

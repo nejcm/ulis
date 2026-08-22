@@ -7,10 +7,12 @@ import { createTestRenderer, type TestRendererSetup } from "@opentui/core/testin
 
 import { __test as installTest } from "../install.js";
 import { TuiController, type TuiControllerOptions } from "./controller.js";
-import { handleTuiKey, planItems, reviewFingerprint, PRESET_INSTALL_REVIEW_START_ROW, type TuiState } from "./state.js";
+import { handleTuiKey } from "./keys.js";
+import { planItems, reviewFingerprint } from "./selectors.js";
+import { PRESET_INSTALL_REVIEW_START_ROW, type TuiState } from "./state-model.js";
 import { MIN_COLUMNS, MIN_ROWS, SPLIT_COLUMNS } from "./view.js";
 
-/** Comfortably above `state.ts`'s 35 ms duplicate-key window. */
+/** Comfortably above `key-codes.ts`'s 35 ms duplicate-key window. */
 const KEY_DELAY_MS = 60;
 
 const tmpRoots: string[] = [];

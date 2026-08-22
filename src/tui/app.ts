@@ -17,10 +17,8 @@ import {
   applyCustomSourceTextInputChange,
   handleCustomSourceTextInputKey,
   handleTuiKey,
-  PRESET_INSTALL_REVIEW_START_ROW,
-  type TuiEffect,
-  type TuiState,
-} from "./state.js";
+} from "./keys.js";
+import { PRESET_INSTALL_REVIEW_START_ROW, type TuiEffect, type TuiState } from "./state-model.js";
 import { THEME, toneColor } from "./theme.js";
 import {
   buildScreenView,
@@ -65,7 +63,7 @@ export interface TuiAppOptions {
  * Imperative OpenTUI shell for the ULIS TUI.
  *
  * The app owns only presentation and input routing; every state transition goes
- * through the shared handlers in `state.ts`, so keyboard and mouse cannot drift
+ * through the shared handlers in `keys.ts`, so keyboard and mouse cannot drift
  * apart.
  */
 export class TuiApp {
@@ -806,7 +804,7 @@ function isPathInputScreen(state: TuiState): boolean {
   return state.screen === "customSource" || state.screen === "customPresetSource";
 }
 
-/** Maps an OpenTUI key event onto the plain key strings `state.ts` understands. */
+/** Maps an OpenTUI key event onto the plain key strings `key-codes.ts` understands. */
 export function keyEventToKey(event: KeyEvent): string | undefined {
   const name = event.name;
 
