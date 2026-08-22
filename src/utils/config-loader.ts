@@ -5,10 +5,19 @@ import { ZodError, type z } from "zod";
 
 import { ParseError } from "../parsers/_shared.js";
 import { fileExists, readFile } from "./fs.js";
+import type { ResolvedPreset } from "./resolve-presets.js";
 
 export interface ConfigDiagnosticOptions {
   readonly source?: string;
   readonly sourceDir?: string;
+}
+
+/**
+ * Diagnostic context for a preset layer, matching the `preset:<name>` source label
+ * `parseProject` uses, so a malformed manifest reads the same whichever path hit it first.
+ */
+export function presetDiagnostic(preset: ResolvedPreset): Required<ConfigDiagnosticOptions> {
+  return { source: `preset:${preset.name}`, sourceDir: preset.dir };
 }
 
 interface ConfigParseContext extends ConfigDiagnosticOptions {

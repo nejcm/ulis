@@ -4,7 +4,7 @@ import { basename, join, relative } from "node:path";
 
 import type { Logger } from "../build.js";
 import { REMOTE_CLONE_DIRNAME_PREFIX } from "../config.js";
-import { formatCommandFailure, runCommand, runSkillCommand } from "../install.js";
+import { formatCommandFailure, runCommand, runSkillCommand } from "../install/runner.js";
 import { PresetMetaSchema } from "../schema.js";
 import { commandExists } from "./command.js";
 import { loadConfigFile } from "./config-loader.js";

@@ -1,12 +1,12 @@
 import { spawn, spawnSync } from "node:child_process";
 import { stdin } from "node:process";
 
-// Temporary back-import: resolveExecutable/runAsyncCommand still live in install.ts (runner.ts
-// territory, out of scope this phase). Safe because both calls resolve at invocation time, not
-// module-init time, so the circularity never bites. Goes away once runner.ts lands.
-import { resolveExecutable, runAsyncCommand } from "../install.js";
 import { confirm } from "../utils/prompt.js";
 import { InstallError } from "./errors.js";
+// This module and runner.ts import each other, safely: both sides only read the other's export
+// inside a function body, never at module-init time. It breaks the moment runner.ts reads
+// runtimeDependencies at its top level, or this file calls resolveExecutable in its module body.
+import { resolveExecutable, runAsyncCommand } from "./runner.js";
 import type { AsyncCommandResult } from "./types.js";
 
 type RunCommand = (

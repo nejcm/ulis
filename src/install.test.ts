@@ -16,12 +16,14 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { runBuild, type Logger } from "./build.js";
-import { __test, planRemoteCommands, resolveRunner, runInstall, runPresetInstall } from "./install.js";
+import { __test, runInstall, runPresetInstall } from "./install.js";
 import { loadDotEnv } from "./install/dotenv.js";
 import { InstallError } from "./install/errors.js";
 import { preflightOwnership } from "./install/manifest.js";
 import { detectInstallCollisions } from "./install/platforms.js";
 import { formatCommandPreview } from "./install/preview.js";
+import { resolveRunner } from "./install/runner.js";
+import { planRemoteCommands } from "./install/trust-gate.js";
 import { ParseError } from "./parsers/index.js";
 import { platformConfigDir, PLATFORMS, type Platform } from "./platforms.js";
 import { readMergeableConfig } from "./utils/config-merge.js";

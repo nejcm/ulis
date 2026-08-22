@@ -6,9 +6,9 @@ import { createInterface } from "node:readline/promises";
  * or a closed stdin declines rather than proceeds.
  *
  * There is no terminal check here. The remote-command gate is the only prompt that is a security
- * boundary, and it refuses a non-terminal stdin at its own seam in `install.ts` - loudly, because
- * a run that silently installed nothing and exited 0 reads as a successful one. A second check
- * here could only ever fail open, which is the shape that gate was rewritten to close.
+ * boundary, and it refuses a non-terminal stdin at its own seam in `install/runtime.ts` - loudly,
+ * because a run that silently installed nothing and exited 0 reads as a successful one. A second
+ * check here could only ever fail open, which is the shape that gate was rewritten to close.
  */
 export async function confirm(question: string): Promise<boolean> {
   const rl = createInterface({ input, output });

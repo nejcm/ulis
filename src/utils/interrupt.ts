@@ -3,6 +3,15 @@
  * both `install` and `preset install` import it from the same place.
  */
 
+/**
+ * Raise if `signal` has already fired. The checkpoint every abortable loop or command call
+ * threads through, so a run that has been told to stop never spawns one more command or takes
+ * one more loop iteration first.
+ */
+export function throwIfAborted(signal?: AbortSignal, cause?: unknown): void {
+  if (signal?.aborted) throw new Error("Install stopped by user.", { cause });
+}
+
 export interface InterruptGuard {
   /** Threaded through remote-source resolution and install. `undefined` for local-only runs. */
   readonly signal: AbortSignal | undefined;

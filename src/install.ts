@@ -1,48 +1,31 @@
-import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { analyzePresets, runBuild, type Logger } from "./build.js";
+import { analyzePresets, runBuild } from "./build.js";
 import { ULIS_GENERATED_DIRNAME, ULIS_PROVENANCE_FILENAME } from "./config.js";
 import { generate, writeResult } from "./generators/index.js";
 import { loadDotEnv } from "./install/dotenv.js";
 import { InstallError } from "./install/errors.js";
-import { logHeader, logInfo, logSuccess, logWarn } from "./install/log.js";
+import { logHeader, logInfo, logWarn } from "./install/log.js";
 import { preflightOwnership, reconcileOwnership } from "./install/manifest.js";
 import { installClaude, installCodex, installCursor, installForgecode, installOpencode } from "./install/platforms.js";
-import { formatCommandPreview, previewInstalledExecution, type PreviewInputs } from "./install/preview.js";
-import { runtimeDependencies } from "./install/runtime.js";
-import type {
-  AsyncCommandResult,
-  GeneratedInstallOptions,
-  InstallContext,
-  InstallOptions,
-  PresetInstallOptions,
-  Runner as InstallRunner,
-  SkillInstallLog,
-} from "./install/types.js";
+import { installExtensions, installSkills, runPlatformExtensions } from "./install/post-install.js";
+import type { PreviewInputs } from "./install/preview.js";
+import { makeTimestamp, resolveRunner } from "./install/runner.js";
+import { resolveGlobalInstall } from "./install/scope.js";
+import { confirmRemoteCommands } from "./install/trust-gate.js";
+import type { GeneratedInstallOptions, InstallContext, InstallOptions, PresetInstallOptions } from "./install/types.js";
 import { loadExtensions, mergeExtensionsConfigs } from "./parsers/extensions.js";
 import { loadSkills, mergeSkillsConfigs } from "./parsers/skills.js";
-import { isSamePath, PLATFORMS, uniquePlatforms, type Platform } from "./platforms.js";
-import { UlisConfigSchema, type ExtensionsConfig, type SkillsConfig } from "./schema.js";
-import { assertShellSafeArgv, commandExists as commandExistsOnPath } from "./utils/command.js";
-import { loadValidatedConfigFile, type ConfigDiagnosticOptions } from "./utils/config-loader.js";
-import { yieldToEventLoop } from "./utils/interrupt.js";
+import { PLATFORMS, uniquePlatforms, type Platform } from "./platforms.js";
+import { UlisConfigSchema } from "./schema.js";
+import { loadValidatedConfigFile, presetDiagnostic } from "./utils/config-loader.js";
+import { throwIfAborted, yieldToEventLoop } from "./utils/interrupt.js";
 import { logger as defaultLogger } from "./utils/logger.js";
 import { legacyRootRecordPath, readRecordedRemoteSources } from "./utils/provenance.js";
-import { sanitizeLogText } from "./utils/redact.js";
-import type { ResolvedPreset } from "./utils/resolve-presets.js";
 
 export type { Runner } from "./install/types.js";
-
-export function resolveGlobalInstall(options: {
-  readonly globalInstall?: boolean;
-  readonly destBase: string;
-  readonly userHome: string;
-}): boolean {
-  return options.globalInstall ?? isSamePath(options.destBase, options.userHome);
-}
 
 /**
  * Install generated per-platform configs from source to destination base directory.
@@ -160,14 +143,16 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
       // Ctrl-C must not be shown a "Run these commands?" question on the way out.
       throwIfAborted(options.signal);
       const approved = await confirmRemoteCommands({
-        platforms,
-        skillsConfig,
-        extensionsConfig,
-        previewInputs,
-        runner,
-        globalInstall,
-        installExtensionsEnabled,
-        installSkillsEnabled,
+        plan: {
+          platforms,
+          skillsConfig,
+          extensionsConfig,
+          previewInputs,
+          runner,
+          globalInstall,
+          installExtensionsEnabled,
+          installSkillsEnabled,
+        },
         logger,
         remoteSources: options.remoteSources,
         nonInteractive: options.nonInteractive,
@@ -326,14 +311,6 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
   }
 }
 
-/**
- * Diagnostic context for a preset layer, matching the `preset:<name>` source label
- * `parseProject` uses, so a malformed manifest reads the same whichever path hit it first.
- */
-function presetDiagnostic(preset: ResolvedPreset): Required<ConfigDiagnosticOptions> {
-  return { source: `preset:${preset.name}`, sourceDir: preset.dir };
-}
-
 /** Returns false when the trust gate was declined, otherwise the failed post-install command count. */
 async function installGeneratedOutput(options: GeneratedInstallOptions): Promise<number | false> {
   // The trust gate, before anything reaches the destination. Everything below either spawns a
@@ -344,7 +321,24 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
   // A run that reaches here after an interrupt is a user who already said stop; putting a
   // "Run these commands?" question to them is answering the wrong question.
   throwIfAborted(options.signal);
-  if (!(await confirmRemoteCommands(options))) {
+  if (
+    !(await confirmRemoteCommands({
+      plan: {
+        platforms: options.platforms,
+        skillsConfig: options.skillsConfig,
+        extensionsConfig: options.extensionsConfig,
+        previewInputs: options.previewInputs,
+        runner: options.runner,
+        globalInstall: options.globalInstall,
+        installExtensionsEnabled: options.installExtensionsEnabled,
+        installSkillsEnabled: options.installSkillsEnabled,
+      },
+      logger: options.logger,
+      remoteSources: options.remoteSources,
+      nonInteractive: options.nonInteractive,
+      approvedCommands: options.approvedCommands,
+    }))
+  ) {
     logWarn(options.logger, "Declined. Nothing from the remote source was installed.");
     return false;
   }
@@ -480,476 +474,6 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
       else logInfo(options.logger, summary);
     }
   }
-}
-
-// map platform key to skills argument agent name
-// only platforms supported by the `skills` CLI are listed here
-const SKILL_PLATFORM_AGENT_NAMES: Partial<Record<Platform, string>> = {
-  claude: "claude-code",
-  opencode: "opencode",
-  codex: "codex",
-  cursor: "cursor",
-};
-
-const SKILL_INSTALL_CONCURRENCY = 4;
-
-function normalizeSkillArgs(args: readonly string[] = []): string[] {
-  return args.flatMap((arg) => arg.trim().split(/\s+/));
-}
-
-function skillAgentNames(platform: Platform | "*", selectedPlatforms: readonly Platform[]): string[] {
-  return platform === "*"
-    ? selectedPlatforms.flatMap((selectedPlatform) => {
-        const agentName = SKILL_PLATFORM_AGENT_NAMES[selectedPlatform];
-        return agentName ? [agentName] : [];
-      })
-    : [SKILL_PLATFORM_AGENT_NAMES[platform] ?? platform];
-}
-
-function skillNpxArgs(
-  skill: { name: string; args?: readonly string[] },
-  agentFlags: readonly string[],
-  globalInstall: boolean,
-): string[] {
-  return [
-    "skills@latest",
-    "add",
-    skill.name,
-    ...agentFlags,
-    ...(globalInstall ? ["-g"] : ["--project"]),
-    "--yes",
-    ...normalizeSkillArgs(skill.args),
-  ];
-}
-
-/**
- * argv for one `extensions.yaml` entry. `--` ends option parsing so a name is read as a package even
- * if it looks like a flag; both runners accept it (verified against npx 11 and bun 1.3).
- *
- * It is only load-bearing for `npx`, which resolves everything after `--` as a package spec. `bunx`
- * accepts `--` but keeps parsing its own flags past it (`bunx -- --version` still prints bun's
- * version), so what actually covers bunx is `PackageNameSchema`
- * (`src/schema/shared.ts`) refusing a name that starts with `-` at the input contract. Shared with the preview so the two cannot drift.
- */
-function extensionRunnerArgs(extension: { name: string; args?: readonly string[] }): string[] {
-  return ["--", extension.name, ...(extension.args ?? [])];
-}
-
-/**
- * Every command a remote source is about to run, exactly as it will be spawned, plus the files it
- * installs that a host agent later executes on its own. Built from the same helpers the install
- * paths use, so the prompt cannot drift from what actually executes.
- */
-type RemoteCommandPlan = Pick<
-  GeneratedInstallOptions,
-  | "platforms"
-  | "skillsConfig"
-  | "extensionsConfig"
-  | "previewInputs"
-  | "runner"
-  | "globalInstall"
-  | "installExtensionsEnabled"
-  | "installSkillsEnabled"
->;
-
-/** What the trust gate reads. Every field is available before the build runs. */
-type RemoteGateOptions = RemoteCommandPlan & {
-  readonly logger: Logger;
-  readonly remoteSources?: readonly string[];
-  readonly nonInteractive?: boolean;
-  readonly approvedCommands?: readonly string[];
-};
-
-/**
- * The commands a remote source would run, for a caller that gates consent before the install starts
- * (the TUI review screen). Loads configs the same way the install paths do and formats through the
- * same preview helper, so what is shown cannot drift from what executes.
- */
-export function planRemoteCommands(options: {
-  readonly sourceDir?: string;
-  readonly presets?: readonly ResolvedPreset[];
-  readonly platforms: readonly Platform[];
-  readonly destBase: string;
-  readonly userHome?: string;
-  readonly globalInstall?: boolean;
-  readonly runner?: InstallRunner;
-  readonly installExtensions?: boolean;
-  readonly installSkills?: boolean;
-}): readonly string[] {
-  const destBase = resolve(options.destBase);
-  const userHome = resolve(options.userHome ?? homedir());
-  const layers: readonly Required<ConfigDiagnosticOptions>[] = [
-    ...(options.presets ?? []).map((preset) => presetDiagnostic(preset)),
-    ...(options.sourceDir ? [{ source: "base", sourceDir: options.sourceDir }] : []),
-  ];
-  const ulisConfig = options.sourceDir
-    ? loadValidatedConfigFile({
-        dir: options.sourceDir,
-        baseName: "config",
-        schema: UlisConfigSchema,
-        defaultValue: { version: 1, name: "ulis" },
-      })
-    : undefined;
-
-  return renderCommandPlan({
-    platforms: uniquePlatforms(options.platforms),
-    skillsConfig: mergeSkillsConfigs(layers.map((layer) => loadSkills(layer.sourceDir, layer))),
-    extensionsConfig: mergeExtensionsConfigs(layers.map((layer) => loadExtensions(layer.sourceDir, layer))),
-    previewInputs: {
-      sourceDir: options.sourceDir,
-      presets: options.presets ?? [],
-      platforms: uniquePlatforms(options.platforms),
-    },
-    runner: resolveRunner({ cliFlag: options.runner, configValue: ulisConfig?.runner }),
-    globalInstall: resolveGlobalInstall({ ...options, destBase, userHome }),
-    installExtensionsEnabled: options.installExtensions ?? true,
-    installSkillsEnabled: options.installSkills ?? true,
-  });
-}
-
-function renderCommandPlan(options: RemoteCommandPlan): string[] {
-  // Written first, and executed by the host agent rather than by us, so they lead the list.
-  const installs = previewInstalledExecution(options.previewInputs);
-  const commands: string[][] = [];
-  if (options.installSkillsEnabled) {
-    for (const platform of options.platforms) {
-      const agentNames = skillAgentNames(platform, []);
-      if (agentNames.length === 0) continue;
-      for (const skill of options.skillsConfig[platform]?.skills ?? []) {
-        commands.push(["npx", ...skillNpxArgs(skill, ["-a", ...agentNames], options.globalInstall)]);
-      }
-    }
-    const agentNames = skillAgentNames("*", options.platforms);
-    if (agentNames.length > 0) {
-      for (const skill of options.skillsConfig["*"]?.skills ?? []) {
-        commands.push(["npx", ...skillNpxArgs(skill, ["-a", ...agentNames], options.globalInstall)]);
-      }
-    }
-  }
-  if (options.installExtensionsEnabled) {
-    for (const platform of [...options.platforms, "*" as const]) {
-      for (const extension of options.extensionsConfig[platform]?.extensions ?? []) {
-        commands.push([options.runner, ...extensionRunnerArgs(extension)]);
-      }
-    }
-  }
-  return [...installs, ...commands.map((argv) => formatCommandPreview(argv))];
-}
-
-/**
- * The trust gate: local presets you authored, remote ones you did not. Returns true when there is
- * nothing to gate, when the run is purely local, when consent given elsewhere still matches what
- * is about to run, or when the user says yes here.
- */
-async function confirmRemoteCommands(options: RemoteGateOptions): Promise<readonly string[] | false> {
-  const remoteSources = options.remoteSources ?? [];
-  if (remoteSources.length === 0) return [];
-  // No early exit on an empty plan. An empty plan does not mean "nothing happens": it means nothing
-  // this planner recognises as executable, and the install still writes a remote source's agents,
-  // skills, rules and instructions into the destination. Skipping the gate there is what let a
-  // payload the enumeration had not learned about yet install with no prompt at all.
-  const commands = renderCommandPlan(options);
-
-  // A caller that already obtained consent — the TUI, which shows the list on its review screen
-  // because it owns the terminal and cannot prompt on stdin — passes back exactly what it
-  // displayed. Comparing it here, against a list rebuilt from the real install options at the
-  // point of execution, is what makes "what was shown is what runs" a fact rather than a
-  // convention: any divergence, however it arose, stops the run instead of executing unseen
-  // commands.
-  if (options.approvedCommands) {
-    if (commandsMatch(options.approvedCommands, commands)) return commands;
-    logWarn(options.logger, "Commands changed since they were reviewed:");
-    for (const command of commands) logInfo(options.logger, `  ${command}`);
-    throw new InstallError("Refusing to run remote commands that differ from the ones reviewed. Review them again.");
-  }
-
-  logHeader(options.logger, "Remote Source Commands");
-  for (const url of remoteSources) logInfo(options.logger, `From ${url}`);
-  for (const command of commands) logInfo(options.logger, `  ${command}`);
-  if (commands.length > 0) {
-    if (options.nonInteractive) return commands;
-    return (await runtimeDependencies.confirm("Run these commands?")) && commands;
-  }
-
-  // Never claim there is nothing to run. Every bypass found so far printed a confident "nothing
-  // here" over a payload that was installing, and a false statement is worse than a missing one.
-  // Printed before the -y exit, not after: the disclosure is the whole point of the -y change, and
-  // an unattended run is precisely where a log line is the only record anyone ever sees.
-  logInfo(options.logger, "  Nothing here was recognised as executable - which is not a guarantee.");
-  logInfo(options.logger, `  Its files will still be installed for: ${options.platforms.join(", ")}.`);
-  if (options.nonInteractive) return commands;
-  return (await runtimeDependencies.confirm("Install from this remote source?")) && commands;
-}
-
-function commandsMatch(approved: readonly string[], planned: readonly string[]): boolean {
-  // Display order matters for consent. Spawn groups follow it; concurrent skills within a group may not.
-  return approved.length === planned.length && approved.every((command, index) => command === planned[index]);
-}
-
-async function installSkills(
-  skills: readonly { key?: string; name: string; args?: readonly string[] }[],
-  platform: Platform | "*",
-  installBaseDir: string,
-  globalInstall: boolean,
-  logger?: Logger,
-  selectedPlatforms: readonly Platform[] = [],
-  signal?: AbortSignal,
-): Promise<readonly string[]> {
-  if (skills.length === 0) return [];
-  const agentNames = skillAgentNames(platform, selectedPlatforms);
-  if (agentNames.length === 0) return [];
-  const agentFlags = ["-a", ...agentNames];
-
-  const results = await runBounded(
-    skills,
-    SKILL_INSTALL_CONCURRENCY,
-    async (skill): Promise<SkillInstallLog> => {
-      throwIfAborted(signal);
-      const npxArgs = skillNpxArgs(skill, agentFlags, globalInstall);
-      const name = `${platform}: ${skill.key ?? skill.name}`;
-      logInfo(logger, `Installing ${platform} skill: ${skill.key ?? skill.name}`);
-      let result: AsyncCommandResult;
-      try {
-        result = await runSkillCommand("npx", npxArgs, {
-          stdio: ["ignore", "pipe", "pipe"],
-          cwd: installBaseDir,
-          shell: process.platform === "win32",
-          signal,
-        });
-      } catch (error) {
-        throwIfAborted(signal, error);
-        return {
-          level: "warn",
-          name,
-          message: `Failed to install ${platform} skill: ${skill.key ?? skill.name} (${formatCommandFailure({
-            error: error instanceof Error ? error : new Error(String(error)),
-          })})`,
-        };
-      }
-      throwIfAborted(signal);
-      if (result.status !== 0) {
-        return {
-          level: "warn",
-          name,
-          message: `Failed to install ${platform} skill: ${skill.key ?? skill.name} (${formatCommandFailure(result)})`,
-        };
-      }
-      return { level: "success", message: `${platform} skill: ${skill.key ?? skill.name}` };
-    },
-    signal,
-  );
-
-  for (const result of results) {
-    if (result.level === "warn") logWarn(logger, result.message);
-    else logSuccess(logger, result.message);
-  }
-  return results.flatMap((result) => (result.level === "warn" ? [result.name] : []));
-}
-
-async function runBounded<T, U>(
-  items: readonly T[],
-  concurrency: number,
-  runItem: (item: T) => Promise<U>,
-  signal?: AbortSignal,
-): Promise<readonly U[]> {
-  let nextIndex = 0;
-  const results: U[] = [];
-  const workerCount = Math.min(concurrency, items.length);
-  const workers = Array.from({ length: workerCount }, async () => {
-    while (nextIndex < items.length) {
-      throwIfAborted(signal);
-      const itemIndex = nextIndex;
-      const item = items[itemIndex]!;
-      nextIndex += 1;
-      results[itemIndex] = await runItem(item);
-    }
-  });
-  await Promise.all(workers);
-  return results;
-}
-
-async function runPlatformExtensions(
-  context: InstallContext,
-  platform: Platform,
-  signal?: AbortSignal,
-): Promise<readonly string[]> {
-  if (!context.installExtensionsEnabled) return [];
-  const entries = context.extensions[platform]?.extensions ?? [];
-  if (entries.length === 0) return [];
-  return installExtensions(entries, platform, context.destBase, context.runner, context.logger, signal);
-}
-
-async function installExtensions(
-  extensions: readonly { key?: string; name: string; args?: readonly string[] }[],
-  platform: Platform | "*",
-  installBaseDir: string,
-  runner: InstallRunner,
-  logger?: Logger,
-  signal?: AbortSignal,
-): Promise<readonly string[]> {
-  if (extensions.length === 0) return [];
-  const failed: string[] = [];
-  if (!commandExists(runner)) {
-    logWarn(
-      logger,
-      `${runner} not found on PATH - failed to install ${platform} extensions. Pass --skip-extensions to proceed without them.`,
-    );
-    return extensions.map((extension) => `${platform}: ${extension.key ?? extension.name}`);
-  }
-
-  for (const extension of extensions) {
-    throwIfAborted(signal);
-    const args = extensionRunnerArgs(extension);
-    // Same formatting as the trust preview: a raw argv here could print a credential, or use
-    // terminal controls to erase the preview the user just approved.
-    logInfo(logger, `Will run: ${formatCommandPreview([runner, ...args])}`);
-
-    const name = `${platform}: ${extension.key ?? extension.name}`;
-    let result: AsyncCommandResult;
-    try {
-      result = await runSkillCommand(runner, args, {
-        stdio: ["ignore", "pipe", "pipe"],
-        cwd: installBaseDir,
-        shell: process.platform === "win32",
-        signal,
-      });
-    } catch (error) {
-      throwIfAborted(signal, error);
-      failed.push(name);
-      logWarn(
-        logger,
-        `Failed to install ${platform} extension: ${extension.key ?? extension.name} (${formatCommandFailure({
-          error: error instanceof Error ? error : new Error(String(error)),
-        })})`,
-      );
-      continue;
-    }
-    throwIfAborted(signal);
-    if (result.status !== 0) {
-      failed.push(name);
-      logWarn(
-        logger,
-        `Failed to install ${platform} extension: ${extension.key ?? extension.name} (${formatCommandFailure(result)})`,
-      );
-      continue;
-    }
-    logSuccess(logger, `${platform} extension: ${extension.key ?? extension.name}`);
-  }
-  return failed;
-}
-
-function throwIfAborted(signal?: AbortSignal, cause?: unknown): void {
-  // Shared by both install paths, so the wording cannot name one of them.
-  if (signal?.aborted) throw new Error("Install stopped by user.", { cause });
-}
-
-/**
- * Resolve which package runner to use for `extensions.yaml` entries.
- * Precedence: CLI flag → config.yaml → auto-detect (`bunx` if present, else `npx`).
- */
-export function resolveRunner({
-  cliFlag,
-  configValue,
-  hasCommand = commandExists,
-}: {
-  cliFlag?: InstallRunner;
-  configValue?: InstallRunner;
-  hasCommand?: (cmd: string) => boolean;
-}): InstallRunner {
-  if (cliFlag) return cliFlag;
-  if (configValue) return configValue;
-  return hasCommand("bunx") ? "bunx" : "npx";
-}
-
-/** {@link commandExistsOnPath}, bound to this module's mockable spawn. */
-function commandExists(command: string): boolean {
-  return commandExistsOnPath(command, runCommand);
-}
-
-export function resolveExecutable(command: string): string {
-  if (process.platform === "win32" && (command === "npx" || command === "bunx")) {
-    return `${command}.cmd`;
-  }
-  return command;
-}
-
-export function formatCommandFailure(result: {
-  stdout?: unknown;
-  stderr?: unknown;
-  status?: unknown;
-  error?: Error;
-}): string {
-  const stdout = typeof result.stdout === "string" ? result.stdout : "";
-  const stderr = typeof result.stderr === "string" ? result.stderr : "";
-  const combined = `${stdout}\n${stderr}`
-    // oxlint-disable-next-line no-control-regex
-    .replace(/\u001b\[[0-9;]*m/gu, "")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-  // Child output is untrusted: it can echo a credentialed URL back, or carry terminal controls.
-  return sanitizeLogText(combined[combined.length - 1] || result.error?.message || `exit ${result.status}`);
-}
-
-function makeTimestamp(): string {
-  const now = new Date();
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(
-    now.getMinutes(),
-  )}${pad(now.getSeconds())}`;
-}
-
-export function runCommand(command: string, args: readonly string[], options: Parameters<typeof spawnSync>[2]) {
-  try {
-    return runtimeDependencies.runCommand(command, args, options);
-  } catch (error) {
-    throw new InstallError(`Failed to run command: ${formatCommandPreview([command, ...args])}`, error);
-  }
-}
-
-export async function runSkillCommand(
-  command: string,
-  args: readonly string[],
-  options: Parameters<typeof spawn>[2],
-): Promise<AsyncCommandResult> {
-  // The one place every skill, extension and clone launch passes through, so the shell check
-  // belongs here rather than at each caller. `.cmd` shims force `shell: true` on Windows, which
-  // means argv is concatenated rather than escaped — see {@link assertShellSafeArgv}.
-  if (options?.shell) assertShellSafeArgv([command, ...args]);
-  try {
-    return await runtimeDependencies.runAsyncCommand(command, args, options);
-  } catch (error) {
-    throw new InstallError(`Failed to run command: ${formatCommandPreview([command, ...args])}`, error);
-  }
-}
-
-export function runAsyncCommand(
-  command: string,
-  args: readonly string[],
-  options: Parameters<typeof spawn>[2],
-): Promise<AsyncCommandResult> {
-  return new Promise((resolve) => {
-    const child = spawn(command, [...args], options);
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    child.stdout?.on("data", (chunk: Buffer | string) => stdout.push(Buffer.from(chunk)));
-    child.stderr?.on("data", (chunk: Buffer | string) => stderr.push(Buffer.from(chunk)));
-    child.on("error", (error) => {
-      resolve({
-        status: 1,
-        stdout: Buffer.concat(stdout).toString("utf8"),
-        stderr: Buffer.concat(stderr).toString("utf8"),
-        error,
-      });
-    });
-    child.on("close", (status) => {
-      resolve({
-        status,
-        stdout: Buffer.concat(stdout).toString("utf8"),
-        stderr: Buffer.concat(stderr).toString("utf8"),
-      });
-    });
-  });
 }
 
 export { __test } from "./install/runtime.js";

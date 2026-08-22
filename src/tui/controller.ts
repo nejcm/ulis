@@ -1,7 +1,7 @@
 import type { CliRenderer } from "@opentui/core";
 
 import type { Logger } from "../build.js";
-import { planRemoteCommands } from "../install.js";
+import { planRemoteCommands } from "../install/trust-gate.js";
 import type { Platform } from "../platforms.js";
 import type { InterruptGuard } from "../utils/interrupt.js";
 import { sanitizeConsentText } from "../utils/redact.js";

@@ -1,7 +1,9 @@
 /**
  * URL credential redaction and untrusted-text escaping. This module imports nothing, so every
- * layer — parsers, the cloner, the installer, the TUI — can reach it. `install.ts` needs it and
- * `remote-source.ts` imports from `install.ts`, so a shared leaf is what breaks the cycle.
+ * layer — parsers, the cloner, the installer, the TUI — can reach it. `install/runner.ts`,
+ * `install/log.ts` and `install/preview.ts` all need it, and `utils/remote-source.ts` imports
+ * `formatCommandFailure`/`runCommand`/`runSkillCommand` from `install/runner.ts`; a shared leaf is
+ * what keeps that from folding back into a cycle between the two.
  */
 
 /** C0 controls plus DEL, written as escapes so the source stays copy-pasteable text. */

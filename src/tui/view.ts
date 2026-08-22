@@ -427,7 +427,7 @@ function missingSourceView(state: TuiState, cwd?: string, userHome?: string): Sc
  *
  * An empty list is not "nothing happens": it means nothing this planner recognises as executable,
  * while the remote tree's agents, skills, rules and instructions still land in the destination.
- * `confirmRemoteCommands` in `install.ts` refuses to skip its gate there for exactly that reason,
+ * `confirmRemoteCommands` in `install/trust-gate.ts` refuses to skip its gate there for exactly that reason,
  * so this screen keeps its own gate - in the CLI's own words, so both surfaces say one thing.
  */
 function remoteCommandRows(state: TuiState): ViewRow[] {
