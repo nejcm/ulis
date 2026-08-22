@@ -423,10 +423,32 @@ function missingSourceView(state: TuiState, cwd?: string, userHome?: string): Sc
  * entries run during the install, others are files a host agent executes on its own afterwards -
  * so the framing stays deliberately general rather than naming the classes it happens to list
  * today. Text is pre-sanitised by the planner, so a hostile manifest cannot forge or hide a line.
- * Renders nothing when there is nothing remote to install.
+ * Renders nothing when the install is purely local.
+ *
+ * An empty list is not "nothing happens": it means nothing this planner recognises as executable,
+ * while the remote tree's agents, skills, rules and instructions still land in the destination.
+ * `confirmRemoteCommands` in `install.ts` refuses to skip its gate there for exactly that reason,
+ * so this screen keeps its own gate - in the CLI's own words, so both surfaces say one thing.
  */
 function remoteCommandRows(state: TuiState): ViewRow[] {
-  if (state.remoteCommands.length === 0) return [];
+  if (!isRemoteReview(state)) return [];
+  if (state.remoteCommands.length === 0) {
+    return [
+      {
+        kind: "text",
+        text: "Nothing here was recognised as executable - which is not a guarantee.",
+        tone: "warn",
+      },
+      {
+        kind: "text",
+        text: `  Its files will still be installed for: ${formatPlatforms(state.platforms)}.`,
+        tone: "muted",
+        // A consent row even though it lists no command: it is the only thing on this screen that
+        // has to be read before an empty-plan remote install may start.
+        consent: "command",
+      },
+    ];
+  }
   return [
     {
       kind: "text",
@@ -445,18 +467,32 @@ function remoteCommandRows(state: TuiState): ViewRow[] {
 }
 
 function remoteWarningRows(state: TuiState, columns: number): ViewRow[] {
+  if (!isRemoteReview(state)) return [];
   const source = formatRemoteSource(sanitizeConsentText(state.remoteCommandSource), columns);
-  return state.remoteCommands.length === 0
-    ? []
-    : [
-        {
-          kind: "text",
-          text: `REMOTE: ${state.remoteCommands.length} ${state.remoteCommands.length === 1 ? "entry" : "entries"} WILL apply`,
-          tone: "error",
-          consent: "warning",
-        },
-        { kind: "text", text: `@ ${source}`, tone: "error", consent: "warning" },
-      ];
+  const count = state.remoteCommands.length;
+  return [
+    {
+      kind: "text",
+      // With nothing recognised there is no count to state, but the install is no less remote:
+      // the banner drops to what remains true rather than disappearing.
+      text:
+        count === 0
+          ? "REMOTE: source files WILL be installed"
+          : `REMOTE: ${count} ${count === 1 ? "entry" : "entries"} WILL apply`,
+      tone: "error",
+      consent: "warning",
+    },
+    { kind: "text", text: `@ ${source}`, tone: "error", consent: "warning" },
+  ];
+}
+
+/**
+ * Whether this review is installing something the user did not write. Keyed on the source rather
+ * than on the command list, because an empty list is a plan the enumeration did not recognise, not
+ * a local install.
+ */
+function isRemoteReview(state: TuiState): boolean {
+  return state.remoteCommandSource !== "" || state.remoteCommands.length > 0;
 }
 
 function formatRemoteSource(value: string, columns: number): string {

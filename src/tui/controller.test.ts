@@ -433,6 +433,72 @@ describe("TUI layout", () => {
     }
   }, 15_000);
 
+  it.each([
+    ["installReview", 0, "Start install"],
+    ["presetInstallReview", PRESET_INSTALL_REVIEW_START_ROW, "Start preset install"],
+  ] as const)("gates %s on a remote source whose recognised plan is empty", async (screen, cursor, label) => {
+    let runs = 0;
+    const harness = await createHarness(MIN_COLUMNS, MIN_ROWS, {
+      runAction: async () => {
+        runs += 1;
+      },
+    });
+    Object.assign(harness.controller.state, {
+      screen,
+      cursor,
+      remoteCommandSource: "https://github.com/acme/remote",
+      remoteCommands: [],
+    });
+
+    const frame = await harness.frame();
+    expect(frame).toContain("REMOTE:");
+    expect(frame).toContain("@ github.com/acme/remote");
+    expect(frame).toContain(`> ${label}`);
+
+    // Nothing recognised as executable still means an unreviewed tree lands in the destination,
+    // so the first Enter must acknowledge the gate rather than start the install.
+    await harness.press("RETURN");
+    await Bun.sleep(0);
+    expect(runs).toBe(0);
+    expect(harness.controller.state.screen).toBe(screen);
+    const blocked = harness.captureCharFrame();
+    expect(blocked).toContain("Review all 1 remote command before starting.");
+    expect(blocked).toContain("Its files will still be installed for:");
+
+    await pageDownWithPaint(harness, 6);
+    await Bun.sleep(410);
+    await harness.press("RETURN");
+    await Bun.sleep(0);
+    expect(runs).toBe(1);
+  });
+
+  it("keeps remote-command coverage across a review height change", async () => {
+    // Rows wrap by width alone, so a height-only resize does not invalidate the record of which
+    // lines were painted - what was seen was seen. Only width is part of the consent signature.
+    let runs = 0;
+    const harness = await createHarness(50, 20, {
+      runAction: async () => {
+        runs += 1;
+      },
+    });
+    Object.assign(harness.controller.state, {
+      screen: "installReview",
+      cursor: 0,
+      remoteCommandSource: "https://github.com/acme/remote",
+      remoteCommands: ["remote command 1", "remote command 2"],
+    });
+
+    await harness.frame();
+    await pageDownWithPaint(harness, 6);
+    harness.resize(50, 30);
+    await harness.renderOnce();
+    await Bun.sleep(410);
+    await harness.press("RETURN");
+    await Bun.sleep(0);
+
+    expect(runs).toBe(1);
+  });
+
   it("budgets wrapped action text by rendered lines", async () => {
     const harness = await createHarness(50, 24);
     Object.assign(harness.controller.state, {

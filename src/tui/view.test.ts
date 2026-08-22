@@ -234,11 +234,41 @@ describe("remote command consent", () => {
     expect(rowText(state)).toContain("npx some-extension");
   });
 
-  it("shows no command section when nothing remote will run", () => {
+  it("gates a remote source whose recognised plan is empty", () => {
+    const state = createInitialState();
+    state.screen = "installReview";
+    state.remoteCommandSource = "https://github.com/o/r";
+    state.remoteCommands = [];
+
+    const text = rowText(state);
+
+    // An empty plan is not "nothing happens", and the CLI refuses to skip its gate there
+    // (`confirmRemoteCommands`). This screen must say the same thing, in the same words.
+    expect(text).toContain("REMOTE:");
+    expect(text).toContain("WILL be installed");
+    expect(text).toContain("@ github.com/o/r");
+    expect(text).toContain("Nothing here was recognised as executable - which is not a guarantee.");
+    expect(text).toContain("Its files will still be installed for:");
+  });
+
+  it("shows the empty-plan gate on the preset install review screen too", () => {
+    const state = createInitialState();
+    state.screen = "presetInstallReview";
+    state.remoteCommandSource = "https://github.com/o/r";
+    state.remoteCommands = [];
+
+    expect(rowText(state)).toContain("Nothing here was recognised as executable - which is not a guarantee.");
+  });
+
+  it("shows no remote gate when the install is purely local", () => {
     const state = createInitialState();
     state.screen = "installReview";
 
-    expect(rowText(state)).not.toContain("execution surface");
+    const text = rowText(state);
+
+    expect(text).not.toContain("REMOTE:");
+    expect(text).not.toContain("Nothing here was recognised");
+    expect(text).not.toContain("run later inside your agent");
   });
 
   it("redacts credentials in the source picker and recents list", () => {
