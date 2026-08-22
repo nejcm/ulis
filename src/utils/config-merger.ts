@@ -1,5 +1,17 @@
-import { cpSync, existsSync, readdirSync, rmSync, statSync } from "node:fs";
-import { extname, join } from "node:path";
+import {
+  closeSync,
+  cpSync,
+  existsSync,
+  fchmodSync,
+  lstatSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, extname, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import { patch as patchToml, TomlDocument, TomlFormat } from "@decimalturn/toml-patch";
@@ -160,31 +172,141 @@ export function readMergeableConfig(filePath: string): unknown {
 }
 
 export function writeMergeableConfig(filePath: string, value: unknown): void {
+  writeFile(filePath, serializeMergeableConfig(filePath, value));
+}
+
+/** Split out so a destination write can serialise here and write through {@link writeDestinationFile}. */
+function serializeMergeableConfig(filePath: string, value: unknown): string {
   const ext = extname(filePath).toLowerCase();
   if (!MERGE_EXTS.has(ext)) throw new Error(`Unsupported config extension: ${ext}`);
-  if (ext === ".json") {
-    writeFile(filePath, JSON.stringify(value, null, 2));
-  } else if (ext === ".toml") {
-    writeFile(filePath, smolToml.stringify(value as Record<string, smolToml.TomlPrimitive>));
-  } else {
-    writeFile(filePath, stringifyYaml(value));
+  if (ext === ".json") return JSON.stringify(value, null, 2);
+  if (ext === ".toml") return smolToml.stringify(value as Record<string, smolToml.TomlPrimitive>);
+  return stringifyYaml(value);
+}
+
+/**
+ * Write a native config file into the destination, never through a symbolic link.
+ *
+ * These are the platform's real config files - the MCP servers and hooks a host agent acts on - and
+ * `writeFile` follows a link at the destination, so one planted at `opencode.json` or `.claude.json`
+ * made the install write wherever it pointed, with content the planter already influences since the
+ * existing file is what gets preserved and merged into the result. Remove-then-exclusive-create is
+ * the same pair `src/install/fs.ts` uses: the link is unlinked as a link, and the create fails
+ * rather than adopting anything that appears in between.
+ */
+function writeDestinationFile(filePath: string, content: string | Buffer, sourceMode?: number): void {
+  refuseSymlinkAt(filePath);
+  writeFileExclusively(filePath, content, sourceMode);
+}
+
+/**
+ * {@link writeDestinationFile} for the generated tree, which ULIS owns outright and rewrites on every
+ * build: a symlink there is replaced rather than refused, since nobody put it there deliberately.
+ */
+function writeGeneratedFile(filePath: string, content: string | Buffer): void {
+  writeFileExclusively(filePath, content);
+}
+
+function writeFileExclusively(filePath: string, content: string | Buffer, sourceMode?: number): void {
+  ensureDir(dirname(filePath));
+  // The mode to land on: the one the file being replaced already had, or - when there is nothing to
+  // replace - the mode of the file being copied in. `rmSync` takes the old mode away with the inode
+  // and a fresh create lands at the process umask, so a `0600` config holding MCP environment values
+  // came back `0644` and readable by every local user. A verbatim copy of a `0600` generated file
+  // onto a path that does not exist yet has the same problem from the other side.
+  const mode = existingFileMode(filePath) ?? sourceMode;
+  rmSync(filePath, { force: true });
+  // Created, written and chmodded through one descriptor. `wx` is the exclusive create; `fchmodSync`
+  // needs no path, and resolving the path a second time to `chmod` it would leave a window for a
+  // concurrent writer to swap in a symlink and have us change permissions on a file outside the
+  // destination. `applyMode` in `src/install/fs.ts` avoids the same window the same way.
+  const handle = openSync(filePath, "wx", mode ?? 0o666);
+  try {
+    writeFileSync(handle, content);
+    // The mode passed to `open` is masked by the umask; this restores it exactly.
+    if (mode !== undefined) fchmodSync(handle, mode);
+  } finally {
+    closeSync(handle);
   }
 }
 
+/**
+ * {@link writeDestinationFile} for a verbatim copy. Reads the bytes and goes through the one writer
+ * rather than `copyFileSync`, which needs its own exclusive-create flag and its own mode handling -
+ * two implementations of the same rule is what keeps going wrong here. The source's mode is carried
+ * across explicitly, since `copyFileSync` would have done that and a plain write would not.
+ */
+function copyDestinationFile(sourcePath: string, filePath: string): void {
+  writeDestinationFile(filePath, readFileSync(sourcePath), existingFileMode(sourcePath));
+}
+
+function isSymbolicLink(filePath: string): boolean {
+  try {
+    return lstatSync(filePath).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+/** Mode of an existing regular file. A symlink is refused before this, a directory fails at the write. */
+function existingFileMode(filePath: string): number | undefined {
+  try {
+    const stats = lstatSync(filePath);
+    return stats.isFile() ? stats.mode & 0o7777 : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Refuse a symbolic link where a native config file belongs.
+ *
+ * Safety does not rest on this check: both writers above unlink and create exclusively, so neither
+ * can follow a link whatever this reports. It exists to fail loudly and name the path, because a
+ * link here is about as likely to be a dotfile manager's as an attacker's, and quietly replacing a
+ * deliberate one is its own kind of data loss. That is also why an `lstat` which cannot answer is
+ * simply left alone - the write below fails on the same error, so nothing is decided by the silence.
+ */
+function refuseSymlinkAt(filePath: string): void {
+  let stats;
+  try {
+    stats = lstatSync(filePath);
+  } catch {
+    return;
+  }
+  if (!stats.isSymbolicLink()) return;
+  throw new UnsafeNativeConfigPathError(filePath);
+}
+
 function mergeOrCopyFile(srcFile: string, destFile: string): void {
-  if (!fileExists(destFile) || !isMergeable(destFile)) {
-    cpSync(srcFile, destFile);
+  // A symlink at the destination is never a merge base. `raw/` layers merge into the generated tree
+  // one after another, so the first layer copying a link in was enough for the second to read
+  // through it and write through it - a remote source having the build modify a file outside the
+  // generated tree, after the trust prompt had already been answered. Replaced, not followed.
+  if (isSymbolicLink(destFile) || !fileExists(destFile) || !isMergeable(destFile)) {
+    copyRawFile(srcFile, destFile);
     return;
   }
 
   try {
     const generated = readMergeableConfig(destFile);
     const raw = readMergeableConfig(srcFile);
-    writeMergeableConfig(destFile, mergeConfigValues(generated, raw));
+    writeGeneratedFile(destFile, serializeMergeableConfig(destFile, mergeConfigValues(generated, raw)));
   } catch (err) {
     console.warn(`[config-merger] merge failed for ${destFile}: ${err}. Copying raw file as-is.`);
-    cpSync(srcFile, destFile);
+    copyRawFile(srcFile, destFile);
   }
+}
+
+/**
+ * Copy one `raw/` file into the generated tree. The removal is non-recursive, so a symlink an
+ * earlier layer left there is unlinked as a link rather than written through, and a directory stops
+ * it. The source is copied as it is - a link in `raw/` stays a link, which is the author's own tree.
+ */
+function copyRawFile(srcFile: string, destFile: string): void {
+  ensureDir(dirname(destFile));
+  rmSync(destFile, { force: true });
+  cpSync(srcFile, destFile);
 }
 
 export function mergeOrCopyDir(
@@ -269,6 +391,20 @@ export interface PreservedNativeConfigEntry {
 export interface CapturedPreservedNativeConfig extends PreservedNativeConfigEntry {
   readonly preservedConfig: unknown | undefined;
   readonly originalContent?: string;
+}
+
+/**
+ * A native config path the install refuses to write. Named so the install path can surface the
+ * message as-is: it tells the user which file is a symlink and what to do about it, and a generic
+ * "failed to write preserved native config" wrapper would bury exactly the part that is actionable.
+ */
+export class UnsafeNativeConfigPathError extends Error {
+  constructor(readonly targetPath: string) {
+    super(
+      `Refusing to write through a symbolic link: ${targetPath}. Remove it, or point it somewhere ULIS is installing to.`,
+    );
+    this.name = "UnsafeNativeConfigPathError";
+  }
 }
 
 export class PreservedNativeConfigParseError extends Error {
@@ -525,13 +661,18 @@ function setConfigPath(target: Record<string, unknown>, path: readonly string[],
 
 function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger?: PreservedNativeConfigLogger): void {
   try {
+    // Once, for every branch below, rather than at each of the ones that write. The branches that
+    // do not write still act on the path - one of them deleted the link outright - and a refusal
+    // that holds only where it was remembered is not a refusal. `existsSync` follows a link, so no
+    // branch can be trusted to notice one on its own.
+    refuseSymlinkAt(entry.targetPath);
     if (!existsSync(entry.generatedPath)) {
       if (entry.overlay && existsSync(entry.targetPath)) {
         logger?.success(`${entry.label} (preserved)`);
         return;
       }
       if (entry.preservedConfig !== undefined) {
-        writeMergeableConfig(entry.targetPath, entry.preservedConfig);
+        writeDestinationFile(entry.targetPath, serializeMergeableConfig(entry.targetPath, entry.preservedConfig));
         logger?.success(`${entry.label} (preserved)`);
       } else if (existsSync(entry.targetPath)) {
         removePath(entry.targetPath);
@@ -541,7 +682,7 @@ function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger
     }
 
     if (entry.preservedConfig === undefined) {
-      cpSync(entry.generatedPath, entry.targetPath);
+      copyDestinationFile(entry.generatedPath, entry.targetPath);
       logger?.success(`${entry.label} (copied)`);
       return;
     }
@@ -551,12 +692,15 @@ function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger
     const merged = mergeConfigValues(entry.preservedConfig, generated);
     if (entry.overlay === "toml") {
       const existingContent = entry.originalContent ?? readFile(entry.targetPath);
-      writeFile(entry.targetPath, patchTomlOverlay(existingContent, generatedContent, merged));
+      writeDestinationFile(entry.targetPath, patchTomlOverlay(existingContent, generatedContent, merged));
     } else {
-      writeMergeableConfig(entry.targetPath, merged);
+      writeDestinationFile(entry.targetPath, serializeMergeableConfig(entry.targetPath, merged));
     }
     logger?.success(`${entry.label} (merged)`);
   } catch (error) {
+    // Passed through rather than wrapped: its message names the file and the fix, and this wrapper
+    // would hide both behind the path pair.
+    if (error instanceof UnsafeNativeConfigPathError) throw error;
     throw new Error(`Failed to merge preserved native config ${entry.generatedPath} -> ${entry.targetPath}`, {
       cause: error,
     });

@@ -16,23 +16,24 @@ import {
   capturePreservedNativeConfigs,
   nativeConfigFilenames,
   PreservedNativeConfigParseError,
+  UnsafeNativeConfigPathError,
   writePreservedNativeConfigs,
   type CapturedPreservedNativeConfig,
 } from "../utils/config-merger.js";
 import { InstallError } from "./errors.js";
-import { backupPath, copyPath, copyPlatformContents, ensureDir, readDirectoryEntries } from "./fs.js";
+import { backupPath, copyPlatformContents, copyToNewPath, ensureDir, readDirectoryEntries } from "./fs.js";
 import { MANAGED_PLATFORM_LAYOUTS } from "./layouts.js";
-import { ULIS_MANIFEST_FILENAME } from "./manifest.js";
+import { ULIS_MANIFEST_FILENAME, type PlatformOwnership } from "./manifest.js";
 import type { InstallContext } from "./types.js";
+
+/** Enough to clear a same-second collision; a run needing more has a directory full of backups. */
+const MAX_BACKUP_ATTEMPTS = 100;
 
 const PLATFORM_INSTALL_SKIP_NAMES: Readonly<Record<Platform, ReadonlySet<string>>> = Object.fromEntries(
   PLATFORMS.map((platform) => [platform, reservedNames(...nativeConfigFilenames(platform))]),
 ) as Record<Platform, ReadonlySet<string>>;
 
-export async function installOpencode(
-  context: InstallContext,
-  previouslyManagedRootEntries?: readonly string[],
-): Promise<void> {
+export async function installOpencode(context: InstallContext, ownership?: PlatformOwnership): Promise<void> {
   const targetDir = platformConfigDir("opencode", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "opencode");
 
@@ -48,7 +49,8 @@ export async function installOpencode(
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.opencode,
     namedDirectories: managedDirectoryRules("opencode"),
     pruneExtraNames: context.prune,
-    previouslyManagedRootEntries,
+    previouslyManagedRootEntries: ownership?.previous?.rootEntries,
+    currentManagedRootEntries: ownership?.current.rootEntries,
   });
   logSuccess(context, `OpenCode -> ${targetDir}`);
 }
@@ -250,6 +252,8 @@ function writePlatformPreservedNativeConfigs(
   try {
     writePreservedNativeConfigs(entries, context.logger);
   } catch (error) {
+    // Same treatment the parse error gets above: a diagnosable message reaches the user intact.
+    if (error instanceof UnsafeNativeConfigPathError) throw new InstallError(error.message, error);
     throw new InstallError(`Failed to write preserved native config for ${platform}`, error);
   }
 }
@@ -259,9 +263,7 @@ function backupDirectory(targetDir: string, context: InstallContext): void {
     return;
   }
 
-  const targetBackupPath = backupPath(targetDir, context.timestamp);
-  copyPath(targetDir, targetBackupPath);
-  logInfo(context, `[backup] ${targetDir} -> ${targetBackupPath}`);
+  logInfo(context, `[backup] ${targetDir} -> ${copyToUnusedBackupPath(targetDir, context)}`);
 }
 
 function backupFile(targetPath: string, context: InstallContext): void {
@@ -269,9 +271,25 @@ function backupFile(targetPath: string, context: InstallContext): void {
     return;
   }
 
-  const targetBackupPath = backupPath(targetPath, context.timestamp);
-  copyPath(targetPath, targetBackupPath);
-  logInfo(context, `[backup] ${targetPath} -> ${targetBackupPath}`);
+  logInfo(context, `[backup] ${targetPath} -> ${copyToUnusedBackupPath(targetPath, context)}`);
+}
+
+/**
+ * Copy `sourcePath` to the first backup name nothing is using, and return it.
+ *
+ * Never to a name already taken: the timestamp resolves to the second, so two installs moments
+ * apart compute the same one, and overwriting would delete the earlier backup - or, for a name that
+ * happened to exist already, whatever was there. `copyToNewPath` also refuses to write through a
+ * symbolic link, which this predictable name is otherwise a fine place to plant.
+ */
+function copyToUnusedBackupPath(sourcePath: string, context: InstallContext): string {
+  for (let attempt = 1; attempt <= MAX_BACKUP_ATTEMPTS; attempt += 1) {
+    const candidate = backupPath(sourcePath, context.timestamp, attempt);
+    if (copyToNewPath(sourcePath, candidate)) return candidate;
+  }
+  throw new InstallError(
+    `Found no unused backup path for ${sourcePath} after ${MAX_BACKUP_ATTEMPTS} attempts. Remove some of its .backup copies and retry.`,
+  );
 }
 
 function reservedNames(...names: readonly string[]): ReadonlySet<string> {

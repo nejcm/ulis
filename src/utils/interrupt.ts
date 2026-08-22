@@ -108,6 +108,21 @@ export function createInterruptGuard(
   };
 }
 
+/**
+ * Hand the event loop one turn so a queued signal handler gets to run.
+ *
+ * The installers are synchronous throughout (`cpSync`, `readdirSync`, `writeFileSync`), so a loop
+ * that awaits them awaits already-resolved promises and drains entirely through the microtask
+ * queue. A Ctrl-C arriving mid-write is delivered as a macrotask and would not be observed until
+ * the whole write phase had finished - which is not what "unwinds between platforms" means. One
+ * `setImmediate` per iteration is what puts the abort checkpoints back in reach of the handler.
+ */
+export function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolveYield) => {
+    setImmediate(resolveYield);
+  });
+}
+
 export const __test = {
   /** Stop the run the way Ctrl-C would. Replaced in tests so an interrupt does not kill the runner. */
   exitOnInterrupt: (): void => {

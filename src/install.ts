@@ -18,6 +18,7 @@ import { isSamePath, PLATFORMS, uniquePlatforms, type Platform } from "./platfor
 import { UlisConfigSchema, type ExtensionsConfig, type SkillsConfig } from "./schema.js";
 import { assertShellSafeArgv, commandExists as commandExistsOnPath } from "./utils/command.js";
 import { loadValidatedConfigFile, type ConfigDiagnosticOptions } from "./utils/config-loader.js";
+import { yieldToEventLoop } from "./utils/interrupt.js";
 import { logger as defaultLogger } from "./utils/logger.js";
 import { confirm } from "./utils/prompt.js";
 import { legacyRootRecordPath, readRecordedRemoteSources } from "./utils/provenance.js";
@@ -344,19 +345,6 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
       return [];
     }
 
-    const missingBuildOutputs = platforms.some((platform) => !existsSync(join(outputDir, platform)));
-    if (rebuild || missingBuildOutputs) {
-      logWarn(
-        logger,
-        !rebuild
-          ? "Missing generated output. Running build."
-          : remoteInTheMix && options.rebuild === false
-            ? "Rebuilding generated configs before install: a remote source cannot skip the build, because the trust gate previews what the build produces."
-            : "Rebuilding generated configs before install.",
-      );
-      runBuild({ targets: platforms, sourceDir, outputDir, logger, presets: options.presets });
-    }
-
     const skillsConfig = mergeSkillsConfigs([
       ...(options.presets ?? []).map((preset) => loadSkills(preset.dir, presetDiagnostic(preset))),
       loadSkills(sourceDir, { source: "base", sourceDir }),
@@ -375,6 +363,53 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
       defaultValue: { version: 1, name: "ulis" },
     });
     const runner = resolveRunner({ cliFlag: options.runner, configValue: ulisConfig.runner });
+    const previewInputs: PreviewInputs = { sourceDir, presets: options.presets ?? [], platforms };
+
+    // The gate runs before the build, not only before the copy. `runBuild` writes the remote-authored
+    // merged tree into `<source>/generated/`, so gating after it would leave remote-authored files in
+    // the user's own repository whatever they answered - "declining installs nothing" has to be true
+    // of the source tree too, not only of the destinations. The preview regenerates in memory and
+    // never reads that tree, so it loses nothing by going first. The list agreed to here is handed
+    // to `installGeneratedOutput` as the approved one, which re-checks it against a plan rebuilt
+    // after the build: consent and execution still compare, they just now bracket the build.
+    let approvedCommands = options.approvedCommands;
+    if (remoteInTheMix) {
+      // Same reason as the checkpoint in `installGeneratedOutput`: a user who has already pressed
+      // Ctrl-C must not be shown a "Run these commands?" question on the way out.
+      throwIfAborted(options.signal);
+      const approved = await confirmRemoteCommands({
+        platforms,
+        skillsConfig,
+        extensionsConfig,
+        previewInputs,
+        runner,
+        globalInstall,
+        installExtensionsEnabled,
+        installSkillsEnabled,
+        logger,
+        remoteSources: options.remoteSources,
+        nonInteractive: options.nonInteractive,
+        approvedCommands: options.approvedCommands,
+      });
+      if (approved === false) {
+        logWarn(logger, "Declined. Nothing from the remote source was installed.");
+        return [];
+      }
+      approvedCommands = approved;
+    }
+
+    const missingBuildOutputs = platforms.some((platform) => !existsSync(join(outputDir, platform)));
+    if (rebuild || missingBuildOutputs) {
+      logWarn(
+        logger,
+        !rebuild
+          ? "Missing generated output. Running build."
+          : remoteInTheMix && options.rebuild === false
+            ? "Rebuilding generated configs before install: a remote source cannot skip the build, because the trust gate previews what the build produces."
+            : "Rebuilding generated configs before install.",
+      );
+      runBuild({ targets: platforms, sourceDir, outputDir, logger, presets: options.presets });
+    }
 
     const failureCount = await installGeneratedOutput({
       outputDir,
@@ -386,14 +421,14 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
       platforms,
       skillsConfig,
       extensionsConfig,
-      previewInputs: { sourceDir, presets: options.presets ?? [], platforms },
+      previewInputs,
       runner,
       installExtensionsEnabled,
       installSkillsEnabled,
       logger,
       remoteSources: options.remoteSources,
       nonInteractive: options.nonInteractive,
-      approvedCommands: options.approvedCommands,
+      approvedCommands,
       signal: options.signal,
     });
 
@@ -454,6 +489,8 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
     const analysis = analyzePresets({ presets, logger });
     const remoteUrls = presets.flatMap((preset) => (preset.remoteUrl ? [preset.remoteUrl] : []));
     for (const target of platforms) {
+      // `generate` and `writeResult` are synchronous; same reason as the install loop below.
+      await yieldToEventLoop();
       throwIfAborted(options.signal);
       const outDir = join(outputDir, target);
       const result = generate(target, analysis.project);
@@ -522,6 +559,9 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
   // server it spawns on next launch, a `raw/` hook fragment it runs on next session start. Gating
   // after the writes would leave the payload on disk no matter the answer, so declining here has to
   // mean nothing is installed at all. Both runInstall and runPresetInstall funnel through here.
+  // A run that reaches here after an interrupt is a user who already said stop; putting a
+  // "Run these commands?" question to them is answering the wrong question.
+  throwIfAborted(options.signal);
   if (!(await confirmRemoteCommands(options))) {
     logWarn(options.logger, "Declined. Nothing from the remote source was installed.");
     return false;
@@ -555,13 +595,16 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
   const failedExtensions: string[] = [];
   try {
     for (const platform of options.platforms) {
+      // Every installer below is synchronous, so without this the loop never returns to the event
+      // loop and the checkpoint on the next line cannot see a Ctrl-C that landed mid-write.
+      await yieldToEventLoop();
       throwIfAborted(options.signal, failures[0]?.error);
       const platformOwnership = ownership.get(platform);
       if (!platformOwnership) throw new InstallError(`Missing ownership preflight data for ${platform}`);
       try {
         switch (platform) {
           case "opencode":
-            await installOpencode(context, platformOwnership.previous?.rootEntries);
+            await installOpencode(context, platformOwnership);
             break;
           case "claude":
             await installClaude(context);
@@ -727,6 +770,14 @@ type RemoteCommandPlan = Pick<
   | "installSkillsEnabled"
 >;
 
+/** What the trust gate reads. Every field is available before the build runs. */
+type RemoteGateOptions = RemoteCommandPlan & {
+  readonly logger: Logger;
+  readonly remoteSources?: readonly string[];
+  readonly nonInteractive?: boolean;
+  readonly approvedCommands?: readonly string[];
+};
+
 /**
  * The commands a remote source would run, for a caller that gates consent before the install starts
  * (the TUI review screen). Loads configs the same way the install paths do and formats through the
@@ -808,9 +859,9 @@ function renderCommandPlan(options: RemoteCommandPlan): string[] {
  * nothing to gate, when the run is purely local, when consent given elsewhere still matches what
  * is about to run, or when the user says yes here.
  */
-async function confirmRemoteCommands(options: GeneratedInstallOptions): Promise<boolean> {
+async function confirmRemoteCommands(options: RemoteGateOptions): Promise<readonly string[] | false> {
   const remoteSources = options.remoteSources ?? [];
-  if (remoteSources.length === 0) return true;
+  if (remoteSources.length === 0) return [];
   // No early exit on an empty plan. An empty plan does not mean "nothing happens": it means nothing
   // this planner recognises as executable, and the install still writes a remote source's agents,
   // skills, rules and instructions into the destination. Skipping the gate there is what let a
@@ -824,7 +875,7 @@ async function confirmRemoteCommands(options: GeneratedInstallOptions): Promise<
   // convention: any divergence, however it arose, stops the run instead of executing unseen
   // commands.
   if (options.approvedCommands) {
-    if (commandsMatch(options.approvedCommands, commands)) return true;
+    if (commandsMatch(options.approvedCommands, commands)) return commands;
     logWarn(options.logger, "Commands changed since they were reviewed:");
     for (const command of commands) logInfo(options.logger, `  ${command}`);
     throw new InstallError("Refusing to run remote commands that differ from the ones reviewed. Review them again.");
@@ -833,14 +884,19 @@ async function confirmRemoteCommands(options: GeneratedInstallOptions): Promise<
   logHeader(options.logger, "Remote Source Commands");
   for (const url of remoteSources) logInfo(options.logger, `From ${url}`);
   for (const command of commands) logInfo(options.logger, `  ${command}`);
-  if (options.nonInteractive) return true;
-  if (commands.length > 0) return await runtimeDependencies.confirm("Run these commands?");
+  if (commands.length > 0) {
+    if (options.nonInteractive) return commands;
+    return (await runtimeDependencies.confirm("Run these commands?")) && commands;
+  }
 
   // Never claim there is nothing to run. Every bypass found so far printed a confident "nothing
   // here" over a payload that was installing, and a false statement is worse than a missing one.
+  // Printed before the -y exit, not after: the disclosure is the whole point of the -y change, and
+  // an unattended run is precisely where a log line is the only record anyone ever sees.
   logInfo(options.logger, "  Nothing here was recognised as executable - which is not a guarantee.");
   logInfo(options.logger, `  Its files will still be installed for: ${options.platforms.join(", ")}.`);
-  return await runtimeDependencies.confirm("Install from this remote source?");
+  if (options.nonInteractive) return commands;
+  return (await runtimeDependencies.confirm("Install from this remote source?")) && commands;
 }
 
 function commandsMatch(approved: readonly string[], planned: readonly string[]): boolean {

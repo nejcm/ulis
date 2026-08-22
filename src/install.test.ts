@@ -240,6 +240,43 @@ describe("runInstall", () => {
     expect(existsSync(join(fixture.destBase, ".codex", ".ulis-manifest.json"))).toBe(false);
   });
 
+  // A signal handler runs as a macrotask, and every installer body is synchronous (`cpSync`,
+  // `writeFileSync`). Without a turn of the event loop per platform the loop drains through the
+  // microtask queue and the abort is only seen once every platform has already been written -
+  // which is the whole write phase, not "between platforms". `setImmediate` stands in for the
+  // handler so the test does not depend on real signal delivery.
+  it("observes an interrupt queued during the write phase before the next platform", async () => {
+    const fixture = createPlatformReportFixture();
+    const logs: string[] = [];
+    const controller = new AbortController();
+    const logger = captureLogger(logs, (message) => {
+      if (message === "Installing Claude Code") setImmediate(() => controller.abort());
+    });
+
+    let error: unknown;
+    try {
+      await runInstall({
+        sourceDir: fixture.sourceDir,
+        outputDir: fixture.outputDir,
+        destBase: fixture.destBase,
+        userHome: fixture.homeDir,
+        platforms: ["claude", "codex"],
+        rebuild: false,
+        installExtensions: false,
+        installSkills: false,
+        logger,
+        signal: controller.signal,
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error instanceof Error ? error.message : String(error)).toBe("Install stopped by user.");
+    expect(read(join(fixture.destBase, ".claude", "agents", "worker.md"))).toBe("Claude worker.\n");
+    expect(existsSync(join(fixture.destBase, ".codex", "AGENTS.md"))).toBe(false);
+    expect(logs).toContain("Install summary — installed: [claude]");
+  });
+
   it("reports recorded failures when a later platform is interrupted", async () => {
     for (const platforms of [
       ["claude", "codex"],
@@ -2019,12 +2056,16 @@ describe("runInstall", () => {
     });
 
     for (const configDir of [".claude", ".codex", ".cursor", ".opencode", ".forge"]) {
-      expect(JSON.parse(read(join(projectDir, configDir, ".ulis-manifest.json")))).toEqual({
-        version: 2,
+      const manifest = JSON.parse(read(join(projectDir, configDir, ".ulis-manifest.json")));
+      expect(manifest).toEqual({
+        version: 3,
         agents: [],
         skills: [],
         rootEntries: expect.any(Array),
       });
+      // Never copied, so never claimed: a manifest that lists a file the install did not put there
+      // is a false ownership record even when nothing acts on it.
+      expect(manifest.rootEntries).not.toContain(".ulis-manifest.json");
     }
     expect(copiedEntries).not.toContain(".ulis-manifest.json");
     expect(copiedEntries).not.toContain(".ULIS-MANIFEST.JSON");
@@ -2098,7 +2139,7 @@ describe("runInstall", () => {
 
   for (const [caseName, manifest] of [
     ["malformed JSON", "{"],
-    ["a future version", JSON.stringify({ version: 3, agents: [], skills: [], rootEntries: [] })],
+    ["a future version", JSON.stringify({ version: 4, agents: [], skills: [], rootEntries: [] })],
     ["path traversal", JSON.stringify({ version: 1, agents: ["agents/../../outside.md"], skills: [] })],
     ["root traversal", JSON.stringify({ version: 2, agents: [], skills: [], rootEntries: ["../outside"] })],
   ] as const) {
@@ -2137,13 +2178,13 @@ describe("runInstall", () => {
     const projectDir = join(root, "project");
     const userHome = join(root, "home");
     const manifestPath = join(projectDir, ".claude", ".ulis-manifest.json");
-    write(manifestPath, JSON.stringify({ version: 3, agents: [], skills: [], rootEntries: [] }));
+    write(manifestPath, JSON.stringify({ version: 4, agents: [], skills: [], rootEntries: [] }));
 
     const preflight = () => preflightOwnership(["claude"], outputDir, projectDir, userHome, true);
 
     expect(preflight).toThrow(InstallError);
     expect(preflight).toThrow(
-      `Unsupported ULIS ownership manifest for claude at ${manifestPath}: expected version 1 or 2, received 3`,
+      `Unsupported ULIS ownership manifest for claude at ${manifestPath}: expected version 1, 2 or 3, received 4`,
     );
   });
 
@@ -2261,7 +2302,7 @@ describe("runInstall", () => {
     expect(read(join(projectDir, ".opencode", "skills", "local", "SKILL.md"))).toBe("Local skill.\n");
   });
 
-  it("prunes OpenCode root entries listed by a v2 manifest", async () => {
+  it("prunes OpenCode root entries listed by the previous install's manifest", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -2288,7 +2329,7 @@ describe("runInstall", () => {
     expect(existsSync(join(projectDir, ".opencode", "commands"))).toBe(false);
   });
 
-  it("--no-prune retains OpenCode root entries listed by a v2 manifest", async () => {
+  it("--no-prune retains OpenCode root entries listed by the previous install's manifest", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
     const outputDir = join(sourceDir, "generated");
@@ -2315,6 +2356,414 @@ describe("runInstall", () => {
     expect(read(join(projectDir, ".opencode", "commands", "old.md"))).toBe("Old command.\n");
   });
 
+  // The sweep records what a previous install wrote. A directory it wrote may since have gained
+  // files the user put there, which were never ULIS's to remove - so the sweep has to work at the
+  // granularity it records, not remove the whole subtree by name.
+  it("sweeps only the files a previous install wrote into an OpenCode root directory", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const generatedCommands = join(outputDir, "opencode", "commands");
+    mkdirSync(userHome, { recursive: true });
+    write(join(generatedCommands, "old.md"), "Old command.\n");
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["opencode"] as const,
+      rebuild: false,
+      logger: silentLogger,
+    };
+    await runInstall(options);
+    write(join(projectDir, ".opencode", "commands", "mine.md"), "Mine.\n");
+    rmSync(generatedCommands, { recursive: true });
+    write(join(outputDir, "opencode", "AGENTS.md"), "Generated instructions.\n");
+
+    await runInstall(options);
+
+    expect(read(join(projectDir, ".opencode", "commands", "mine.md"))).toBe("Mine.\n");
+    expect(existsSync(join(projectDir, ".opencode", "commands", "old.md"))).toBe(false);
+  });
+
+  // The copy pass has the same problem from the other side: replacing a generated root directory
+  // wholesale removes whatever the user added next to its files.
+  it("merges a regenerated root directory instead of replacing the destination's", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "opencode", "commands", "old.md"), "Old command.\n");
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["opencode"] as const,
+      rebuild: false,
+      logger: silentLogger,
+    };
+    await runInstall(options);
+    write(join(projectDir, ".opencode", "commands", "mine.md"), "Mine.\n");
+
+    await runInstall(options);
+
+    expect(read(join(projectDir, ".opencode", "commands", "mine.md"))).toBe("Mine.\n");
+    expect(read(join(projectDir, ".opencode", "commands", "old.md"))).toBe("Old command.\n");
+  });
+
+  // Merging into an existing destination directory means the copy now walks a tree the user
+  // controls. `cpSync` follows a symlink it finds there, so a link planted anywhere below the
+  // platform root would relocate the write outside it - the write-side twin of the traversal the
+  // sweep refuses. Replacing the link is safe: `rmSync` removes the link, never its target.
+  it("refuses to write through a nested symlink in the destination", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const outside = join(root, "outside");
+    mkdirSync(userHome, { recursive: true });
+    write(join(outside, "victim.md"), "Victim.\n");
+    write(join(outputDir, "opencode", "commands", "nested", "payload.md"), "Payload.\n");
+    write(join(projectDir, ".opencode", "commands", "keep.md"), "Keep.\n");
+    symlinkSync(outside, join(projectDir, ".opencode", "commands", "nested"), "dir");
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["opencode"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(readdirSync(outside)).toEqual(["victim.md"]);
+    const nested = join(projectDir, ".opencode", "commands", "nested");
+    expect(lstatSync(nested).isSymbolicLink()).toBe(false);
+    expect(read(join(nested, "payload.md"))).toBe("Payload.\n");
+    expect(read(join(projectDir, ".opencode", "commands", "keep.md"))).toBe("Keep.\n");
+  });
+
+  // Case-folding the managed-path comparison makes a case-only rename look like the same entry, so
+  // the sweep skips the old file while the copy writes the new one beside it - and on a
+  // case-sensitive filesystem the stale command stays live in the destination.
+  it("prunes a root entry renamed by case alone", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const upper = join(outputDir, "opencode", "commands", "Old.md");
+    const lower = join(outputDir, "opencode", "commands", "old.md");
+    mkdirSync(userHome, { recursive: true });
+    write(upper, "Upper name.\n");
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["opencode"] as const,
+      rebuild: false,
+      logger: silentLogger,
+    };
+
+    await runInstall(options);
+    renameSync(upper, lower);
+    write(lower, "Lower name.\n");
+    await runInstall(options);
+
+    const installed = readdirSync(join(projectDir, ".opencode", "commands"));
+    expect(installed).toEqual(["old.md"]);
+    expect(read(join(projectDir, ".opencode", "commands", "old.md"))).toBe("Lower name.\n");
+    expect(JSON.parse(read(join(projectDir, ".opencode", ".ulis-manifest.json"))).rootEntries).toEqual([
+      "commands/old.md",
+    ]);
+  });
+
+  // Ownership is rewritten at the end of every install, so a sweep that cannot see a recorded path
+  // must not conclude the path is gone. Treating an inspection failure as "not there" skips the
+  // stale file *and* drops it from the new manifest, which turns a live managed command into one
+  // nothing will ever clean up again - fail-open, on the deletion path, permanently.
+  it("aborts rather than disowning a root entry it cannot inspect", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const generatedCommands = join(outputDir, "opencode", "commands");
+    const installedCommands = join(projectDir, ".opencode", "commands");
+    const manifestPath = join(projectDir, ".opencode", ".ulis-manifest.json");
+    mkdirSync(userHome, { recursive: true });
+    write(join(generatedCommands, "old.md"), "Old command.\n");
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["opencode"] as const,
+      rebuild: false,
+      logger: silentLogger,
+    };
+
+    await runInstall(options);
+    rmSync(generatedCommands, { recursive: true });
+    write(join(outputDir, "opencode", "AGENTS.md"), "Generated instructions.\n");
+    // Not searchable: `lstat` on the directory itself still succeeds, on anything inside it does not.
+    chmodSync(installedCommands, 0o000);
+
+    let thrown: unknown;
+    try {
+      await runInstall(options);
+    } catch (error) {
+      thrown = error;
+    } finally {
+      chmodSync(installedCommands, 0o755);
+    }
+
+    expect(thrown).toBeInstanceOf(InstallError);
+    expect((thrown as Error).message).toBe(`Failed to inspect managed path: ${join(installedCommands, "old.md")}`);
+    // The point of aborting: ownership still names the file, so a later install can still remove it.
+    expect(JSON.parse(read(manifestPath)).rootEntries).toEqual(["commands/old.md"]);
+    expect(read(join(installedCommands, "old.md"))).toBe("Old command.\n");
+  });
+
+  // The identity fallback exists for one thing: a case-insensitive destination, where two spellings
+  // are one directory entry. A symlink resolves to the same `realpath` without being the same entry,
+  // so accepting it there preserves the stale file, lets the copy replace the link, and then drops
+  // the old path from the manifest - leaving a live file nothing owns.
+  it("does not treat a symlinked alias as the entry it points at", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const generatedCommands = join(outputDir, "opencode", "commands");
+    const installedCommands = join(projectDir, ".opencode", "commands");
+    mkdirSync(userHome, { recursive: true });
+    write(join(generatedCommands, "old.md"), "Old command.\n");
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["opencode"] as const,
+      rebuild: false,
+      logger: silentLogger,
+    };
+
+    await runInstall(options);
+    rmSync(join(generatedCommands, "old.md"));
+    write(join(generatedCommands, "new.md"), "New command.\n");
+    symlinkSync("old.md", join(installedCommands, "new.md"));
+
+    await runInstall(options);
+
+    expect(readdirSync(installedCommands)).toEqual(["new.md"]);
+    expect(lstatSync(join(installedCommands, "new.md")).isSymbolicLink()).toBe(false);
+    expect(read(join(installedCommands, "new.md"))).toBe("New command.\n");
+  });
+
+  // `agents` and `skills` are created by the install rather than merged into, and `ensureDir` used
+  // `mkdir -p`, which accepts a symlink already sitting at the path. Everything the named-directory
+  // copy then does - the category directories, the removals, the writes - lands beyond the link.
+  // Preflight refuses a symlinked managed path, but only walks paths that are in the current managed
+  // set: a category directory that generates no files is never walked, and neither is one planted
+  // after preflight has run.
+  it("refuses to create a named directory through a symlink in the destination", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const outside = join(root, "outside");
+    mkdirSync(userHome, { recursive: true });
+    mkdirSync(outside, { recursive: true });
+    mkdirSync(join(outputDir, "opencode", "agents", "core"), { recursive: true });
+    mkdirSync(join(outputDir, "opencode", "agents", "specialized"), { recursive: true });
+    write(join(outputDir, "opencode", "AGENTS.md"), "Generated instructions.\n");
+    mkdirSync(join(projectDir, ".opencode"), { recursive: true });
+    symlinkSync(outside, join(projectDir, ".opencode", "agents"), "dir");
+
+    let thrown: unknown;
+    try {
+      await runInstall({
+        sourceDir,
+        outputDir,
+        destBase: projectDir,
+        userHome,
+        platforms: ["opencode"],
+        rebuild: false,
+        logger: silentLogger,
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(InstallError);
+    expect((thrown as Error).message).toBe(
+      `Refusing to install through a symbolic link: ${join(projectDir, ".opencode", "agents")}`,
+    );
+    expect(readdirSync(outside)).toEqual([]);
+  });
+
+  // A backup that deletes the previous backup is the opposite of the feature. The name carries a
+  // second-granularity timestamp, so two installs a few milliseconds apart compute the same path -
+  // and the copy that gets destroyed is the older one, holding the state furthest from whatever the
+  // installs have been doing to the destination.
+  it("keeps an earlier backup when a second --backup install lands in the same second", async () => {
+    const currentSecond = () => Math.floor(Date.now() / 1000);
+    let sameSecond = false;
+    let backups: string[] = [];
+    let projectDir = "";
+
+    // Retried only to guarantee the precondition the case needs, then asserted below: a run that
+    // straddled a second boundary would produce two names for unrelated reasons and prove nothing.
+    for (let attempt = 0; attempt < 20 && !sameSecond; attempt += 1) {
+      const root = createTempRoot();
+      const sourceDir = join(root, ".ulis");
+      const outputDir = join(sourceDir, "generated");
+      projectDir = join(root, "project");
+      const userHome = join(root, "home");
+      mkdirSync(userHome, { recursive: true });
+      write(join(outputDir, "opencode", "AGENTS.md"), "Generated instructions.\n");
+      write(join(projectDir, ".opencode", "keep.md"), "Original.\n");
+      const options = {
+        sourceDir,
+        outputDir,
+        destBase: projectDir,
+        userHome,
+        platforms: ["opencode"] as const,
+        rebuild: false,
+        backup: true,
+        logger: silentLogger,
+      };
+
+      const startedAt = currentSecond();
+      await runInstall(options);
+      await runInstall(options);
+      sameSecond = startedAt === currentSecond();
+      backups = readdirSync(projectDir).filter((entry) => entry.startsWith(".opencode.") && entry.endsWith(".backup"));
+    }
+
+    expect(sameSecond).toBe(true);
+    expect(backups).toHaveLength(2);
+    for (const backup of backups) {
+      expect(read(join(projectDir, backup, "keep.md"))).toBe("Original.\n");
+    }
+  });
+
+  // The generated set changing a name from a directory to a file must not take the directory's
+  // contents with it. The sweep deliberately keeps descendants a previous install never recorded,
+  // and a recursive removal here would destroy exactly the files it had just saved.
+  it("refuses to replace a destination directory with a generated file of the same name", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const installedCommands = join(projectDir, ".opencode", "commands");
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "opencode", "commands"), "Now a file.\n");
+    write(join(installedCommands, "mine.md"), "Mine.\n");
+
+    let thrown: unknown;
+    try {
+      await runInstall({
+        sourceDir,
+        outputDir,
+        destBase: projectDir,
+        userHome,
+        platforms: ["opencode"],
+        rebuild: false,
+        logger: silentLogger,
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(InstallError);
+    expect(read(join(installedCommands, "mine.md"))).toBe("Mine.\n");
+  });
+
+  // The build merges each `raw/` layer into the generated tree in turn. If the first layer puts a
+  // symlink there, the second reads and writes through it - so a remote source can have the build
+  // modify a file outside the generated tree entirely, after the trust prompt has been answered.
+  it("keeps a raw merge inside the generated tree when an earlier layer left a symlink", () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(root, "generated");
+    const externalPath = join(root, "outside", "external.json");
+    write(sourceDir + "/config.yaml", "version: 1\nname: test\n");
+    write(externalPath, JSON.stringify({ untouched: true }));
+    mkdirSync(join(sourceDir, "raw", "all"), { recursive: true });
+    symlinkSync(externalPath, join(sourceDir, "raw", "all", "config.json"));
+    write(join(sourceDir, "raw", "claude", "config.json"), JSON.stringify({ injected: true }));
+
+    runBuild({ targets: ["claude"], sourceDir, outputDir, logger: silentLogger });
+
+    expect(readFileSync(externalPath, "utf-8")).toBe(JSON.stringify({ untouched: true }));
+    const generatedConfig = join(outputDir, "claude", "config.json");
+    expect(lstatSync(generatedConfig).isSymbolicLink()).toBe(false);
+    expect(JSON.parse(read(generatedConfig))).toEqual({ injected: true });
+  });
+
+  // Root entries describe what lands in the destination root. For ForgeCode that is the native
+  // root plus the outer tree, never the generated directory's own listing - and never a reserved
+  // name the install skips on the way in.
+  it("records ForgeCode root entries from the destination's own roots", () => {
+    const root = createTempRoot();
+    const outputDir = join(root, "generated");
+    createForgecodeOutput(outputDir);
+    write(join(outputDir, "forgecode", ".forge", "commands", "review.md"), "Review.\n");
+    write(join(outputDir, "forgecode", ".ulis-provenance.json"), JSON.stringify({ remoteSources: [] }));
+
+    const ownership = preflightOwnership(["forgecode"], outputDir, join(root, "project"), join(root, "home"), true);
+
+    expect(ownership.get("forgecode")!.current.rootEntries).toEqual([".mcp.json", "AGENTS.md", "commands/review.md"]);
+  });
+
+  // A version 2 manifest recorded top-level *names*. A name that is a file was recorded by a previous
+  // install as its own generated output, so pruning it on the first upgraded run is the stale cleanup
+  // working; a name that is a *directory* may have gained files the user put there since, which is
+  // what the empty-only safeguard is for. The CHANGELOG says exactly this.
+  it("migrates a v2 manifest to v3, pruning a stale file but not a directory with content", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const targetDir = join(projectDir, ".opencode");
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "opencode", "AGENTS.md"), "Generated instructions.\n");
+    write(join(targetDir, "stale.md"), "Stale command.\n");
+    write(join(targetDir, "commands", "mine.md"), "Mine.\n");
+    // A version 2 manifest records top-level names, not files.
+    write(
+      join(targetDir, ".ulis-manifest.json"),
+      JSON.stringify({ version: 2, agents: [], skills: [], rootEntries: ["stale.md", "commands"] }),
+    );
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["opencode"],
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    expect(existsSync(join(targetDir, "stale.md"))).toBe(false);
+    expect(read(join(targetDir, "commands", "mine.md"))).toBe("Mine.\n");
+    expect(JSON.parse(read(join(targetDir, ".ulis-manifest.json")))).toMatchObject({ version: 3 });
+  });
+
   it("migrates a v1 manifest without sweeping OpenCode root entries", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
@@ -2339,7 +2788,7 @@ describe("runInstall", () => {
 
     expect(read(join(targetDir, "commands", "old.md"))).toBe("Old command.\n");
     expect(JSON.parse(read(join(targetDir, ".ulis-manifest.json")))).toMatchObject({
-      version: 2,
+      version: 3,
       rootEntries: ["AGENTS.md"],
     });
   });
@@ -2743,6 +3192,9 @@ describe("remote trust gate", () => {
     readonly commands: Array<{ command: string; args: readonly string[] }>;
     readonly logs: string[];
     readonly questions: string[];
+    readonly projectDir: string;
+    readonly outputDir: string;
+    readonly error?: unknown;
   }
 
   async function runWithRemote(
@@ -2773,6 +3225,9 @@ describe("remote trust gate", () => {
       mcpJson?: string;
       /** Files to plant in the prebuilt `generated/` tree, as path → contents. */
       generatedFiles?: Readonly<Record<string, string>>;
+      signal?: AbortSignal;
+      /** Return the thrown error on {@link GateRun} instead of rejecting. */
+      captureError?: boolean;
     } = {},
   ): Promise<GateRun> {
     const root = createTempRoot();
@@ -2853,22 +3308,29 @@ describe("remote trust gate", () => {
       },
     };
 
-    await runInstall({
-      sourceDir,
-      outputDir,
-      destBase: projectDir,
-      userHome,
-      platforms: overrides.platforms ?? ["codex"],
-      rebuild: false,
-      logger: recordingLogger,
-      remoteSources: overrides.remoteSources,
-      nonInteractive: overrides.nonInteractive,
-      approvedCommands: overrides.approvedCommands,
-      installSkills: overrides.installSkills,
-      installExtensions: overrides.installExtensions,
-    });
+    let error: unknown;
+    try {
+      await runInstall({
+        sourceDir,
+        outputDir,
+        destBase: projectDir,
+        userHome,
+        platforms: overrides.platforms ?? ["codex"],
+        rebuild: false,
+        logger: recordingLogger,
+        remoteSources: overrides.remoteSources,
+        nonInteractive: overrides.nonInteractive,
+        approvedCommands: overrides.approvedCommands,
+        installSkills: overrides.installSkills,
+        installExtensions: overrides.installExtensions,
+        signal: overrides.signal,
+      });
+    } catch (caught) {
+      if (!overrides.captureError) throw caught;
+      error = caught;
+    }
 
-    return { commands, logs, questions, projectDir } as GateRun & { projectDir: string };
+    return { commands, logs, questions, projectDir, outputDir, error };
   }
 
   it("does not prompt for a purely local source", async () => {
@@ -3293,6 +3755,44 @@ describe("remote trust gate", () => {
     expect(run.logs.some((line) => line.includes("not a guarantee"))).toBe(true);
     expect(run.logs.some((line) => line.includes("No commands to run, and no hooks"))).toBe(false);
     expect(existsSync(join(run.projectDir, ".codex"))).toBe(false);
+  });
+
+  // "Declining installs nothing" has to be true of the source tree too: the build writes the
+  // remote-authored merged tree into `<source>/generated/` before anything reaches a destination,
+  // so a user who declines and then opens their repository must not find remote-authored files
+  // there. The preview regenerates in memory, so it does not need the build's output.
+  it("declining leaves no remote-authored build output in the source tree", async () => {
+    const run = await runWithRemote({ remoteSources: ["https://github.com/o/r"], answer: false });
+
+    // The prebuilt tree the fixture planted, byte for byte: a build would have rewritten it.
+    expect(readdirSync(join(run.outputDir, "codex"))).toEqual(["AGENTS.md"]);
+    expect(read(join(run.outputDir, "codex", "AGENTS.md"))).toBe("Codex instructions.\n");
+  });
+
+  it("does not put the trust question to a user who has already interrupted", async () => {
+    const run = await runWithRemote({
+      remoteSources: ["https://github.com/o/r"],
+      answer: true,
+      signal: AbortSignal.abort(),
+      captureError: true,
+    });
+
+    expect(run.questions).toEqual([]);
+    expect(run.error instanceof Error ? run.error.message : String(run.error)).toBe("Install stopped by user.");
+  });
+
+  // The disclosure is the entire point of the -y change: a CI log that says the plan was empty and
+  // that the files installed anyway. Returning early on -y dropped exactly that line.
+  it("-y still discloses that nothing was recognised as executable", async () => {
+    const run = await runWithRemote({
+      remoteSources: ["https://github.com/o/r"],
+      nonInteractive: true,
+      noCommands: true,
+    });
+
+    expect(run.questions).toEqual([]);
+    expect(run.logs.some((line) => line.includes("Nothing here was recognised as executable"))).toBe(true);
+    expect(run.logs).toContain("  Its files will still be installed for: codex.");
   });
 
   it("accepting runs the commands", async () => {
