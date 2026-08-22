@@ -1,17 +1,27 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { stdin } from "node:process";
 
 import { analyzePresets, runBuild, type Logger } from "./build.js";
 import { ULIS_GENERATED_DIRNAME, ULIS_PROVENANCE_FILENAME } from "./config.js";
 import { generate, writeResult } from "./generators/index.js";
+import { loadDotEnv } from "./install/dotenv.js";
 import { InstallError } from "./install/errors.js";
+import { logHeader, logInfo, logSuccess, logWarn } from "./install/log.js";
 import { preflightOwnership, reconcileOwnership } from "./install/manifest.js";
 import { installClaude, installCodex, installCursor, installForgecode, installOpencode } from "./install/platforms.js";
 import { formatCommandPreview, previewInstalledExecution, type PreviewInputs } from "./install/preview.js";
-import type { InstallContext, Runner as InstallRunner } from "./install/types.js";
+import { runtimeDependencies } from "./install/runtime.js";
+import type {
+  AsyncCommandResult,
+  GeneratedInstallOptions,
+  InstallContext,
+  InstallOptions,
+  PresetInstallOptions,
+  Runner as InstallRunner,
+  SkillInstallLog,
+} from "./install/types.js";
 import { loadExtensions, mergeExtensionsConfigs } from "./parsers/extensions.js";
 import { loadSkills, mergeSkillsConfigs } from "./parsers/skills.js";
 import { isSamePath, PLATFORMS, uniquePlatforms, type Platform } from "./platforms.js";
@@ -20,239 +30,11 @@ import { assertShellSafeArgv, commandExists as commandExistsOnPath } from "./uti
 import { loadValidatedConfigFile, type ConfigDiagnosticOptions } from "./utils/config-loader.js";
 import { yieldToEventLoop } from "./utils/interrupt.js";
 import { logger as defaultLogger } from "./utils/logger.js";
-import { confirm } from "./utils/prompt.js";
 import { legacyRootRecordPath, readRecordedRemoteSources } from "./utils/provenance.js";
 import { sanitizeLogText } from "./utils/redact.js";
 import type { ResolvedPreset } from "./utils/resolve-presets.js";
 
 export type { Runner } from "./install/types.js";
-
-export interface InstallOptions {
-  readonly platforms?: readonly Platform[];
-  /**
-   * ulis source tree (e.g. `./.ulis/` or `~/.ulis/`).
-   */
-  readonly sourceDir: string;
-  /**
-   * What to show as the source in logs. Defaults to `sourceDir`; a remote source passes its URL so
-   * the log names the repository rather than the throwaway temp directory.
-   */
-  readonly sourceLabel?: string;
-  /** Redacted URLs of remote sources in this run; a non-empty list arms the trust gate. */
-  readonly remoteSources?: readonly string[];
-  /**
-   * True when `sourceDir` is a tree this run cloned rather than one the user wrote. Set from the
-   * resolver's own `mode` (identity), not from what the path looks like (naming) - every caller
-   * passes it explicitly.
-   */
-  readonly sourceIsRemote?: boolean;
-  /** `-y`: run a remote source's commands without prompting. */
-  readonly nonInteractive?: boolean;
-  /**
-   * The exact command list a caller already showed the user and got consent for. Checked against
-   * what this run actually plans; a mismatch aborts. Used by the TUI, whose review screen is the
-   * consent boundary. Omit for a plain CLI run, which prompts instead.
-   */
-  readonly approvedCommands?: readonly string[];
-  /**
-   * Where the per-platform configs land — typically `~` for global, CWD for project.
-   */
-  readonly destBase: string;
-  /**
-   * Where the intermediate build output lives. Defaults to `<sourceDir>/generated/`.
-   */
-  readonly outputDir?: string;
-  /** Install skills globally (`npx skills ... -g`) instead of project-local. */
-  readonly globalInstall?: boolean;
-  readonly backup?: boolean;
-  /** Remove agents and local skills previously installed by ULIS but no longer generated. */
-  readonly prune?: boolean;
-  readonly rebuild?: boolean;
-  readonly logger?: Logger;
-  readonly userHome?: string;
-  /** Resolved presets to merge at build time and for external skill installs. */
-  readonly presets?: readonly ResolvedPreset[];
-  /** Override the package runner used for `extensions.yaml` entries. */
-  readonly runner?: InstallRunner;
-  /** When false, skip running extensions installers (`extensions.yaml`). */
-  readonly installExtensions?: boolean;
-  /** When false, skip installing external skills (`skills.yaml`). */
-  readonly installSkills?: boolean;
-  readonly signal?: AbortSignal;
-}
-
-export interface PresetInstallOptions {
-  readonly platforms?: readonly Platform[];
-  /** Presets to install as the complete source. Applied in order; later presets win conflicts. */
-  readonly presets: readonly ResolvedPreset[];
-  /** Where the per-platform configs land — typically `~` for global, CWD for project. */
-  readonly destBase: string;
-  /** Install skills globally (`npx skills ... -g`) instead of project-local. */
-  readonly globalInstall?: boolean;
-  readonly backup?: boolean;
-  /** Remove agents and local skills previously installed by ULIS but no longer generated. */
-  readonly prune?: boolean;
-  readonly logger?: Logger;
-  readonly userHome?: string;
-  /** Override the package runner used for `extensions.yaml` entries. */
-  readonly runner?: InstallRunner;
-  /** When false, skip running extensions installers (`extensions.yaml`). */
-  readonly installExtensions?: boolean;
-  /** When false, skip installing external skills (`skills.yaml`). */
-  readonly installSkills?: boolean;
-  /** Redacted URLs of remote presets in this run; a non-empty list arms the trust gate. */
-  readonly remoteSources?: readonly string[];
-  /** `-y`: run a remote preset's commands without prompting. */
-  readonly nonInteractive?: boolean;
-  /**
-   * The exact command list a caller already showed the user and got consent for. Checked against
-   * what this run actually plans; a mismatch aborts. Used by the TUI, whose review screen is the
-   * consent boundary. Omit for a plain CLI run, which prompts instead.
-   */
-  readonly approvedCommands?: readonly string[];
-  readonly signal?: AbortSignal;
-}
-
-type RunCommand = (
-  command: string,
-  args: readonly string[],
-  options: Parameters<typeof spawnSync>[2],
-) => ReturnType<typeof spawnSync>;
-
-export interface AsyncCommandResult {
-  readonly status: number | null;
-  readonly stdout: string;
-  readonly stderr: string;
-  readonly error?: Error;
-}
-
-type SkillInstallLog =
-  | { readonly level: "success"; readonly message: string }
-  | { readonly level: "warn"; readonly message: string; readonly name: string };
-
-type RunAsyncCommand = (
-  command: string,
-  args: readonly string[],
-  options: Parameters<typeof spawn>[2],
-) => Promise<AsyncCommandResult>;
-
-interface RuntimeDependencies {
-  readonly runCommand: RunCommand;
-  readonly runAsyncCommand: RunAsyncCommand;
-  /** Seam for the trust gate, so tests can answer it without a terminal. */
-  readonly confirm: (question: string) => Promise<boolean>;
-}
-
-interface GeneratedInstallOptions {
-  readonly outputDir: string;
-  readonly destBase: string;
-  readonly userHome: string;
-  readonly globalInstall: boolean;
-  readonly backup: boolean;
-  readonly prune: boolean;
-  readonly platforms: readonly Platform[];
-  readonly skillsConfig: SkillsConfig;
-  readonly extensionsConfig: ExtensionsConfig;
-  readonly runner: InstallRunner;
-  readonly installExtensionsEnabled: boolean;
-  readonly installSkillsEnabled: boolean;
-  readonly logger: Logger;
-  readonly signal?: AbortSignal;
-  /**
-   * What this run installs from, for the trust preview to generate and read back. Not the merged
-   * configs above: the preview has to see the same inputs the build sees, or it describes a
-   * different project than the one being installed.
-   */
-  readonly previewInputs: PreviewInputs;
-  /** Redacted URLs of the remote sources contributing to this run; empty for a purely local one. */
-  readonly remoteSources?: readonly string[];
-  readonly nonInteractive?: boolean;
-  readonly approvedCommands?: readonly string[];
-}
-
-const defaultRuntimeDependencies: RuntimeDependencies = {
-  runCommand(command, args, options) {
-    return spawnSync(command, [...args], options);
-  },
-  runAsyncCommand(command, args, options) {
-    return runAsyncCommand(resolveExecutable(command), args, options);
-  },
-  confirm(question) {
-    // The trust gate is a security boundary: a piped `y` must not answer it. Without a terminal the
-    // question cannot be put at all, and that is a failure rather than a decision - a cron job or a
-    // wrapper script that silently installed nothing and exited 0 would read as a successful run.
-    // An interactive "no" is the opposite: a choice, and it exits 0. This throw is what enforces
-    // that, so `requireTty` below would only ever re-check what is already known to be true here -
-    // dropped, so the actionable message above is the only thing a caller ever sees.
-    if (!stdin.isTTY) {
-      throw new InstallError(
-        "Remote source commands need confirmation, but stdin is not a terminal. " +
-          "Re-run in a terminal to review them, or pass -y to accept them up front.",
-      );
-    }
-    return confirm(question);
-  },
-};
-
-let runtimeDependencies: RuntimeDependencies = { ...defaultRuntimeDependencies };
-
-/**
- * Variables that steer how a child process finds, fetches and loads code. A remote `.env` is attacker-
- * controlled, so setting one of these would hijack the very `npx`/`bunx` command the user approved.
- * Local sources keep the old behaviour.
- *
- * `HOME`/`USERPROFILE` are here because they relocate where `npx`/`bunx` read `.npmrc` and
- * `.bunfig.toml` (as does `XDG_CONFIG_HOME` on Linux), and `script-shell=` in an `.npmrc` is a
- * code-execution primitive; `ComSpec` is the
- * shell Node launches for `spawn({ shell: true })` on Windows; `SSH_ASKPASS`/`SSH_AUTH_SOCK` are the
- * ssh-side hole next to the `GIT_*` ones.
- */
-const UNTRUSTED_ENV_DENYLIST =
-  /^(?:PATH|HOME|USERPROFILE|XDG_CONFIG_HOME|ComSpec|NODE_.*|npm_.*|BUN_.*|LD_.*|DYLD_.*|GIT_.*|SSH_.*|(?:HTTP|HTTPS|ALL|NO)_PROXY)$/iu;
-
-/**
- * Load environment variables from `<rootDir>/.env` without overriding existing values.
- * `untrusted` marks a remote source, whose `.env` may not set {@link UNTRUSTED_ENV_DENYLIST} keys.
- */
-export function loadDotEnv(
-  rootDir: string,
-  env: NodeJS.ProcessEnv = process.env,
-  options: { readonly untrusted?: boolean } = {},
-): void {
-  const envPath = join(rootDir, ".env");
-  if (!existsSync(envPath)) {
-    return;
-  }
-
-  let lines: readonly string[];
-  try {
-    lines = readFileSync(envPath, "utf8").split(/\r?\n/u);
-  } catch (error) {
-    throw new InstallError(`Failed to read .env file at ${envPath}`, error);
-  }
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
-      continue;
-    }
-
-    const separator = trimmed.indexOf("=");
-    if (separator === -1) {
-      continue;
-    }
-
-    const key = trimmed.slice(0, separator).trim();
-    const rawValue = trimmed.slice(separator + 1).trim();
-    if (!key || key in env || (options.untrusted && UNTRUSTED_ENV_DENYLIST.test(key))) {
-      continue;
-    }
-
-    const hasMatchingQuotes =
-      (rawValue.startsWith('"') && rawValue.endsWith('"')) || (rawValue.startsWith("'") && rawValue.endsWith("'"));
-    env[key] = hasMatchingQuotes ? rawValue.slice(1, -1) : rawValue;
-  }
-}
 
 export function resolveGlobalInstall(options: {
   readonly globalInstall?: boolean;
@@ -1084,7 +866,7 @@ function commandExists(command: string): boolean {
   return commandExistsOnPath(command, runCommand);
 }
 
-function resolveExecutable(command: string): string {
+export function resolveExecutable(command: string): string {
   if (process.platform === "win32" && (command === "npx" || command === "bunx")) {
     return `${command}.cmd`;
   }
@@ -1141,7 +923,7 @@ export async function runSkillCommand(
   }
 }
 
-function runAsyncCommand(
+export function runAsyncCommand(
   command: string,
   args: readonly string[],
   options: Parameters<typeof spawn>[2],
@@ -1170,34 +952,4 @@ function runAsyncCommand(
   });
 }
 
-// Every install log line is sanitized here rather than at its call site. Much of what these print
-// is remote-controlled — manifest entries, preset names, child process output — and a wrapper that
-// has to be remembered at each site is one forgotten call away from letting a hostile manifest
-// forge the trust preview. Sanitizing at the sink makes that unforgettable. `sanitizeLogText` is
-// idempotent, so text already sanitized upstream (a command preview, say) passes through unchanged.
-
-function logHeader(logger: Logger | undefined, message: string): void {
-  // Headers are literals from this file, never remote text.
-  logger?.header(message);
-}
-
-function logInfo(logger: Logger | undefined, message: string): void {
-  logger?.info(sanitizeLogText(message));
-}
-
-function logSuccess(logger: Logger | undefined, message: string): void {
-  logger?.success(sanitizeLogText(message));
-}
-
-function logWarn(logger: Logger | undefined, message: string): void {
-  logger?.warn(sanitizeLogText(message));
-}
-
-export const __test = {
-  setRuntimeDependencies(overrides: Partial<RuntimeDependencies>): void {
-    runtimeDependencies = { ...runtimeDependencies, ...overrides };
-  },
-  resetRuntimeDependencies(): void {
-    runtimeDependencies = { ...defaultRuntimeDependencies };
-  },
-};
+export { __test } from "./install/runtime.js";

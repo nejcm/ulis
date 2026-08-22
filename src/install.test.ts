@@ -16,7 +16,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { runBuild, type Logger } from "./build.js";
-import { __test, loadDotEnv, planRemoteCommands, resolveRunner, runInstall, runPresetInstall } from "./install.js";
+import { __test, planRemoteCommands, resolveRunner, runInstall, runPresetInstall } from "./install.js";
+import { loadDotEnv } from "./install/dotenv.js";
 import { InstallError } from "./install/errors.js";
 import { preflightOwnership } from "./install/manifest.js";
 import { detectInstallCollisions } from "./install/platforms.js";
