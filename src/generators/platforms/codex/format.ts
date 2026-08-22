@@ -1,4 +1,5 @@
 import { toTomlKey } from "../../shared/keys.js";
+import { quoteYamlString } from "../../shared/yaml.js";
 
 export const EFFORT_MAP: Record<string, string> = { low: "low", medium: "medium", high: "high", max: "max" };
 
@@ -16,11 +17,13 @@ export function toTomlMultilineString(value: string): string {
   return `"""\n${escaped}\\\n"""`;
 }
 
+/**
+ * Quote a string for the YAML files this platform emits. Delegates to the shared serializer's
+ * escaping so a value cannot carry a line break — including the separators a YAML 1.1 reader
+ * breaks on — into `agents/openai.yaml`.
+ */
 export function toYamlString(value: string): string {
-  return JSON.stringify(value).replace(
-    /[\u007f-\u009f]/gu,
-    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
-  );
+  return quoteYamlString(value);
 }
 
 export function emitTomlExtra(lines: string[], extra: Record<string, unknown>): void {

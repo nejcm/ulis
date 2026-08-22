@@ -3,7 +3,7 @@
  * Used by: claude, cursor, forgecode, opencode.
  */
 
-import { toYamlKey, yamlScalarResolvesNonString } from "./keys.js";
+import { escapeYamlChars, toYamlKey, yamlScalarResolvesNonString } from "./keys.js";
 
 /**
  * Returns `value` as a YAML scalar, quoting it when the bare form would be
@@ -12,7 +12,7 @@ import { toYamlKey, yamlScalarResolvesNonString } from "./keys.js";
 export function toYamlScalar(value: string): string {
   const needsQuotes =
     value.length === 0 ||
-    /[\u0000-\u001f\u007f-\u009f\ud800-\udfff#{}[\],&*!|>'"%@`\\]/u.test(value) ||
+    /[\u0000-\u001f\u007f-\u009f\u2028\u2029\ud800-\udfff#{}[\],&*!|>'"%@`\\]/u.test(value) ||
     /^[-?:]/u.test(value) ||
     /:(?:\s|$)/u.test(value) ||
     yamlScalarResolvesNonString(value) ||
@@ -20,41 +20,66 @@ export function toYamlScalar(value: string): string {
   return needsQuotes ? quoteYamlString(value) : value;
 }
 
-function quoteYamlString(value: string): string {
-  return JSON.stringify(value).replace(
-    /[\u007f-\u009f]/gu,
-    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
-  );
+/**
+ * Render `value` as a double-quoted YAML string. Exported so the Codex YAML writer shares this
+ * one escaping path rather than keeping its own copy of the character class.
+ */
+export function quoteYamlString(value: string): string {
+  return escapeYamlChars(JSON.stringify(value));
 }
 
 /**
- * Serialize extra (unknown) platform fields as YAML lines.
- * Handles strings, numbers, booleans, and flat arrays. Skips null/undefined/objects.
+ * Serialize a key→value record as YAML lines, without any document delimiter.
+ * Every value goes through the same escaping path, so an unrecognised pass-through
+ * field cannot forge a sibling key no matter how deeply it nests.
  */
-export function extraToYamlLines(extra: Record<string, unknown>): string[] {
+export function serializeYamlLines(data: Record<string, unknown>): string[] {
   const lines: string[] = [];
-  for (const [key, value] of Object.entries(extra)) {
-    if (value === undefined || value === null) continue;
-    if (typeof value === "string") {
-      lines.push(`${toYamlKey(key)}: ${toYamlScalar(value)}`);
-    } else if (typeof value === "number" || typeof value === "boolean") {
-      lines.push(`${toYamlKey(key)}: ${value}`);
-    } else if (Array.isArray(value)) {
-      lines.push(`${toYamlKey(key)}:`);
-      for (const item of value) {
-        lines.push(`  - ${typeof item === "string" ? toYamlScalar(item) : String(item)}`);
-      }
-    }
-  }
+  appendObject(lines, data, 0, new WeakSet([data]));
   return lines;
 }
 
-/** Serialize a key→value record as a YAML frontmatter block. */
-export function serializeYamlFrontmatter(data: Record<string, unknown>): string {
-  const lines = ["---"];
-  appendObject(lines, data, 0, new WeakSet([data]));
-  lines.push("---");
-  return lines.join("\n");
+/**
+ * Render `note` as a YAML comment. A comment runs to the end of the line, so a note carrying a
+ * line break would emit a live YAML line; escaping every control character — and the separators a
+ * YAML 1.1 reader also breaks on — keeps it on one line however the source spelled the key it names.
+ */
+export function toYamlComment(note: string): string {
+  return `# ${escapeYamlChars(JSON.stringify(note).slice(1, -1))}`;
+}
+
+/**
+ * Split source-controlled pass-through fields against the keys a generator owns.
+ *
+ * A colliding extra is dropped rather than merged: the generated value is what the security
+ * policy and tool mapping asked for, so letting the source side win would let a source switch
+ * off its own restrictions, and emitting both would leave a duplicate key that a last-one-wins
+ * consumer resolves in the source's favour. The returned notes make the drop visible in the
+ * generated file instead of silent.
+ */
+export function partitionReservedExtras(
+  extra: Record<string, unknown>,
+  reserved: Iterable<string>,
+): { extras: Record<string, unknown>; notes: string[] } {
+  const reservedKeys = new Set(reserved);
+  const extras: Record<string, unknown> = {};
+  const notes: string[] = [];
+  for (const [key, value] of Object.entries(extra)) {
+    if (value === undefined) continue;
+    if (reservedKeys.has(key)) {
+      // Single quotes keep the key readable in the rendered comment; JSON escaping would double
+      // up on double quotes, and the key itself is source-controlled text.
+      notes.push(`ULIS dropped the platform field '${key}' because it collides with a generated field.`);
+      continue;
+    }
+    extras[key] = value;
+  }
+  return { extras, notes };
+}
+
+/** Serialize a key→value record as a YAML frontmatter block, prefixed by any comment notes. */
+export function serializeYamlFrontmatter(data: Record<string, unknown>, notes: readonly string[] = []): string {
+  return ["---", ...notes.map(toYamlComment), ...serializeYamlLines(data), "---"].join("\n");
 }
 
 function appendObject(
@@ -107,7 +132,13 @@ function appendValue(
 function appendArrayItem(lines: string[], value: unknown, indent: number, ancestors: WeakSet<object>): void {
   const prefix = `${" ".repeat(indent)}-`;
   if (value === undefined) return void lines.push(`${prefix} null`);
+  const start = lines.length;
   appendValue(lines, prefix, value, indent, ancestors);
+  // A nested block leaves the dash alone on its line. Fold the first child line up onto it so
+  // items read as `- key: value`; the child was indented by two, which the dash now occupies.
+  if (lines[start] === prefix && lines.length > start + 1) {
+    lines.splice(start, 2, `${prefix} ${lines[start + 1]!.slice(indent + 2)}`);
+  }
 }
 
 function scalar(value: unknown): string {

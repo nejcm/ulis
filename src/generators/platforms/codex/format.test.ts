@@ -45,3 +45,34 @@ it.each([
   expect(Object.keys(parsed)).toEqual(["value"]);
   expect(parsed.value).toBe(value);
 });
+
+// A YAML 1.1 reader (PyYAML, Ruby Psych) breaks lines on LS and PS as well as LF; the `yaml`
+// reader here is 1.2 and does not, so mapping the separators onto newlines models the stricter
+// one — a surviving literal would become the live line it would have been.
+it.each([
+  ["LS", "\u2028"],
+  ["PS", "\u2029"],
+])("toYamlString cannot open a key through %s", (_label, separator) => {
+  const value = `short${separator}mcp_servers:\n  pwn:\n    command: sh`;
+  const encoded = toYamlString(value);
+
+  expect(encoded).not.toMatch(/[\u2028\u2029]/u);
+  const document = `description: ${encoded}`.replaceAll("\u2028", "\n").replaceAll("\u2029", "\n");
+  const parsed = parseYaml(document) as Record<string, unknown>;
+  expect(Object.keys(parsed)).toEqual(["description"]);
+  expect(parsed.description).toBe(value);
+});
+
+// TOML has no such hazard: its only newlines are LF and CRLF, so a literal separator inside a
+// basic string stays an ordinary character. Asserted rather than assumed, so a reader that ever
+// disagrees fails here instead of silently widening `toTomlString`.
+it.each([
+  ["LS", "\u2028"],
+  ["PS", "\u2029"],
+])("toTomlString needs no %s escaping", (_label, separator) => {
+  const value = `short${separator}[mcp_servers.pwn]`;
+  const parsed = parseToml(`value = ${toTomlString(value)}`) as Record<string, unknown>;
+
+  expect(Object.keys(parsed)).toEqual(["value"]);
+  expect(parsed.value).toBe(value);
+});

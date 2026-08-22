@@ -41,8 +41,26 @@ export function toTomlTableHeader(...segments: readonly string[]): string {
 export function toYamlKey(key: string): string {
   return BARE_KEY.test(key) && !/^-+$/u.test(key) && !yamlScalarResolvesNonString(key)
     ? key
-    : JSON.stringify(key).replace(
-        /[\u007f-\u009f]/gu,
-        (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
-      );
+    : escapeYamlChars(JSON.stringify(key));
+}
+
+/**
+ * Characters every YAML quoting path escapes because `JSON.stringify` leaves them literal: the C1
+ * block, plus LS and PS. A YAML 1.1 reader (PyYAML, Ruby Psych) treats LS/PS as line breaks, so a
+ * literal one ends a comment or folds a quoted scalar or key and opens a live sibling — the readers
+ * ULIS targets are 1.2 and do not, but the emitted file is not ours to assume a reader for. TOML
+ * has no such hazard: its only line terminators are LF and CRLF.
+ *
+ * This lives here rather than in `yaml.ts` because `yaml.ts` already depends on this module; keys
+ * and values must escape identically, and a second copy of the class is how they drift apart.
+ * `src/utils/redact.ts` classifies the same two codepoints over a wider display-safety set.
+ */
+const YAML_ESCAPED_CHARS = /[\u007f-\u009f\u2028\u2029]/gu;
+
+/** Escape, in already-quoted YAML text, everything `JSON.stringify` left literal. */
+export function escapeYamlChars(value: string): string {
+  return value.replace(
+    YAML_ESCAPED_CHARS,
+    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
 }
