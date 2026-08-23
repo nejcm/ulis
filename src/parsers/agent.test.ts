@@ -1,8 +1,10 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { join, resolve } from "node:path";
 
-import { createTempRoot, writeTextFile } from "../test-utils/fs.js";
+import { cleanupTempRoots, createTempRoot, writeTextFile } from "../test-utils/fs.js";
 import { parseAgents } from "./agent.js";
+
+afterEach(cleanupTempRoots);
 
 const fixturesDir = resolve(join(import.meta.dirname, "../../tests/fixtures/agents"));
 
@@ -13,7 +15,7 @@ describe("parseAgents", () => {
 
     const [worker] = agents;
     expect(worker.name).toBe("worker");
-    expect(worker.frontmatter.description).toBe("A minimal test agent");
+    expect(worker.frontmatter.description).toBe("A minimal test agent, focus: safe changes");
     expect(worker.frontmatter.model).toBe("claude-haiku-4-5-20251001");
     const tools = worker.frontmatter.tools;
     if (typeof tools === "string") throw new Error("expected tools object");

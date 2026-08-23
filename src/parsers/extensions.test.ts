@@ -1,8 +1,10 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { join } from "node:path";
 
-import { createTempRoot, writeTextFile } from "../test-utils/fs.js";
+import { cleanupTempRoots, createTempRoot, writeTextFile } from "../test-utils/fs.js";
 import { loadExtensions, mergeExtensionsConfigs } from "./extensions.js";
+
+afterEach(cleanupTempRoots);
 
 describe("loadExtensions", () => {
   it("returns empty config when extensions.yaml is empty", () => {
@@ -54,7 +56,7 @@ describe("loadExtensions", () => {
 });
 
 describe("mergeExtensionsConfigs", () => {
-  it("concatenates platform extensions in input order", () => {
+  it("merges distinct platform extensions in input order", () => {
     expect(
       mergeExtensionsConfigs([
         {
@@ -69,6 +71,93 @@ describe("mergeExtensionsConfigs", () => {
     ).toEqual({
       "*": { extensions: [{ name: "preset/all" }, { name: "base/all" }] },
       codex: { extensions: [{ name: "preset/codex" }, { name: "base/codex" }] },
+    });
+  });
+
+  it("lets a base entry override a preset entry of the same name (base-wins, not additive)", () => {
+    const merged = mergeExtensionsConfigs([
+      { codex: { extensions: [{ name: "shared-ext", args: ["--preset-arg"] }] } },
+      { codex: { extensions: [{ name: "shared-ext", args: ["--base-arg"] }] } },
+    ]);
+
+    expect(merged.codex?.extensions).toEqual([{ name: "shared-ext", args: ["--base-arg"] }]);
+  });
+
+  it("keeps a preset entry that survives when the base declares a different name", () => {
+    const merged = mergeExtensionsConfigs([
+      { codex: { extensions: [{ name: "preset-only" }] } },
+      { codex: { extensions: [{ name: "base-only" }] } },
+    ]);
+
+    expect(merged.codex?.extensions).toEqual([{ name: "preset-only" }, { name: "base-only" }]);
+  });
+
+  it("lets key distinguish two entries that share a name", () => {
+    const merged = mergeExtensionsConfigs([
+      {
+        codex: {
+          extensions: [
+            { name: "pkg-ext", key: "pkg-ext/a", args: ["--flavor a"] },
+            { name: "pkg-ext", key: "pkg-ext/b", args: ["--flavor b"] },
+          ],
+        },
+      },
+    ]);
+
+    expect(merged.codex?.extensions).toEqual([
+      { name: "pkg-ext", key: "pkg-ext/a", args: ["--flavor a"] },
+      { name: "pkg-ext", key: "pkg-ext/b", args: ["--flavor b"] },
+    ]);
+  });
+
+  it("deduplicates repeated entries within a single layer, last occurrence winning, first position kept", () => {
+    const merged = mergeExtensionsConfigs([
+      {
+        codex: {
+          extensions: [
+            { name: "dup-ext", args: ["--first"] },
+            { name: "other-ext" },
+            { name: "dup-ext", args: ["--second"] },
+          ],
+        },
+      },
+    ]);
+
+    expect(merged.codex?.extensions).toEqual([{ name: "dup-ext", args: ["--second"] }, { name: "other-ext" }]);
+  });
+
+  it("three layers: a middle preset's entry wins when the top layer doesn't declare it", () => {
+    const merged = mergeExtensionsConfigs([
+      { codex: { extensions: [{ name: "shared-ext", args: ["--a"] }] } },
+      { codex: { extensions: [{ name: "shared-ext", args: ["--b"] }] } },
+      { codex: { extensions: [{ name: "other-ext" }] } },
+    ]);
+
+    expect(merged.codex?.extensions).toEqual([{ name: "shared-ext", args: ["--b"] }, { name: "other-ext" }]);
+  });
+
+  it("preserves first-occurrence position across layers even when overridden later", () => {
+    const merged = mergeExtensionsConfigs([
+      { codex: { extensions: [{ name: "first-ext" }, { name: "shared-ext", args: ["--preset"] }] } },
+      { codex: { extensions: [{ name: "shared-ext", args: ["--base"] }, { name: "last-ext" }] } },
+    ]);
+
+    expect(merged.codex?.extensions).toEqual([
+      { name: "first-ext" },
+      { name: "shared-ext", args: ["--base"] },
+      { name: "last-ext" },
+    ]);
+  });
+
+  it("merges the '*' platform key independently of a named platform key", () => {
+    const merged = mergeExtensionsConfigs([
+      { "*": { extensions: [{ name: "wildcard-ext" }] }, codex: { extensions: [{ name: "codex-only" }] } },
+      { codex: { extensions: [{ name: "codex-only", args: ["--override"] }] } },
+    ]);
+
+    expect(merged).toEqual({
+      "*": { extensions: [{ name: "wildcard-ext" }] },
+      codex: { extensions: [{ name: "codex-only", args: ["--override"] }] },
     });
   });
 

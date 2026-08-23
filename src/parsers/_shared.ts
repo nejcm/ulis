@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import matter from "gray-matter";
-import type { ZodSchema } from "zod";
+import { ZodError, type ZodSchema } from "zod";
 
 import { deriveDiagnosticOrigin, formatCause, suggestFix } from "../diagnostics.js";
 import type { Diagnostic, DiagnosticOrigin } from "../types.js";
@@ -84,6 +84,11 @@ export class ParseAggregateError extends Error {
  * ParseErrors so callers can choose to fail-fast or collect-all.
  *
  * Missing directory → { items: [], errors: [] } (uniform across all parsers).
+ *
+ * Entries are sorted byte-wise (default `Array.sort`, not `localeCompare`) because parse order
+ * becomes output order — rule index bullets, agent-map key order — and `readdirSync` returns raw
+ * dirent order under Bun. That order varies by filesystem and by checkout, which would break the
+ * byte-identical-output invariant.
  */
 export function readMarkdownDir<TFrontmatter, TItem>(
   dir: string,
@@ -98,9 +103,12 @@ export function readMarkdownDir<TFrontmatter, TItem>(
   if (opts?.recursive) {
     files = (readdirSync(dir, { recursive: true }) as string[])
       .map((f) => f.replace(/\\/g, "/"))
-      .filter((f) => f.endsWith(".md") && basename(f).toLowerCase() !== "readme.md");
+      .filter((f) => f.endsWith(".md") && basename(f).toLowerCase() !== "readme.md")
+      .sort();
   } else {
-    files = readdirSync(dir).filter((f) => f.endsWith(".md") && f.toLowerCase() !== "readme.md");
+    files = readdirSync(dir)
+      .filter((f) => f.endsWith(".md") && f.toLowerCase() !== "readme.md")
+      .sort();
   }
 
   const items: TItem[] = [];
@@ -112,7 +120,7 @@ export function readMarkdownDir<TFrontmatter, TItem>(
     let raw: string | undefined;
     try {
       raw = readFile(absoluteFile);
-      const { data, content } = matter(raw);
+      const { data, content } = parseMarkdownFrontmatter(raw);
       const frontmatter = schema.parse(data);
       const name = opts?.recursive ? relFile.replace(/\.md$/, "") : basename(relFile, ".md");
       const origin: DiagnosticOrigin = {
@@ -138,6 +146,39 @@ export function readMarkdownDir<TFrontmatter, TItem>(
   }
 
   return { items, errors };
+}
+
+export function parseMarkdownFrontmatter(raw: string) {
+  const parsed = matter(raw);
+  assertSafeYamlFrontmatter(parsed.data);
+  return parsed;
+}
+
+function assertSafeYamlFrontmatter(
+  value: unknown,
+  path: PropertyKey[] = [],
+  ancestors: WeakSet<object> = new WeakSet(),
+  depth = 0,
+): void {
+  if (depth > 100) {
+    throw new ZodError([{ code: "custom", path, message: "YAML frontmatter cannot exceed 100 levels." }]);
+  }
+  if (value === null || typeof value !== "object" || value instanceof Date) return;
+  const prototype = Object.getPrototypeOf(value);
+  if (!Array.isArray(value) && prototype !== null && prototype !== Object.prototype) {
+    throw new ZodError([{ code: "custom", path, message: "Non-plain YAML values are not supported." }]);
+  }
+  if (ancestors.has(value)) {
+    throw new ZodError([{ code: "custom", path, message: "Cyclic YAML aliases are not supported." }]);
+  }
+  ancestors.add(value);
+  try {
+    for (const [key, child] of Object.entries(value)) {
+      assertSafeYamlFrontmatter(child, [...path, key], ancestors, depth + 1);
+    }
+  } finally {
+    ancestors.delete(value);
+  }
 }
 
 function frontmatterContent(raw: string): string | undefined {

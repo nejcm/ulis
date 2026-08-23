@@ -2,6 +2,10 @@ name: CI
 
 on:
   pull_request:
+  push:
+    branches:
+      - develop
+      - master
 
 permissions:
   contents: read
@@ -13,12 +17,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: 1.3.13
+          bun-version: 1.4.0
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -26,5 +30,23 @@ jobs:
       - name: Lint
         run: bun run lint
 
+      - name: Check formatting
+        run: bun run format:check
+
+      # Build before the test step: src/tui/launcher.test.ts asserts that
+      # dist/cli.js never pulls in OpenTUI, and it fails when the bundle is
+      # missing under CI.
+      - name: Build
+        run: bun run build
+
+      - name: Node CLI smoke test
+        run: node dist/cli.js build --source example
+
       - name: Test
         run: bun run test
+
+      - name: Verify tui.svg is up to date
+        run: |
+          bun run gen:screenshot
+          git diff --stat -- tui.svg
+          test -z "$(git status --porcelain -- tui.svg)"

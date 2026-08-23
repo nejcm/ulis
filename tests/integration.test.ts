@@ -11,7 +11,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
+import matter from "gray-matter";
 import { parse as parseToml } from "smol-toml";
+import { parse as parseYaml } from "yaml";
 
 import { generate } from "../src/generators/index.js";
 import type { FileArtifact, ProjectBundle } from "../src/generators/types.js";
@@ -21,7 +23,7 @@ import { loadMcp } from "../src/parsers/mcp.js";
 import { loadPermissions } from "../src/parsers/permissions.js";
 import { parseRules } from "../src/parsers/rule.js";
 import { parseSkills } from "../src/parsers/skill.js";
-import type { Platform } from "../src/platforms.js";
+import { PLATFORMS, type Platform } from "../src/platforms.js";
 import { UlisConfigSchema } from "../src/schema.js";
 import { validateCollisions } from "../src/validators/collisions.js";
 import { validateCrossRefs } from "../src/validators/cross-refs.js";
@@ -68,6 +70,39 @@ function write(path: string, content: string): void {
   writeFileSync(path, content, "utf8");
 }
 
+/**
+ * Writes one identical fixture tree, creating entries in the given order so that the on-disk dirent
+ * order differs between calls with different orders. Byte content is identical either way.
+ */
+function materializeOrderingFixture(names: readonly string[]): ProjectBundle {
+  const sourceDir = createTempSource();
+  write(join(sourceDir, "config.yaml"), "version: 1\nname: ordering\n");
+  for (const name of names) {
+    write(
+      join(sourceDir, "rules", `${name}.md`),
+      `---\ndescription: Rule ${name}\npaths:\n  - src/${name}/**\n---\n\nRule ${name} body.\n`,
+    );
+    write(
+      join(sourceDir, "agents", `${name}.md`),
+      `---\ndescription: Agent ${name}\nmodel: claude-haiku-4-5-20251001\ntools:\n  read: true\n---\n\nAgent ${name} body.\n`,
+    );
+    write(
+      join(sourceDir, "skills", name, "SKILL.md"),
+      `---\nname: ${name}\ndescription: Skill ${name}\n---\n\nSkill ${name} body.\n`,
+    );
+  }
+
+  return {
+    agents: parseAgents(join(sourceDir, "agents")),
+    skills: parseSkills(join(sourceDir, "skills")),
+    rules: parseRules(join(sourceDir, "rules")),
+    mcp: loadMcp(sourceDir),
+    permissions: loadPermissions(sourceDir),
+    ulisConfig: UlisConfigSchema.parse({ version: 1, name: "ordering" }),
+    sourceDir,
+  };
+}
+
 afterEach(() => {
   for (const root of tmpRoots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
@@ -93,11 +128,11 @@ function assertSafeRelativeArtifactPath(path: string): void {
   expect(normalized.split("/")).not.toContain("");
 }
 
-function assertMarkdownFrontmatter(content: string): void {
-  if (!content.startsWith("---\n")) return;
-  const end = content.indexOf("\n---\n", 4);
-  expect(end).toBeGreaterThan(0);
-  expect(content.slice(end + "\n---\n".length).length).toBeGreaterThan(0);
+function assertMarkdownFrontmatter(content: string, expectedKeys: readonly string[]): void {
+  const parsed = matter(content);
+  expect(content.startsWith("---\n")).toBe(expectedKeys.length > 0);
+  expect(Object.keys(parsed.data).sort()).toEqual([...expectedKeys].sort());
+  expect(parsed.content.trim().length).toBeGreaterThan(0);
 }
 
 // ─── Claude ──────────────────────────────────────────────────────────────────
@@ -108,7 +143,7 @@ describe("Claude generator", () => {
   it("generates agent .md with correct frontmatter", () => {
     const c = get(m, "agents/worker.md");
     expect(c).toContain("name: worker");
-    expect(c).toContain("description: A minimal test agent");
+    expect(c).toContain('description: "A minimal test agent, focus: safe changes"');
     expect(c).toContain("model: claude-haiku-4-5-20251001");
   });
 
@@ -384,7 +419,7 @@ describe("Cursor generator", () => {
 
   it("generates agent .mdc with model", () => {
     const mdc = get(m, "agents/worker.mdc");
-    expect(mdc).toContain("description: A minimal test agent");
+    expect(mdc).toContain('description: "A minimal test agent, focus: safe changes"');
     expect(mdc).toContain("model:");
   });
 
@@ -450,7 +485,7 @@ describe("ForgeCode generator", () => {
   it("generates agent markdown with Forge frontmatter", () => {
     const c = get(m, ".forge/agents/worker.md");
     expect(c).toContain("id: worker");
-    expect(c).toContain("description: A minimal test agent");
+    expect(c).toContain('description: "A minimal test agent, focus: safe changes"');
     expect(c).toContain("tools:");
   });
 
@@ -503,6 +538,21 @@ Review security-sensitive changes.
   });
 
   it("emits structurally valid and safe relative artifacts", () => {
+    const expectedFrontmatterKeys: Record<string, readonly string[]> = {
+      "claude:agents/worker.md": [
+        "name",
+        "description",
+        "model",
+        "tools",
+        "disallowedTools",
+        "permissionMode",
+        "hooks",
+      ],
+      "codex:skills/my-skill/SKILL.md": ["name", "description", "custom_agent_hint"],
+      "cursor:agents/worker.mdc": ["description", "model", "readonly", "tools"],
+      "forgecode:.forge/agents/worker.md": ["id", "title", "description", "model", "tools"],
+    };
+
     for (const platform of ["claude", "codex", "cursor", "opencode", "forgecode"] as const) {
       const result = generate(platform, buildProject());
       expect(result).toBeDefined();
@@ -517,8 +567,11 @@ Review security-sensitive changes.
         if (path.endsWith(".toml")) {
           expect(() => parseToml(contents)).not.toThrow();
         }
+        if (path.endsWith(".yaml") || path.endsWith(".yml")) {
+          expect(() => parseYaml(contents)).not.toThrow();
+        }
         if (path.endsWith(".md") || path.endsWith(".mdc")) {
-          assertMarkdownFrontmatter(contents);
+          assertMarkdownFrontmatter(contents, expectedFrontmatterKeys[`${platform}:${path}`] ?? []);
         }
       }
     }
@@ -533,10 +586,21 @@ Review security-sensitive changes.
     }
   });
 
-  it("is pure: two runs produce byte-identical artifacts", () => {
-    const a = run("claude");
-    const b = run("claude");
-    expect([...a.entries()].sort()).toEqual([...b.entries()].sort());
+  it("is order-independent: two source copies written in opposite order produce byte-identical artifacts", () => {
+    // Traversal order — not just function purity — is what the "byte-identical output" invariant is
+    // exposed to: `readdirSync` under Bun returns raw dirent order (creation order on tmpfs,
+    // name-hash order on ext4/btrfs), and parse order becomes rule-index and agent-map key order.
+    // So build two copies of the same fixture whose entries were created in opposite order, and do
+    // NOT sort the entry lists here — sorting would normalize away the thing under test.
+    const names = ["alpha", "bravo", "delta", "mike", "zeta"];
+    const forward = materializeOrderingFixture(names);
+    const reversed = materializeOrderingFixture([...names].reverse());
+
+    for (const platform of PLATFORMS) {
+      const a = [...runProject(platform, forward).entries()];
+      const b = [...runProject(platform, reversed).entries()];
+      expect(a).toEqual(b);
+    }
   });
 
   it("returns FileArtifact[] for every registered platform", () => {

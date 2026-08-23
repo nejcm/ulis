@@ -11,6 +11,8 @@ function project(overrides: Partial<ParsedProject> = {}): ParsedProject {
     rules: [],
     mcp: { servers: {} },
     permissions: undefined,
+    skillsConfig: {},
+    extensionsConfig: {},
     ulisConfig: { version: 1, name },
     sourceDir: `/tmp/${name}`,
     ...overrides,
@@ -62,5 +64,109 @@ describe("mergeProjects", () => {
 
     const merged = mergeProjects([presetA, presetB, base]);
     expect(merged.agents.map((a) => a.name)).toEqual(["a-agent", "b-agent", "base-agent"]);
+  });
+
+  describe("permission list merging", () => {
+    it("lets a base claude.allow override a preset claude.allow (base-wins, not additive)", () => {
+      const preset = project({ permissions: { claude: { allow: ["Bash(*)"] } } });
+      const base = project({ permissions: { claude: { allow: ["Read(**)"] } } });
+
+      const merged = mergeProjects([preset, base]);
+      expect(merged.permissions?.claude?.allow).toEqual(["Read(**)"]);
+    });
+
+    it("keeps a preset claude.allow when the base declares none", () => {
+      const preset = project({ permissions: { claude: { allow: ["Bash(*)"] } } });
+      const base = project({ permissions: { claude: {} } });
+
+      const merged = mergeProjects([preset, base]);
+      expect(merged.permissions?.claude?.allow).toEqual(["Bash(*)"]);
+    });
+
+    it("lets a base claude.allow: [] clear a preset's list rather than being ignored as absent", () => {
+      const preset = project({ permissions: { claude: { allow: ["Bash(*)"] } } });
+      const base = project({ permissions: { claude: { allow: [] } } });
+
+      const merged = mergeProjects([preset, base]);
+      expect(merged.permissions?.claude?.allow).toEqual([]);
+    });
+
+    it("deduplicates repeated entries within a single layer, preserving first occurrence", () => {
+      const preset = project({ permissions: { claude: {} } });
+      const base = project({ permissions: { claude: { allow: ["Bash(*)", "Read(**)", "Bash(*)"] } } });
+
+      const merged = mergeProjects([preset, base]);
+      expect(merged.permissions?.claude?.allow).toEqual(["Bash(*)", "Read(**)"]);
+    });
+
+    it("three layers: a middle preset's claude.allow wins when the top layer doesn't declare it", () => {
+      const presetA = project({ permissions: { claude: { allow: ["A"] } } });
+      const presetB = project({ permissions: { claude: { allow: ["B"] } } });
+      const base = project({ permissions: { claude: {} } });
+
+      const merged = mergeProjects([presetA, presetB, base]);
+      expect(merged.permissions?.claude?.allow).toEqual(["B"]);
+    });
+
+    it("lets a base cursor.terminalAllowlist override a preset's (base-wins, not additive)", () => {
+      const preset = project({ permissions: { cursor: { terminalAllowlist: ["git"] } } });
+      const base = project({ permissions: { cursor: { terminalAllowlist: ["npm"] } } });
+
+      const merged = mergeProjects([preset, base]);
+      expect(merged.permissions?.cursor?.terminalAllowlist).toEqual(["npm"]);
+    });
+
+    it("keeps a preset cursor.terminalAllowlist when the base declares none", () => {
+      const preset = project({ permissions: { cursor: { terminalAllowlist: ["git"] } } });
+      const base = project({ permissions: { cursor: {} } });
+
+      const merged = mergeProjects([preset, base]);
+      expect(merged.permissions?.cursor?.terminalAllowlist).toEqual(["git"]);
+    });
+
+    it("lets a base cursor.terminalAllowlist: [] clear a preset's list", () => {
+      const preset = project({ permissions: { cursor: { terminalAllowlist: ["git"] } } });
+      const base = project({ permissions: { cursor: { terminalAllowlist: [] } } });
+
+      const merged = mergeProjects([preset, base]);
+      expect(merged.permissions?.cursor?.terminalAllowlist).toEqual([]);
+    });
+
+    it("deduplicates repeated cursor.terminalAllowlist entries within a single layer", () => {
+      const preset = project({ permissions: { cursor: {} } });
+      const base = project({ permissions: { cursor: { terminalAllowlist: ["git", "npm", "git"] } } });
+
+      const merged = mergeProjects([preset, base]);
+      expect(merged.permissions?.cursor?.terminalAllowlist).toEqual(["git", "npm"]);
+    });
+
+    it("three layers: a middle preset's cursor.terminalAllowlist wins when the top layer doesn't declare it", () => {
+      const presetA = project({ permissions: { cursor: { terminalAllowlist: ["A"] } } });
+      const presetB = project({ permissions: { cursor: { terminalAllowlist: ["B"] } } });
+      const base = project({ permissions: { cursor: {} } });
+
+      const merged = mergeProjects([presetA, presetB, base]);
+      expect(merged.permissions?.cursor?.terminalAllowlist).toEqual(["B"]);
+    });
+  });
+
+  describe("skills and extensions manifests", () => {
+    it("concatenates preset and base entries in install order", () => {
+      const preset = project({
+        skillsConfig: { "*": { skills: [{ name: "scope/preset" }] } },
+        extensionsConfig: { claude: { extensions: [{ name: "scope/preset-ext" }] } },
+      });
+      const base = project({
+        skillsConfig: { "*": { skills: [{ name: "scope/base" }] } },
+        extensionsConfig: { claude: { extensions: [{ name: "scope/base-ext" }] } },
+      });
+
+      const merged = mergeProjects([preset, base]);
+      expect(merged.skillsConfig["*"]?.skills.map((s) => s.name)).toEqual(["scope/preset", "scope/base"]);
+      expect(merged.extensionsConfig.claude?.extensions.map((e) => e.name)).toEqual([
+        "scope/preset-ext",
+        "scope/base-ext",
+      ]);
+    });
   });
 });

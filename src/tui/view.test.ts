@@ -1,7 +1,13 @@
 import { describe, expect, it } from "bun:test";
 
-import { createInitialState } from "./state.js";
-import { buildScreenView, MIN_COLUMNS, MIN_ROWS, SPLIT_COLUMNS, splitLogTag } from "./view.js";
+import { planItems } from "./selectors.js";
+import {
+  createInitialState,
+  PRESET_INSTALL_REVIEW_BACK_ROW,
+  PRESET_INSTALL_REVIEW_START_ROW,
+  type PlanItemId,
+} from "./state-model.js";
+import { buildScreenView, MIN_COLUMNS, MIN_ROWS, SPLIT_COLUMNS, splitLogTag } from "./view/index.js";
 
 describe("splitLogTag", () => {
   it("separates colored status tags from unstyled message text", () => {
@@ -63,6 +69,39 @@ describe("buildScreenView", () => {
     expect(view.panes.map((pane) => pane.title)).toContain("Actions");
   });
 
+  it("renders a blank row directly after every plan item marked breakAfter, for every flow", () => {
+    // Ids that end a visual section of the plan screen. Identity-based (compiler-checked via
+    // PlanItemId), unlike the old positional BREAKS index arrays this replaces -- reordering or
+    // inserting rows can't silently desync this from the render. Shared across both flows: both
+    // item arrays currently break after the same three sections.
+    const expectedBreakAfterIds = new Set<PlanItemId>(["destination", "backup", "install"]);
+
+    for (const flow of ["project", "presetsOnly"] as const) {
+      const state = createInitialState();
+      state.screen = "plan";
+      state.flow = flow;
+
+      const view = buildScreenView(state);
+      const actionsPane = view.panes.find((pane) => pane.title === "Actions");
+      expect(actionsPane).toBeDefined();
+
+      // Walk items and rendered rows together: each item consumes one "option" row, plus a
+      // trailing "blank" row exactly when its id is expected to end a section. This asserts
+      // adjacency (blank directly follows its item), not fixed row numbers.
+      const items = planItems(state);
+      let rowIndex = 0;
+      for (const item of items) {
+        expect(actionsPane!.rows[rowIndex]).toMatchObject({ kind: "option", label: item.label });
+        rowIndex += 1;
+        if (expectedBreakAfterIds.has(item.id)) {
+          expect(actionsPane!.rows[rowIndex]).toEqual({ kind: "blank" });
+          rowIndex += 1;
+        }
+      }
+      expect(rowIndex).toBe(actionsPane!.rows.length);
+    }
+  });
+
   it("exposes the editable path input on the custom source screen", () => {
     const state = createInitialState();
     state.screen = "customSource";
@@ -121,6 +160,42 @@ describe("buildScreenView", () => {
   });
 });
 
+describe("preset install review rows", () => {
+  it("renders the option rows the cursor constants name", () => {
+    const state = createInitialState();
+    state.screen = "presetInstallReview";
+
+    const options = buildScreenView(state)
+      .panes.flatMap((pane) => pane.rows)
+      .filter((row): row is Extract<typeof row, { kind: "option" }> => row.kind === "option");
+
+    // The key handler and the controller both aim the cursor with these constants; if the render
+    // ever moves a row, the constants must move with it rather than silently pointing at a toggle.
+    expect(options.find((row) => row.index === PRESET_INSTALL_REVIEW_START_ROW)?.label).toBe("Start preset install");
+    expect(options.find((row) => row.index === PRESET_INSTALL_REVIEW_BACK_ROW)?.label).toBe("Back to presets");
+    expect(Math.max(...options.map((row) => row.index))).toBe(PRESET_INSTALL_REVIEW_BACK_ROW);
+  });
+});
+
+describe("review controls", () => {
+  it("shows confirm-only controls on the install review", () => {
+    const state = createInitialState();
+    state.screen = "installReview";
+
+    expect(buildScreenView(state).controls).toContain("Enter: select");
+    expect(buildScreenView(state).controls).toContain("PgDn: review commands");
+    expect(buildScreenView(state).controls.join(" ")).not.toMatch(/x\/space|Enter\/x\/space/u);
+  });
+
+  it("distinguishes preset review confirmation from toggling", () => {
+    const state = createInitialState();
+    state.screen = "presetInstallReview";
+
+    expect(buildScreenView(state).controls).toContain("Enter: select");
+    expect(buildScreenView(state).controls).toContain("x/space: toggle");
+  });
+});
+
 describe("remote command consent", () => {
   function rowText(state: ReturnType<typeof createInitialState>): string {
     return buildScreenView(state)
@@ -137,8 +212,15 @@ describe("remote command consent", () => {
 
     const text = rowText(state);
 
-    expect(text).toContain("https://github.com/o/r");
-    expect(text).toContain("WILL RUN");
+    expect(text).toContain("REMOTE: 2 entries WILL apply");
+    expect(text).toContain("@ github.com/o/r");
+    // Framed by when an entry executes, not by what kind of entry it is: the planner adds classes
+    // (config files a host agent runs later, an approval setting that widens what it may run
+    // without asking, not only commands) and the wording must stay true - "WILL RUN" would be false
+    // for an approval-setting entry, which never runs anything itself.
+    // The fixed action row carries count, provenance, and urgency while the command pane scrolls.
+    expect(text).toContain("WILL apply");
+    expect(text).toContain("run later inside your agent");
     expect(text).toContain("npx skills@latest add acme/skill");
     expect(text).toContain("npx some-extension --flag");
   });
@@ -152,11 +234,41 @@ describe("remote command consent", () => {
     expect(rowText(state)).toContain("npx some-extension");
   });
 
-  it("shows no command section when nothing remote will run", () => {
+  it("gates a remote source whose recognised plan is empty", () => {
+    const state = createInitialState();
+    state.screen = "installReview";
+    state.remoteCommandSource = "https://github.com/o/r";
+    state.remoteCommands = [];
+
+    const text = rowText(state);
+
+    // An empty plan is not "nothing happens", and the CLI refuses to skip its gate there
+    // (`confirmRemoteCommands`). This screen must say the same thing, in the same words.
+    expect(text).toContain("REMOTE:");
+    expect(text).toContain("WILL be installed");
+    expect(text).toContain("@ github.com/o/r");
+    expect(text).toContain("Nothing here was recognised as executable - which is not a guarantee.");
+    expect(text).toContain("Its files will still be installed for:");
+  });
+
+  it("shows the empty-plan gate on the preset install review screen too", () => {
+    const state = createInitialState();
+    state.screen = "presetInstallReview";
+    state.remoteCommandSource = "https://github.com/o/r";
+    state.remoteCommands = [];
+
+    expect(rowText(state)).toContain("Nothing here was recognised as executable - which is not a guarantee.");
+  });
+
+  it("shows no remote gate when the install is purely local", () => {
     const state = createInitialState();
     state.screen = "installReview";
 
-    expect(rowText(state)).not.toContain("WILL RUN");
+    const text = rowText(state);
+
+    expect(text).not.toContain("REMOTE:");
+    expect(text).not.toContain("Nothing here was recognised");
+    expect(text).not.toContain("run later inside your agent");
   });
 
   it("redacts credentials in the source picker and recents list", () => {

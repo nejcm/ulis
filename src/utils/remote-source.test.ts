@@ -92,6 +92,25 @@ describe("parseRepoUrl", () => {
     );
   });
 
+  // The raw-URL guard runs before decoding, so `%00` walks straight past it. A NUL in the subdir
+  // reaches `join`/`statSync` and throws a TypeError instead of this message; one in the ref reaches
+  // `git clone --branch` argv.
+  it("rejects control characters that only appear after percent-decoding", () => {
+    const NUL = "%00";
+    expect(() => parseRepoUrl(`https://github.com/o/r/tree/main/a${NUL}b`)).toThrow(/control characters/u);
+    expect(() => parseRepoUrl(`https://github.com/o/r/tree/ma${NUL}in/x`)).toThrow(/control characters/u);
+    // The message must not carry the control character it is refusing.
+    const message = (() => {
+      try {
+        parseRepoUrl(`https://github.com/o/r/tree/main/a${NUL}b`);
+        return "";
+      } catch (error) {
+        return (error as Error).message;
+      }
+    })();
+    expect(message).not.toContain(String.fromCharCode(0));
+  });
+
   it("decodes percent-escaped ref and subdir segments", () => {
     expect(parseRepoUrl("https://github.com/o/r/tree/rel%2Bv1/presets/My%20Team")).toEqual({
       cloneUrl: "https://github.com/o/r",

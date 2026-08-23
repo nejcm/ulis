@@ -17,11 +17,11 @@ Both resolvers hand their disposal back to the caller:
 Every CLI caller must therefore pair `guard.track(...)` with `guard.onCleanup(result.cleanup)` by hand.
 Four pairs across three commands:
 
-| Site | Lines |
-|------|-------|
-| [`src/commands/build.ts`](../src/commands/build.ts) | 40–43 |
+| Site                                                    | Lines                           |
+| ------------------------------------------------------- | ------------------------------- |
+| [`src/commands/build.ts`](../src/commands/build.ts)     | 40–43                           |
 | [`src/commands/install.ts`](../src/commands/install.ts) | 35–45 (source), 51–58 (presets) |
-| [`src/commands/preset.ts`](../src/commands/preset.ts) | 71–80 |
+| [`src/commands/preset.ts`](../src/commands/preset.ts)   | 71–80                           |
 
 Forgetting the second half strands a temp clone that may carry credentials from the URL. **This is a
 discipline hazard, not a live bug** — all four existing call sites register correctly, and the tests
@@ -44,13 +44,13 @@ that without either changing the consent flow ADR 0003 depends on, or re-exposin
 
 ## 2. Decisions
 
-| # | Decision | Choice | Why |
-|---|----------|--------|-----|
-| 1 | Shape | One extra operation on the existing `InterruptGuard` | No new module; the guard already owns the cleanup list |
-| 2 | Constraint | `T extends { readonly cleanup: () => void }` | Both resolvers already satisfy it; nothing else has to change |
-| 3 | Registration order | Register cleanup *after* `work()` resolves, before returning | Nothing exists to clean up until it resolves; a throw inside is handled by the resolver's own unwind |
-| 4 | `track`/`onCleanup` | Keep both public | The TUI does not use the guard, but keeping the primitives avoids forcing every future caller through one shape |
-| 5 | Scope | CLI commands only | TUI ownership stays explicit (§1) |
+| #   | Decision            | Choice                                                       | Why                                                                                                             |
+| --- | ------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| 1   | Shape               | One extra operation on the existing `InterruptGuard`         | No new module; the guard already owns the cleanup list                                                          |
+| 2   | Constraint          | `T extends { readonly cleanup: () => void }`                 | Both resolvers already satisfy it; nothing else has to change                                                   |
+| 3   | Registration order  | Register cleanup _after_ `work()` resolves, before returning | Nothing exists to clean up until it resolves; a throw inside is handled by the resolver's own unwind            |
+| 4   | `track`/`onCleanup` | Keep both public                                             | The TUI does not use the guard, but keeping the primitives avoids forcing every future caller through one shape |
+| 5   | Scope               | CLI commands only                                            | TUI ownership stays explicit (§1)                                                                               |
 
 ## 3. Implementation
 
@@ -77,9 +77,10 @@ async resolve(work) {
 }
 ```
 
-Push directly onto `cleanups` rather than calling `this.onCleanup` — the object literal is not yet bound
-when it is constructed, and `cleanups` is already in scope. (If `track` is likewise called via a local
-helper rather than `this`, extract it to a named function above the return.)
+Push directly onto `cleanups` rather than calling `this.onCleanup` — `cleanups` is already in scope, so the
+indirection buys nothing. (`this` would in fact resolve fine: it is bound at call time, not when the object
+literal is constructed. The reason to avoid `this` here is that a caller who destructures the guard loses
+it, not that it is unbound.)
 
 ### 3.2 Call sites
 
@@ -95,7 +96,13 @@ const { presets } = await guard.resolve(() =>
 ```ts
 // src/commands/install.ts:35-45
 const resolved = await guard.resolve(() =>
-  resolveSourceOrRemote({ global: options.global, homeDir: options.homeDir, source: options.source, logger: log, signal: guard.signal }),
+  resolveSourceOrRemote({
+    global: options.global,
+    homeDir: options.homeDir,
+    source: options.source,
+    logger: log,
+    signal: guard.signal,
+  }),
 );
 const { sourceDir, destBase, mode } = resolved;
 ```
@@ -136,8 +143,10 @@ bun run ulis install --source https://github.com/<user>/<repo> --yes
 1. Full run to completion → no `ulis-` directory survives.
 2. Second run, Ctrl-C **during** the clone → the abort unwinds, the exit is deferred, no directory survives.
 3. Third run, Ctrl-C **after** the clone but during install → cleanup runs from `release()`, no directory survives.
-4. A purely local run (`bun run ulis install`) registers no signal handlers and prompts nothing — confirms
-   the guard's inactive path is untouched.
+4. A purely local run (`bun run ulis install`) registers no signal handlers — confirms the guard's inactive
+   path is untouched. It may still prompt: a local install whose destination directories already exist asks
+   for overwrite confirmation unless `-y` is passed (`src/commands/install.ts`). Only the trust gate is
+   remote-only.
 
 ### 4.3 Exit checks
 

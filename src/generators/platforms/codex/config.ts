@@ -1,5 +1,6 @@
 import { translateEnvVar } from "../../../utils/env-var.js";
 import { mcpServersFor } from "../../../utils/mcp-block.js";
+import { toTomlKey, toTomlTableHeader } from "../../shared/keys.js";
 import type { ProjectBundle } from "../../types.js";
 import { toTomlString } from "./format.js";
 
@@ -60,40 +61,40 @@ export function buildCodexConfigToml(project: ProjectBundle): string {
   const trustedProjects = project.permissions?.codex?.trustedProjects ?? {};
   for (const [path, level] of Object.entries(trustedProjects)) {
     if (lines.length > 0 && lines.at(-1) !== "") lines.push("");
-    lines.push(`[projects.'${path}']`);
+    lines.push(toTomlTableHeader("projects", path));
     lines.push(`trust_level = ${toTomlString(level)}`);
     lines.push("");
   }
 
   for (const [name, server] of mcpServersFor(project.mcp, "codex")) {
     if (server.type === "local") {
-      lines.push(`[mcp_servers.${name}]`);
+      lines.push(toTomlTableHeader("mcp_servers", name));
       if (server.command) lines.push(`command = ${toTomlString(server.command)}`);
       if (server.args) {
         const args = server.args.map((a) => toTomlString(translateEnvVar(a, "codex"))).join(", ");
         lines.push(`args = [${args}]`);
       }
-      if (server.disabled !== undefined) lines.push(`disabled = ${server.disabled}`);
+      if (server.disabled !== undefined) lines.push(`disabled = ${JSON.stringify(server.disabled)}`);
       if (server.env) {
         lines.push("");
-        lines.push(`[mcp_servers.${name}.env]`);
+        lines.push(toTomlTableHeader("mcp_servers", name, "env"));
         for (const [k, v] of Object.entries(server.env)) {
-          lines.push(`${k} = ${toTomlString(translateEnvVar(v, "codex"))}`);
+          lines.push(`${toTomlKey(k)} = ${toTomlString(translateEnvVar(v, "codex"))}`);
         }
       }
       lines.push("");
     } else if (server.url) {
-      lines.push(`[mcp_servers.${name}]`);
+      lines.push(toTomlTableHeader("mcp_servers", name));
       lines.push(`url = ${toTomlString(server.url)}`);
       for (const headerLine of codexHttpHeaderLines(server.headers)) lines.push(headerLine);
-      if (server.disabled !== undefined) lines.push(`disabled = ${server.disabled}`);
+      if (server.disabled !== undefined) lines.push(`disabled = ${JSON.stringify(server.disabled)}`);
       lines.push("");
     } else if (server.localFallback) {
-      lines.push(`[mcp_servers.${name}]`);
+      lines.push(toTomlTableHeader("mcp_servers", name));
       lines.push(`command = ${toTomlString(server.localFallback.command)}`);
       const args = server.localFallback.args.map((a) => toTomlString(translateEnvVar(a, "codex"))).join(", ");
       lines.push(`args = [${args}]`);
-      if (server.disabled !== undefined) lines.push(`disabled = ${server.disabled}`);
+      if (server.disabled !== undefined) lines.push(`disabled = ${JSON.stringify(server.disabled)}`);
       lines.push("");
     }
   }

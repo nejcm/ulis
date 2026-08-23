@@ -1,12 +1,10 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import matter from "gray-matter";
-
 import { SkillFrontmatterSchema, type SkillFrontmatter } from "../schema.js";
 import type { DiagnosticOrigin } from "../types.js";
 import { fileExists, readFile } from "../utils/fs.js";
-import { ParseError } from "./_shared.js";
+import { ParseError, parseMarkdownFrontmatter } from "./_shared.js";
 
 export interface ParsedSkill {
   name: string; // directory name
@@ -29,7 +27,11 @@ export function collectSkills(
   opts: { readonly sourceDir?: string; readonly source?: string } = {},
 ): { items: readonly ParsedSkill[]; errors: readonly ParseError[] } {
   if (!fileExists(skillsDir)) return { items: [], errors: [] };
-  const entries = readdirSync(skillsDir, { withFileTypes: true }).filter((d) => d.isDirectory());
+  // Byte-wise sort: parse order becomes output order, and Bun's readdirSync returns raw dirent
+  // order, which varies by filesystem and checkout. See readMarkdownDir in ./_shared.ts.
+  const entries = readdirSync(skillsDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const skills: ParsedSkill[] = [];
   const errors: ParseError[] = [];
 
@@ -41,7 +43,7 @@ export function collectSkills(
     let raw: string | undefined;
     try {
       raw = readFile(skillFile);
-      const { data, content } = matter(raw);
+      const { data, content } = parseMarkdownFrontmatter(raw);
       const frontmatter = SkillFrontmatterSchema.parse(data);
       if (frontmatter?.name !== entry.name) {
         throw new Error(`frontmatter name '${frontmatter?.name}' must match directory '${entry.name}'`);

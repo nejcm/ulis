@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { PLATFORMS } from "../platforms.js";
+import { handleTuiKey } from "./keys.js";
 import {
   applyTuiPreferences,
   getTuiPreferencesPath,
@@ -11,7 +12,7 @@ import {
   saveTuiPreferences,
   snapshotTuiPreferences,
 } from "./preferences.js";
-import { createInitialState, handleTuiKey } from "./state.js";
+import { createInitialState } from "./state-model.js";
 
 const tmpRoots: string[] = [];
 
@@ -46,9 +47,9 @@ describe("tui preferences", () => {
     );
     const state = createInitialState([{ name: "team", displayName: "Team", description: "", source: "user", dir: "" }]);
 
-    const error = loadTuiPreferences(state, filePath);
+    const result = loadTuiPreferences(state, filePath);
 
-    expect(error).toBeUndefined();
+    expect(result).toEqual({ canSave: true });
     expect(state.sourceMode).toBe("project");
     expect(state.destinationMode).toBe("project");
 
@@ -109,7 +110,7 @@ describe("tui preferences", () => {
   it("ignores preferences from newer schema versions", () => {
     const state = createInitialState();
 
-    applyTuiPreferences(state, {
+    const applied = applyTuiPreferences(state, {
       version: 999,
       scopes: {
         project: {
@@ -120,8 +121,20 @@ describe("tui preferences", () => {
       },
     });
 
+    expect(applied).toBe(false);
     expect(state.platforms).toEqual([...PLATFORMS]);
     expect(state.backup).toBe(true);
+  });
+
+  it("reports corrupt preferences without disabling saves", () => {
+    const root = createTempRoot();
+    const filePath = join(root, "prefs.json");
+    writeFileSync(filePath, "{ not valid JSON");
+
+    const result = loadTuiPreferences(createInitialState(), filePath);
+
+    expect(result.canSave).toBe(true);
+    expect(result.notice).toContain(`Unable to load TUI preferences from ${filePath}`);
   });
 
   it("only snapshots custom source paths for the custom flow", () => {
@@ -146,7 +159,7 @@ describe("tui preferences", () => {
     });
   });
 
-  it("saves the current state to disk", () => {
+  it("round-trips current-version preferences", () => {
     const root = createTempRoot();
     const filePath = join(root, "prefs.json");
     const state = createInitialState([{ name: "team", displayName: "Team", description: "", source: "user", dir: "" }]);
@@ -180,6 +193,21 @@ describe("tui preferences", () => {
           skipExternalSkills: false,
         },
       },
+    });
+    const loadedState = createInitialState([
+      { name: "team", displayName: "Team", description: "", source: "user", dir: "" },
+    ]);
+    expect(loadTuiPreferences(loadedState, filePath)).toEqual({ canSave: true });
+    loadedState.cursor = 2;
+    handleTuiKey(loadedState, "enter");
+    expect(loadedState).toMatchObject({
+      flow: "custom",
+      destinationMode: "global",
+      customSource: "/tmp/project/.ulis",
+      platforms: ["claude", "codex"],
+      selectedPresetNames: ["team"],
+      backup: false,
+      rebuild: false,
     });
   });
 

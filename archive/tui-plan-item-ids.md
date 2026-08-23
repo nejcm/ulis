@@ -1,6 +1,6 @@
 # Stable identity for TUI plan items
 
-Status: approved, not started
+Status: implemented and reviewed (`src/tui/state.ts`, `src/tui/view.ts`)
 Design date: 2026-08-18
 Origin: architecture review candidate #3, narrowed after external triage
 
@@ -19,14 +19,14 @@ const DASHBOARD_BREAKS = [3, 7, 10];
 Those literals carry four different jobs at once: **identity**, **display text**, **row order**, and —
 via a parallel array of integers — **separator position**. Three modules read them:
 
-| Site | What it does with the label |
-|------|------------------------------|
-| [`handlePlanKey`](../src/tui/state.ts) (`state.ts:674`) | branches on the string to decide toggles and navigation |
-| [`planItemValue`](../src/tui/view.ts) (`view.ts:182`) | branches on the string to render the row's value, using `value === label` as a sentinel for "this row has no value" |
-| [`planItemCursor`](../src/tui/state.ts) (`state.ts:1045`) | looks a row up by label; 4 call sites, all passing `"Install"` |
-| [`planItemsBreaks`](../src/tui/state.ts) (`state.ts:459`) | returns hardcoded indices into those arrays |
+| Site                                                      | What it does with the label                                                                                         |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| [`handlePlanKey`](../src/tui/state.ts) (`state.ts:674`)   | branches on the string to decide toggles and navigation                                                             |
+| [`planItemValue`](../src/tui/view.ts) (`view.ts:182`)     | branches on the string to render the row's value, using `value === label` as a sentinel for "this row has no value" |
+| [`planItemCursor`](../src/tui/state.ts) (`state.ts:1045`) | looks a row up by label; 4 call sites, all passing `"Install"`                                                      |
+| [`planItemsBreaks`](../src/tui/state.ts) (`state.ts:459`) | returns hardcoded indices into those arrays                                                                         |
 
-**The concrete defect is the breaks arrays.** Label identity *is* compiler-checked — `TuiPlanItem` is a
+**The concrete defect is the breaks arrays.** Label identity _is_ compiler-checked — `TuiPlanItem` is a
 union of the literals, so renaming one fails every `item === "Backup"` comparison. But
 `DASHBOARD_BREAKS = [3, 7, 10]` and `PRESET_ONLY_BREAKS = [2, 6, 8]` are raw positional indices with no
 type link to the arrays they index. Insert or reorder a row and the visual separators silently move to
@@ -40,14 +40,14 @@ add twelve modules without removing the coordination that actually hurts.
 
 ## 2. Decisions
 
-| # | Decision | Choice | Why |
-|---|----------|--------|-----|
-| 1 | Item shape | `{ id, label, breakAfter? }` records | Identity, display, and layout stop sharing one string |
-| 2 | Arrays | Keep `DASHBOARD_ITEMS` and `PRESET_ONLY_PLAN_ITEMS` separate, keep `planItems(state)` selecting by `state.flow` | That switch is not the problem; a merged array with per-flow filters would be worse |
-| 3 | Preset row ids | Both "Preset layers" and "Preset sources" get id `"presets"` | Collapses the existing `label === "Preset layers" \|\| label === "Preset sources"` double-check |
-| 4 | Breaks | `breakAfter?: true` on the item; delete both index arrays and `planItemsBreaks` | Removes the only coupling the compiler cannot see |
-| 5 | Value sentinel | `planItemValue` returns `string \| undefined` | Drops the `value === label` trick, which only worked because identity and display were the same string |
-| 6 | Preference keys | Unchanged | `TuiFlowPreferences` keys off state fields, not plan labels — nothing persisted moves |
+| #   | Decision        | Choice                                                                                                          | Why                                                                                                    |
+| --- | --------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 1   | Item shape      | `{ id, label, breakAfter? }` records                                                                            | Identity, display, and layout stop sharing one string                                                  |
+| 2   | Arrays          | Keep `DASHBOARD_ITEMS` and `PRESET_ONLY_PLAN_ITEMS` separate, keep `planItems(state)` selecting by `state.flow` | That switch is not the problem; a merged array with per-flow filters would be worse                    |
+| 3   | Preset row ids  | Both "Preset layers" and "Preset sources" get id `"presets"`                                                    | Collapses the existing `label === "Preset layers" \|\| label === "Preset sources"` double-check        |
+| 4   | Breaks          | `breakAfter?: true` on the item; delete both index arrays and `planItemsBreaks`                                 | Removes the only coupling the compiler cannot see                                                      |
+| 5   | Value sentinel  | `planItemValue` returns `string \| undefined`                                                                   | Drops the `value === label` trick, which only worked because identity and display were the same string |
+| 6   | Preference keys | Unchanged                                                                                                       | `TuiFlowPreferences` keys off state fields, not plan labels — nothing persisted moves                  |
 
 ## 3. Implementation
 
@@ -71,8 +71,8 @@ export interface PlanItem {
 export const DASHBOARD_ITEMS: readonly PlanItem[] = [
   { id: "presets", label: "Preset layers" },
   { id: "source", label: "Base source" },
-  { id: "platforms", label: "Platforms", breakAfter: true },
-  { id: "destination", label: "Install destination" },
+  { id: "platforms", label: "Platforms" },
+  { id: "destination", label: "Install destination", breakAfter: true },
   ...
 ];
 ```
@@ -138,8 +138,9 @@ bun run lint
 bun test src/tui
 ```
 
-`tsc --noEmit` is doing real work here: the exhaustive `switch (item.id)` means an unhandled row fails
-the build.
+`tsc --noEmit` is doing real work here — but only because the `switch (item.id)` ends in a
+`assertNeverPlanItemId(item.id)` call taking a `never`. A `default`-less switch alone does not fail the
+build on an unhandled row; the `never` parameter is what turns a missed id into a type error.
 
 ### 4.2 Manual
 

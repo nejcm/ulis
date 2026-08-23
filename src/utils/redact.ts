@@ -1,17 +1,31 @@
 /**
  * URL credential redaction and untrusted-text escaping. This module imports nothing, so every
- * layer — parsers, the cloner, the installer, the TUI — can reach it. `install.ts` needs it and
- * `remote-source.ts` imports from `install.ts`, so a shared leaf is what breaks the cycle.
+ * layer — parsers, the cloner, the installer, the TUI — can reach it. `install/runner.ts`,
+ * `install/log.ts` and `install/preview.ts` all need it, and `utils/remote-source.ts` imports
+ * `formatCommandFailure`/`runCommand`/`runSkillCommand` from `install/runner.ts`; a shared leaf is
+ * what keeps that from folding back into a cycle between the two.
  */
 
 /** C0 controls plus DEL, written as escapes so the source stays copy-pasteable text. */
 const CONTROL_CHARS = /[\x00-\x1f\x7f]/u;
 
 /**
- * Anything that can move the cursor, erase a line, or reorder what the reader sees: C0/C1 controls
- * plus the Unicode bidi overrides and line/paragraph separators.
+ * True when `value` holds a C0 control or DEL. Exported because callers that percent-decode a URL
+ * have to re-check what decoding produced: the raw-string check in {@link hasUnredactableCredential}
+ * cannot see a control character still spelled `%00`.
  */
-const DISPLAY_CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069\u2028\u2029]/gu;
+export function hasControlChars(value: string): boolean {
+  return CONTROL_CHARS.test(value);
+}
+
+/**
+ * Anything that can move the cursor, erase a line, hide text, or reorder what the reader sees:
+ * C0/C1 controls, invisible format characters, bidi overrides, and line/paragraph separators.
+ */
+const DISPLAY_CONTROL_CHARS =
+  /[\u0000-\u001f\u007f-\u009f\u00ad\u180e\u200b\u200e\u200f\u2028\u2029\u202a-\u202e\u2060-\u2064\u2066-\u2069\u3164\ufeff\uffa0]/gu;
+const CONSENT_CONTROL_CHARS =
+  /[\u0000-\u001f\u007f-\u009f\u00ad\u180e\u200b-\u200f\u2028\u2029\u202a-\u202e\u2060-\u2064\u2066-\u2069\u3164\ufeff\uffa0]/gu;
 
 /**
  * Make untrusted text safe to print: redact URL credentials, then escape every character that could
@@ -19,10 +33,18 @@ const DISPLAY_CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u2
  * or the logs that follow it. Idempotent — an already-escaped string passes through unchanged.
  */
 export function sanitizeLogText(value: string): string {
-  return redactUserinfo(value).replace(
-    DISPLAY_CONTROL_CHARS,
-    (control: string) => "\\u" + control.codePointAt(0)!.toString(16).padStart(4, "0"),
-  );
+  return escapeDisplayControls(value, DISPLAY_CONTROL_CHARS);
+}
+
+/** Escape the wider invisible-character set required where a user grants remote code consent. */
+export function sanitizeConsentText(value: string): string {
+  return escapeDisplayControls(value, CONSENT_CONTROL_CHARS);
+}
+
+function escapeDisplayControls(value: string, controls: RegExp): string {
+  return redactUserinfo(value).replace(controls, (control: string) => {
+    return "\\u" + control.codePointAt(0)!.toString(16).padStart(4, "0");
+  });
 }
 
 /**

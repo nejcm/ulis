@@ -2,7 +2,7 @@ export const GOLDEN_ARTIFACTS = {
   claude: {
     "agents/worker.md": `---
 name: worker
-description: A minimal test agent
+description: "A minimal test agent, focus: safe changes"
 model: claude-haiku-4-5-20251001
 tools: "Read, Glob, Grep, Edit"
 disallowedTools: Bash
@@ -12,7 +12,7 @@ hooks:
     - matcher: "Bash(rm -rf*)"
       hooks:
         - type: command
-          command: "echo \\"Blocked by ULIS security policy: rm -rf\\" && exit 1"
+          command: "echo \\"Blocked by ULIS security policy\\" && exit 1"
 ---
 
 <!--
@@ -44,7 +44,7 @@ You are a minimal worker agent used for testing.
   "small_model": "opencode/kimi-k2.5-free",
   "agent": {
     "worker": {
-      "description": "A minimal test agent",
+      "description": "A minimal test agent, focus: safe changes",
       "mode": "subagent",
       "model": "claude-haiku-4-5-20251001",
       "tools": {
@@ -99,10 +99,30 @@ API_KEY = "\${TEST_API_KEY}"
 url = "https://mcp.example.com/sse"
 bearer_token_env_var = "TEST_REMOTE_TOKEN"
 `,
+    "agents/worker.toml": `# [ULIS contextHints]
+#   maxInputTokens: 20000
+#   priority: high
+
+# [ULIS toolPolicy]
+#   avoid: Bash
+#   requireConfirmation: Write
+
+# [ULIS security]
+#   permissionLevel: readonly
+#   blockedCommands: rm -rf
+#   rateLimit: 30/hour
+
+name = "worker"
+description = "A minimal test agent, focus: safe changes"
+
+developer_instructions = """
+You are a minimal worker agent used for testing.\\
+"""
+`,
   },
   cursor: {
     "agents/worker.mdc": `---
-description: A minimal test agent
+description: "A minimal test agent, focus: safe changes"
 model: claude-haiku-4-5-20251001
 readonly: true
 tools:
@@ -138,7 +158,7 @@ You are a minimal worker agent used for testing.
     ".forge/agents/worker.md": `---
 id: worker
 title: worker
-description: A minimal test agent
+description: "A minimal test agent, focus: safe changes"
 model: claude-haiku-4-5-20251001
 tools:
   - read

@@ -3,23 +3,13 @@ import { createInterface } from "node:readline";
 
 import { analyzePresets, analyzeProject, type Logger } from "../build.js";
 import { initCmd } from "../commands/init.js";
-import { formatDiagnostic } from "../diagnostics.js";
 import { runInstall, runPresetInstall } from "../install.js";
-import { loadExtensions } from "../parsers/extensions.js";
-import { ParseError } from "../parsers/index.js";
 import { redactUserinfo } from "../utils/redact.js";
 import { resolvePresets, type ResolvedPreset } from "../utils/resolve-presets.js";
 import { resolveSourceOrRemote } from "../utils/resolve-source.js";
 import { ULIS_CLI_ENTRY_ENV } from "./launcher.js";
-import {
-  planSource,
-  remotePresetRef,
-  reviewFingerprint,
-  selectedPresets,
-  type PreparedRemoteInstall,
-  type TuiAction,
-  type TuiState,
-} from "./state.js";
+import { planSource, remotePresetRef, reviewFingerprint, selectedPresets } from "./selectors.js";
+import { type PreparedRemoteInstall, type TuiAction, type TuiState } from "./state-model.js";
 
 interface RuntimeDependencies {
   spawn: typeof spawn;
@@ -28,12 +18,14 @@ interface RuntimeDependencies {
   runInstall: typeof runInstall;
 }
 
-interface RunTuiActionOptions {
+export interface RunTuiActionOptions {
   readonly signal?: AbortSignal;
   /** Clone already made for the review screen; reused so consent matches what runs. */
   readonly prepared?: PreparedRemoteInstall;
   /** Working directory used for plan resolution; must match the one used at review time. */
   readonly cwd?: string;
+  /** Home directory override used with cwd in tests. */
+  readonly userHome?: string;
 }
 
 /**
@@ -51,7 +43,10 @@ function requireReviewedRemote(
   if (!prepared) {
     throw new Error("A remote source must be confirmed on the review screen before installing.");
   }
-  if (prepared.fingerprint !== reviewFingerprint(state, action, options.cwd)) {
+  if (prepared.action !== action) {
+    throw new Error("A remote review may only start the action it was generated for.");
+  }
+  if (prepared.fingerprint !== reviewFingerprint(state, action, options.cwd, options.userHome)) {
     throw new Error("Settings changed since the remote commands were reviewed. Review them again before installing.");
   }
 }
@@ -70,7 +65,7 @@ export async function runTuiAction(
 ): Promise<void> {
   // Same cwd the review screen planned with. Without it an injected cwd would show one destination
   // and install to another, and the fingerprint below would still match.
-  const planned = planSource(state, options.cwd);
+  const planned = planSource(state, options.cwd, options.userHome);
   const localPresets = selectedPresets(state);
   const remoteRef = remotePresetRef(state);
 
@@ -118,17 +113,7 @@ export async function runTuiAction(
       logger.info(`Source: ${redactUserinfo(planned.sourceDir)}`);
       if (presets.length > 0) logger.info(`Presets: ${presets.map((preset) => preset.name).join(", ")}`);
       const analysis = analyzeProject({ sourceDir, presets, logger });
-      let extensionsConfig: ReturnType<typeof loadExtensions>;
-      try {
-        extensionsConfig = loadExtensions(sourceDir, { source: "base", sourceDir });
-      } catch (err) {
-        if (err instanceof ParseError) {
-          logger.error(formatDiagnostic(err.toDiagnostic()));
-          throw new Error("Parsing failed: 1 error(s). No files written.");
-        }
-        throw err;
-      }
-      const extensionCount = Object.values(extensionsConfig).reduce(
+      const extensionCount = Object.values(analysis.project.extensionsConfig).reduce(
         (acc, entry) => acc + (entry?.extensions?.length ?? 0),
         0,
       );
@@ -160,6 +145,7 @@ export async function runTuiAction(
         remoteSources: remoteRef ? [remoteRef] : undefined,
         approvedCommands: options.prepared?.commands,
         destBase: planned.destBase,
+        userHome: options.userHome,
         globalInstall: planned.globalInstall,
         platforms: state.platforms,
         backup: state.backup,
@@ -176,19 +162,38 @@ export async function runTuiAction(
     return;
   }
 
+  if (action === "build" && planned.remote) {
+    // Never build a child command line out of a remote source: the URL carries any credentials the
+    // user pasted, and `ulis build` rejects a remote source anyway.
+    throw new Error(
+      "Build writes generated output into the source tree, so it cannot run against a remote source. Use Install instead.",
+    );
+  }
+
   if (action === "install" && (planned.remote || remoteRef)) {
     // Nothing downstream can gate this, so it is the last point an unreviewed remote install stops.
+    // `remoteRef` is presets-only and so cannot be set for `install` today; it stays because
+    // dropping it would let a future presets-only install fall through to the child process, which
+    // silently ignores a remote ref rather than refusing it.
     requireReviewedRemote(state, action, options);
     const prepared = options.prepared!;
 
     // Run in-process rather than through the CLI: handing the child the clone as `--source` would
     // make it derive destBase from the clone's parent, writing the install next to the temp dir
     // (and deleting it with the clone). In-process keeps the reviewed destination explicit.
-    const label = redactUserinfo(planned.sourceDir);
+    // Same expression as `remote-review.ts`'s `remoteCommandSource`: when only the preset ref is
+    // remote (`planned.remote` false), the base source is not what the trust gate should attribute
+    // this to - `planned.sourceDir` would be a local path there, not the remote source in play.
+    const label = redactUserinfo(planned.remote ? planned.sourceDir : (remoteRef ?? ""));
     await runtimeDependencies.runInstall({
       sourceDir: prepared.sourceDir ?? planned.sourceDir,
       sourceLabel: label,
+      // Not `true`: this branch also fires for a presets-only `remoteRef` over a local base source
+      // (`planned.remote` false, `remoteRef` set), and `true` there would wrongly drop that local
+      // source's `.env` too - only `planned.remote` says whether the base source itself is a clone.
+      sourceIsRemote: planned.remote,
       destBase: planned.destBase,
+      userHome: options.userHome,
       globalInstall: planned.globalInstall,
       platforms: state.platforms,
       backup: state.backup,
@@ -213,6 +218,8 @@ export async function runTuiAction(
     logger,
     localPresets.map((preset) => preset.name),
     options.signal,
+    options.cwd,
+    options.userHome,
   );
 }
 
@@ -258,19 +265,23 @@ async function runActionInChildProcess(
   logger: Logger,
   presetNames: readonly string[],
   signal?: AbortSignal,
+  cwd?: string,
+  userHome?: string,
 ): Promise<void> {
   const entryScript = process.env[ULIS_CLI_ENTRY_ENV] || process.argv[1];
   if (!entryScript) {
     throw new Error("Unable to resolve current CLI entry script.");
   }
 
-  const args = [...process.execArgv, entryScript, action, "--source", planSource(state).sourceDir];
+  // Same cwd the plan was resolved with, or the child would install somewhere the plan never showed.
+  const planned = planSource(state, cwd, userHome);
+  const args = [...process.execArgv, entryScript, action, "--source", planned.sourceDir];
   args.push("--target", state.platforms.join(","));
   if (presetNames.length > 0) args.push("--preset", presetNames.join(","));
 
   if (action === "install") {
     args.push("--yes");
-    if (planSource(state).globalInstall) args.push("--global");
+    if (planned.globalInstall) args.push("--global");
     if (!state.rebuild) args.push("--skip-rebuild");
     if (state.backup) args.push("--backup");
     if (!state.prune) args.push("--no-prune");
@@ -278,13 +289,20 @@ async function runActionInChildProcess(
   }
 
   await new Promise<void>((resolve, reject) => {
+    const stopped = () => new Error(`${action} stopped by user.`);
+    // Already cancelled: settle now. Spawning would arm the grace timer with no `close` handler to
+    // clear it, stalling the run for the full grace period on a child nobody is reading from.
+    if (signal?.aborted) {
+      reject(stopped());
+      return;
+    }
+
     const child = runtimeDependencies.spawn(process.execPath, args, {
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, ULIS_NON_INTERACTIVE: "1" },
     });
     let cancelling = false;
     let graceTimer: ReturnType<typeof setTimeout> | undefined;
-    const stopped = () => new Error(`${action} stopped by user.`);
     const abort = () => {
       if (cancelling) return;
       cancelling = true;
@@ -298,10 +316,6 @@ async function runActionInChildProcess(
       }, CHILD_CANCEL_GRACE_MS);
       graceTimer.unref?.();
     };
-    if (signal?.aborted) {
-      abort();
-      return;
-    }
     signal?.addEventListener("abort", abort, { once: true });
 
     const stdout = runtimeDependencies.createInterface({ input: child.stdout });

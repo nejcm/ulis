@@ -4,8 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { __test } from "../install.js";
-import { createTempRoot } from "../test-utils/fs.js";
+import { cleanupTempRoots, createTempRoot } from "../test-utils/fs.js";
 import { parsePresetNames, resolvePresets } from "./resolve-presets.js";
+
+afterEach(cleanupTempRoots);
 
 describe("resolvePresets", () => {
   it("throws in non-interactive mode when a preset is missing", async () => {

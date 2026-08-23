@@ -1,14 +1,15 @@
+// installCmd and presetInstallCmd: generated-config install, Claude agent frontmatter names, remote
+// source cloning and cleanup, global skill scope, SIGINT handling during clone/write (including
+// double-Ctrl-C force-quit and post-clone cleanup-then-exit), preset installs, --yes fast failure,
+// and the declined-overwrite-prompt exit path run through a real child process.
 import { afterEach, describe, expect, it } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 
 import { __test } from "../install.js";
 import { __test as installInterrupt } from "../utils/interrupt.js";
 import { logger as log } from "../utils/logger.js";
-import { buildCmd } from "./build.js";
-import { initCmd } from "./init.js";
 import { installCmd } from "./install.js";
 import { presetInstallCmd } from "./preset.js";
 
@@ -95,83 +96,6 @@ function captureLog(lines: string[]): () => void {
 }
 
 describe("commands", () => {
-  it("initCmd scaffolds a project-local source tree", async () => {
-    const projectRoot = createTempRoot();
-    writeFileSync(join(projectRoot, "package.json"), JSON.stringify({ name: "command-test" }));
-    process.chdir(projectRoot);
-
-    await initCmd();
-
-    expect(existsSync(join(projectRoot, ".ulis", "config.yaml"))).toBe(true);
-    expect(existsSync(join(projectRoot, ".ulis", "extensions.yaml"))).toBe(true);
-    expect(existsSync(join(projectRoot, ".ulis", "agents", ".gitkeep"))).toBe(true);
-    expect(readFileSync(join(projectRoot, ".ulis", "config.yaml"), "utf8")).toContain("name: command-test");
-    expect(readFileSync(join(projectRoot, ".ulis", "extensions.yaml"), "utf8")).toContain("extensions");
-    expect(readFileSync(join(projectRoot, ".gitignore"), "utf8")).toContain("/.ulis/generated/");
-  });
-
-  it("initCmd points global schema refs at the installed package", async () => {
-    const homeRoot = createTempRoot();
-
-    await initCmd({ global: true, homeDir: homeRoot });
-
-    const installedSchemas = pathToFileURL(resolve(join(import.meta.dirname, "../../schemas"))).href;
-    expect(readFileSync(join(homeRoot, ".ulis", "config.yaml"), "utf8")).toContain(
-      `$schema=${installedSchemas}/config.schema.json`,
-    );
-  });
-
-  it("buildCmd writes selected generated output under the project source tree", async () => {
-    const projectRoot = createTempRoot();
-    copyFixtureSource(projectRoot);
-    process.chdir(projectRoot);
-
-    await buildCmd({ target: "claude" });
-
-    expect(existsSync(join(projectRoot, ".ulis", "generated", "claude", "agents", "worker.md"))).toBe(true);
-    expect(existsSync(join(projectRoot, ".ulis", "generated", "opencode"))).toBe(false);
-  });
-
-  it("buildCmd honors explicit --source over project-local source", async () => {
-    const projectRoot = createTempRoot();
-    copyFixtureSource(projectRoot, "custom-source");
-    process.chdir(projectRoot);
-
-    await buildCmd({ source: "custom-source", target: "cursor" });
-
-    expect(existsSync(join(projectRoot, "custom-source", "generated", "cursor", "agents", "worker.mdc"))).toBe(true);
-    expect(existsSync(join(projectRoot, ".ulis", "generated"))).toBe(false);
-  });
-
-  it("buildCmd with an empty target does not default to all platforms", async () => {
-    const projectRoot = createTempRoot();
-    copyFixtureSource(projectRoot);
-    process.chdir(projectRoot);
-
-    await buildCmd({ target: "" });
-
-    expect(existsSync(join(projectRoot, ".ulis", "generated"))).toBe(false);
-  });
-
-  it("buildCmd rejects a remote source before doing any work", async () => {
-    const projectRoot = createTempRoot();
-    copyFixtureSource(projectRoot);
-    process.chdir(projectRoot);
-
-    await expect(buildCmd({ source: "https://github.com/o/r", target: "claude" })).rejects.toThrow(
-      "build writes generated output into the source tree, and a remote source is discarded after the run. " +
-        "Use `ulis install --source <url>` instead.",
-    );
-
-    // Rejected before any work: no clone, no generated output.
-    expect(existsSync(join(projectRoot, ".ulis", "generated"))).toBe(false);
-  });
-
-  it("buildCmd rejects an unsupported protocol instead of pointing at install", async () => {
-    // `ulis install` would refuse `git://` too, so sending the user there would waste a round trip.
-    await expect(buildCmd({ source: "git://github.com/o/r", target: "claude" })).rejects.toThrow(/HTTPS or SSH/u);
-  });
-
   it("installCmd installs generated config into the project platform directory", async () => {
     const projectRoot = createTempRoot();
     copyFixtureSource(projectRoot);
@@ -248,6 +172,29 @@ describe("commands", () => {
     expect(existsSync(join(home, ".mcp.json"))).toBe(false);
   });
 
+  it("installCmd uses global skill scope when the project destination is the user home", async () => {
+    const home = createTempRoot();
+    const sourceDir = copyFixtureSource(home);
+    writeFileSync(join(sourceDir, "skills.yaml"), ['"*":', "  skills:", "    - name: test/skill", ""].join("\n"));
+    process.chdir(home);
+    const commands: Array<{ command: string; args: readonly string[] }> = [];
+    __test.setRuntimeDependencies({
+      async runAsyncCommand(command, args) {
+        commands.push({ command, args });
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    await installCmd({ yes: true, target: "claude", homeDir: home, extensions: false });
+
+    expect(commands).toEqual([
+      {
+        command: "npx",
+        args: ["skills@latest", "add", "test/skill", "-a", "claude-code", "-g", "--yes"],
+      },
+    ]);
+  });
+
   it("installCmd leaves SIGINT alone for a local source", async () => {
     const projectRoot = createTempRoot();
     copyFixtureSource(projectRoot);
@@ -292,18 +239,87 @@ describe("commands", () => {
     expect(exit.exits).toHaveLength(1);
   });
 
-  it("installCmd removes the temp directory when Ctrl-C is pressed twice during the clone", async () => {
+  it("installCmd finishes the current platform and aborts at a write checkpoint", async () => {
+    const projectRoot = createTempRoot();
+    const homeDir = join(projectRoot, "home");
+    process.chdir(projectRoot);
+    const cloned = mockClone();
+    const originalHeader = log.header;
+    const originalDim = log.dim;
+    let writingClaude = false;
+    let interrupted = false;
+    let copiedAfterInterrupt = 0;
+    let clonePresentAtInterrupt = false;
+    const clonePresentAtExit: boolean[] = [];
+    const exit = captureExit({ onExit: () => clonePresentAtExit.push(cloned.some(existsSync)) });
+
+    log.header = (message: string) => {
+      writingClaude = message === "Installing Claude Code";
+    };
+    log.dim = () => {
+      // Platform copies are synchronous, so this directly reaches the handler state a real signal
+      // reaches only at the next await.
+      if (!writingClaude) return;
+      if (interrupted) {
+        copiedAfterInterrupt += 1;
+        return;
+      }
+      interrupted = true;
+      pressCtrlC();
+      clonePresentAtInterrupt = cloned.some(existsSync);
+    };
+
+    try {
+      await expect(
+        installCmd({
+          yes: true,
+          target: ["claude", "codex"],
+          source: "https://github.com/o/r",
+          homeDir,
+          extensions: false,
+          skipExternalSkills: true,
+        }),
+      ).rejects.toThrow("Install stopped by user.");
+    } finally {
+      log.header = originalHeader;
+      log.dim = originalDim;
+      exit.restore();
+    }
+
+    expect(clonePresentAtInterrupt).toBe(true);
+    expect(copiedAfterInterrupt).toBeGreaterThan(0);
+    expect(existsSync(join(projectRoot, ".claude", "agents", "worker.md"))).toBe(true);
+    expect(existsSync(join(projectRoot, ".claude", "skills", "my-skill", "SKILL.md"))).toBe(true);
+    expect(existsSync(join(projectRoot, ".claude", ".ulis-manifest.json"))).toBe(true);
+    expect(existsSync(join(projectRoot, ".codex"))).toBe(false);
+    expect(cloned.map(existsSync)).toEqual([false]);
+    expect(clonePresentAtExit).toEqual([false]);
+    expect(exit.exits).toHaveLength(1);
+
+    await installCmd({
+      yes: true,
+      target: ["claude", "codex"],
+      source: "https://github.com/o/r",
+      homeDir,
+      extensions: false,
+      skipExternalSkills: true,
+    });
+    expect(existsSync(join(projectRoot, ".codex", "agents", "worker.toml"))).toBe(true);
+    expect(cloned.map(existsSync)).toEqual([false, false]);
+  });
+
+  it("installCmd force-quits when Ctrl-C is pressed twice during the clone", async () => {
     const projectRoot = createTempRoot();
     process.chdir(projectRoot);
     const before = process.listenerCount("SIGINT");
     let cloned: string[] = [];
-    // Sample at the instant the real process would have died: the temp dir must already be gone.
-    const survivedAtExit: boolean[] = [];
-    const exit = captureExit({ onExit: () => survivedAtExit.push(cloned.some(existsSync)) });
+    // Sampled at the instant the real process would have died.
+    const handlersAtExit: number[] = [];
+    const exit = captureExit({ onExit: () => handlersAtExit.push(process.listenerCount("SIGINT")) });
 
     cloned = mockClone((dir) => {
       pressCtrlC(); // aborts the clone
-      pressCtrlC(); // arrives before the clone has unwound
+      pressCtrlC(); // arrives before the clone has unwound: force quit
       cpSync(fixturesDir, dir, { recursive: true });
     });
 
@@ -315,11 +331,14 @@ describe("commands", () => {
       exit.restore();
     }
 
-    // The exit must be deferred until after the clone unwound and removed its temp directory.
-    expect(survivedAtExit).toEqual([false]);
+    // Exactly one exit: the second press takes it, and `release()` must not then repeat it.
     expect(exit.exits).toHaveLength(1);
-    expect(cloned.map(existsSync)).toEqual([false]);
+    // The handlers are deregistered before the exit, so a third signal reaches the default handler.
+    expect(handlersAtExit).toEqual([before]);
     expect(process.listenerCount("SIGINT")).toBe(before);
+    // Nothing is installed, and the clone's own unwinding still removes its temp directory here.
+    expect(existsSync(join(projectRoot, ".claude"))).toBe(false);
+    expect(cloned.map(existsSync)).toEqual([false]);
   });
 
   it("installCmd cleans up and stops the run when Ctrl-C lands after the clone", async () => {
@@ -417,6 +436,41 @@ describe("commands", () => {
     expect(existsSync(join(presetDir, "generated"))).toBe(false);
   });
 
+  it("presetInstallCmd uses global skill scope when the project destination is the user home", async () => {
+    const home = createTempRoot();
+    const presetsRoot = join(home, "presets");
+    const bundledPresetsRoot = join(home, "bundled-presets");
+    const presetDir = join(presetsRoot, "team");
+    mkdirSync(presetDir, { recursive: true });
+    mkdirSync(bundledPresetsRoot, { recursive: true });
+    writeFileSync(join(presetDir, "config.yaml"), "version: 1\nname: team\n");
+    writeFileSync(join(presetDir, "skills.yaml"), ['"*":', "  skills:", "    - name: test/skill", ""].join("\n"));
+    process.chdir(home);
+    const commands: Array<{ command: string; args: readonly string[] }> = [];
+    __test.setRuntimeDependencies({
+      async runAsyncCommand(command, args) {
+        commands.push({ command, args });
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    await presetInstallCmd("team", {
+      yes: true,
+      target: "claude",
+      userHome: home,
+      presetsRoot,
+      bundledPresetsRoot,
+      extensions: false,
+    });
+
+    expect(commands).toEqual([
+      {
+        command: "npx",
+        args: ["skills@latest", "add", "test/skill", "-a", "claude-code", "-g", "--yes"],
+      },
+    ]);
+  });
+
   it("presetInstallCmd accepts comma-separated and repeated names in order", async () => {
     const projectRoot = createTempRoot();
     const presetsRoot = join(projectRoot, "presets");
@@ -446,4 +500,42 @@ describe("commands", () => {
     const installedAgent = readFileSync(join(projectRoot, ".claude", "agents", "worker.md"), "utf8");
     expect(installedAgent).toContain("Preset c");
   });
+});
+
+/**
+ * A declined overwrite prompt must be exit code 1, as `docs/CLI.md` documents, and must install
+ * nothing. Driven through a child process because that is the only way to observe the real exit
+ * code, and because the prompt needs a real stdin at EOF — which is also the case that used to hang
+ * forever instead of declining. `confirm` is imported directly by `installCmd`, so there is no
+ * in-process seam to stub without adding one to production code for the test's benefit.
+ */
+describe("installCmd with a declined overwrite prompt", () => {
+  it("exits 1 and installs nothing when stdin is at EOF", async () => {
+    const projectRoot = createTempRoot();
+    copyFixtureSource(projectRoot);
+    // A non-empty platform directory is what triggers the collision prompt.
+    mkdirSync(join(projectRoot, ".claude"), { recursive: true });
+    writeFileSync(join(projectRoot, ".claude", "settings.local.json"), '{"pre": "existing"}');
+
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        join(import.meta.dirname, "../cli.ts"),
+        "install",
+        "--target",
+        "claude",
+        "--skip-external-skills",
+        "--skip-extensions",
+      ],
+      { cwd: projectRoot, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
+    );
+
+    const stderr = await new Response(child.stderr).text();
+    expect(await child.exited).toBe(1);
+    expect(stderr).toContain("Aborted by user.");
+    // Nothing from the source reached the destination, and what was already there is untouched.
+    expect(existsSync(join(projectRoot, ".claude", "agents"))).toBe(false);
+    expect(existsSync(join(projectRoot, ".claude", ".ulis-manifest.json"))).toBe(false);
+    expect(readFileSync(join(projectRoot, ".claude", "settings.local.json"), "utf8")).toBe('{"pre": "existing"}');
+  }, 60_000);
 });

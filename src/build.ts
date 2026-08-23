@@ -1,3 +1,4 @@
+import { rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { ULIS_GENERATED_DIRNAME } from "./config.js";
@@ -9,6 +10,7 @@ import { PLATFORMS, uniquePlatforms } from "./platforms.js";
 import type { Diagnostic } from "./types.js";
 import { logger as defaultLogger } from "./utils/logger.js";
 import { mergeProjects } from "./utils/merge-projects.js";
+import { legacyRootRecordPath } from "./utils/provenance.js";
 import type { ResolvedPreset } from "./utils/resolve-presets.js";
 import { validateCollisions } from "./validators/collisions.js";
 import { validateCrossRefs } from "./validators/cross-refs.js";
@@ -223,11 +225,19 @@ export function runBuild(options: BuildOptions): BuildResult {
 
   const analysis = analyzeProject({ sourceDir, logger, presets: options.presets });
 
+  const remoteUrls = (options.presets ?? []).flatMap((preset) => (preset.remoteUrl ? [preset.remoteUrl] : []));
+
   for (const target of activeTargets) {
     const outDir = join(outputDir, target);
     const result = generate(target, analysis.project);
     if (!result) throw new Error(`No generator registered for platform: ${target}`);
-    writeResult(result, outDir, target, logger);
+    writeResult(result, outDir, target, logger, remoteUrls);
+  }
+
+  // The pre-release root record described the whole generated tree. Only a full build can replace
+  // everything it may have covered, so narrow builds leave the opaque refusal flag in place.
+  if (PLATFORMS.every((platform) => activeTargets.includes(platform))) {
+    rmSync(legacyRootRecordPath(outputDir), { force: true, recursive: true });
   }
 
   logger.header("Build Complete");

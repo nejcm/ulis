@@ -9,6 +9,7 @@ import { initCmd } from "./commands/init.js";
 import { installCmd } from "./commands/install.js";
 import { presetInstallCmd, presetListCmd } from "./commands/preset.js";
 import { tuiCmd } from "./commands/tui.js";
+import { PLATFORMS } from "./platforms.js";
 
 function resolvePackageVersion(): string {
   try {
@@ -26,6 +27,33 @@ function resolvePackageVersion(): string {
     // ignore
   }
   return "0.0.0";
+}
+
+/**
+ * Normalize `--target` at the CLI boundary.
+ *
+ * cac declares the option as `<platforms>` but hands us whatever mri produced: `--target ""` arrives
+ * as the number 0, and `--target ","` as a string carrying no platform name. Both used to reach code
+ * that assumes platform strings - the first threw `value.split is not a function`, the second
+ * silently built nothing and exited 0.
+ */
+function parseTarget(value: unknown): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  const raw = Array.isArray(value) ? (value as unknown[]) : [value];
+  const names = raw
+    .filter((entry): entry is string => typeof entry === "string")
+    .flatMap((entry) =>
+      entry
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean),
+    );
+  if (names.length === 0) {
+    throw new Error(
+      `Invalid --target: no platform name given. Expected a comma-separated platform list (${PLATFORMS.join(", ")}).`,
+    );
+  }
+  return names;
 }
 
 function parseRunner(value: unknown): "npx" | "bunx" | undefined {
@@ -60,7 +88,7 @@ async function main(): Promise<void> {
         global: Boolean(options.global),
         yes: Boolean(options.yes),
         source: options.source,
-        target: options.target,
+        target: parseTarget(options.target),
         rebuild: !options.skipRebuild,
         backup: Boolean(options.backup),
         prune: options.prune !== false,
@@ -81,7 +109,7 @@ async function main(): Promise<void> {
       buildCmd({
         global: Boolean(options.global),
         source: options.source,
-        target: options.target,
+        target: parseTarget(options.target),
         preset: options.preset,
       }),
     );
@@ -104,7 +132,7 @@ async function main(): Promise<void> {
         return presetInstallCmd(names, {
           global: Boolean(options.global),
           yes: Boolean(options.yes),
-          target: options.target,
+          target: parseTarget(options.target),
           backup: Boolean(options.backup),
           prune: options.prune !== false,
           runner: parseRunner(options.runner),
@@ -120,12 +148,20 @@ async function main(): Promise<void> {
   cli.help();
   cli.version(resolvePackageVersion());
 
-  cli.parse(process.argv, { run: false });
+  const { options } = cli.parse(process.argv, { run: false });
 
-  // No subcommand → print help
+  // cac services --help/--version during parse and then clears matchedCommand, so without this
+  // guard both would fall through into the unmatched-command path below and print help again.
+  if (options.help === true || options.version === true) return;
+
   if (!cli.matchedCommand) {
-    cli.outputHelp();
-    return;
+    const [command] = cli.args;
+    // No argv at all is a request for help; argv that matches nothing is a user error.
+    if (command === undefined) {
+      cli.outputHelp();
+      return;
+    }
+    throw new Error(`Unknown command: "${String(command)}". Run \`ulis --help\` to see the available commands.`);
   }
 
   await cli.runMatchedCommand();

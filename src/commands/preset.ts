@@ -79,7 +79,7 @@ export async function presetInstallCmd(
     );
     guard.onCleanup(cleanup);
 
-    const collisions = detectInstallCollisions(destBase, targets, Boolean(options.global), userHome);
+    const collisions = detectInstallCollisions(destBase, targets, userHome);
     if (collisions.length > 0 && !options.yes) {
       log.warn("The following folders already exist and will be modified/overwritten:");
       for (const path of collisions) {
@@ -87,27 +87,30 @@ export async function presetInstallCmd(
       }
       const confirmed = await confirm("Continue?");
       if (!confirmed) {
-        log.info("Aborted by user.");
-        return;
+        // Thrown rather than returned: a declined prompt is exit code 1 (see docs/CLI.md), and a
+        // closed stdin declines, so a scripted run must not read as a successful install.
+        throw new Error("Aborted by user.");
       }
     }
 
-    await runPresetInstall({
-      destBase,
-      globalInstall: Boolean(options.global),
-      platforms: targets,
-      backup: options.backup ?? false,
-      prune: options.prune ?? true,
-      logger: log,
-      presets,
-      runner: options.runner,
-      installExtensions: options.extensions ?? true,
-      installSkills: !options.skipExternalSkills,
-      userHome,
-      remoteSources: presets.flatMap((preset) => (preset.remoteUrl ? [preset.remoteUrl] : [])),
-      nonInteractive: options.yes ?? false,
-      signal: guard.signal,
-    });
+    await guard.track(() =>
+      runPresetInstall({
+        destBase,
+        globalInstall: options.global === true ? true : undefined,
+        platforms: targets,
+        backup: options.backup ?? false,
+        prune: options.prune ?? true,
+        logger: log,
+        presets,
+        runner: options.runner,
+        installExtensions: options.extensions ?? true,
+        installSkills: !options.skipExternalSkills,
+        userHome,
+        remoteSources: presets.flatMap((preset) => (preset.remoteUrl ? [preset.remoteUrl] : [])),
+        nonInteractive: options.yes ?? false,
+        signal: guard.signal,
+      }),
+    );
   } finally {
     guard.release();
   }

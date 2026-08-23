@@ -7,7 +7,7 @@ pageClass: ulis-landing-page
 <div class="ulis-landing">
 
   <section class="ul-hero">
-    <div data-reveal class="ul-badge">v0.0.30 · ISC</div>
+    <div data-reveal class="ul-badge">v{{ version }} · {{ license }}</div>
     <h1 data-reveal data-delay="90">One config source to <span class="ul-accent">rule them all</span>.</h1>
     <p data-reveal data-delay="170" class="ul-sub">Five AI coding tools. Five bespoke dotfile formats. One neutral model in <span class="ul-hl">.ulis/</span> that compiles into all of them.</p>
     <div data-reveal data-delay="250" class="ul-cta-row">
@@ -40,21 +40,26 @@ pageClass: ulis-landing-page
         <div class="ul-eyebrow">.ulis/</div>
         <div class="ul-tree-body">
           <div class="ul-accent">.ulis/</div>
-          <div>├── agents/<span class="ul-dim">        reviewer.md · planner.md</span></div>
-          <div>├── skills/<span class="ul-dim">        release.md · triage.md</span></div>
-          <div>├── mcp/<span class="ul-dim">           github.yaml · fs.yaml</span></div>
+          <div>├── agents/<span class="ul-dim">        security.md · tester.md</span></div>
+          <div>├── skills/<span class="ul-dim">        code-quality/SKILL.md</span></div>
+          <div>├── commands/</div>
+          <div>├── rules/</div>
+          <div>├── raw/<span class="ul-dim">           passthrough files</span></div>
+          <div>├── config.yaml</div>
+          <div>├── mcp.yaml</div>
           <div>├── permissions.yaml</div>
-          <div>└── ulis.yaml</div>
+          <div>├── skills.yaml</div>
+          <div>└── extensions.yaml</div>
         </div>
       </div>
       <div data-reveal data-delay="120" class="ul-tree ul-tree-right">
         <div class="ul-eyebrow">generated/</div>
         <div class="ul-tree-body">
-          <div>├── .claude/<span class="ul-dim">       agents · skills · settings.json</span></div>
-          <div>├── .codex/<span class="ul-dim">        config.toml · prompts</span></div>
-          <div>├── .cursor/<span class="ul-dim">       rules · mcp.json</span></div>
-          <div>├── .opencode/<span class="ul-dim">     opencode.json</span></div>
-          <div>└── .forge/<span class="ul-dim">        forge.yaml</span></div>
+          <div>├── claude/<span class="ul-dim">        agents · skills · settings.json</span></div>
+          <div>├── codex/<span class="ul-dim">         agents · skills · config.toml</span></div>
+          <div>├── cursor/<span class="ul-dim">        rules · mcp.json · permissions.json</span></div>
+          <div>├── opencode/<span class="ul-dim">      agents · skills · opencode.json</span></div>
+          <div>└── forgecode/<span class="ul-dim">     AGENTS.md · .forge/</span></div>
         </div>
       </div>
     </div>
@@ -72,19 +77,20 @@ pageClass: ulis-landing-page
 
 <script setup>
 import { onMounted, onUnmounted } from 'vue'
+// Read straight from package.json so the badge cannot drift from the released version.
+import { version, license } from '../package.json'
 
 const targets = [
   { name: 'Claude Code', path: '.claude/' },
   { name: 'Codex', path: '.codex/' },
-  { name: 'Cursor', path: '.cursor/rules' },
+  { name: 'Cursor', path: '.cursor/' },
   { name: 'OpenCode', path: '.opencode/' },
   { name: 'ForgeCode', path: '.forge/' },
 ]
 const steps = [
   { cmd: 'ulis init', title: 'Scaffold', body: 'Creates the canonical .ulis/ tree with sane defaults for agents, skills, MCP and permissions.' },
-  { cmd: 'ulis check', title: 'Validate', body: 'Schema parse, collision detection and reference resolution — fails fast before anything is written.' },
-  { cmd: 'ulis build', title: 'Compile', body: 'Emits native config for every target into /generated/ so you can diff before you ship.' },
-  { cmd: 'ulis install', title: 'Deploy', body: 'Writes each output into the directory layout the tool expects. Idempotent and reversible.' },
+  { cmd: 'ulis build', title: 'Compile', body: 'Schema parse, collision detection and reference resolution, then native config for every target into <source>/generated/ so you can diff before you ship.' },
+  { cmd: 'ulis install', title: 'Deploy', body: 'Copies each generated tree into the directory the tool expects, tracking what it wrote so a later install can prune what you removed.' },
 ]
 
 let io
@@ -284,7 +290,7 @@ body:has(.ulis-landing-page) {
 }
 .ul-pipeline { max-width: 1280px; margin: 0 auto; padding: 56px 24px 60px; }
 .ul-eyebrow { font-size: 11.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ul-dim); margin-bottom: 26px; }
-.ul-pipe-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border: 1px solid var(--ul-line); }
+.ul-pipe-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--ul-line); }
 .ul-pipe-step {
   padding: 28px 24px 32px; border-right: 1px solid var(--ul-line); display: flex; flex-direction: column; gap: 10px;
   background: rgba(255,255,255,0.015); transition: background-color .15s;

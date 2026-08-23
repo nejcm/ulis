@@ -1,5 +1,5 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 import { applySkillFrontmatterOverrides, toPlatformSkillMarkdown } from "./skill-frontmatter.js";
 
@@ -20,15 +20,16 @@ export function fileExists(filePath: string): boolean {
   return existsSync(filePath);
 }
 
-export function copyDir(src: string, dest: string): void {
+export function copyDir(src: string, dest: string, shouldCopy?: (relativePath: string) => boolean): void {
   ensureDir(dest);
-  cpSync(src, dest, { recursive: true });
+  cpSync(src, dest, {
+    recursive: true,
+    filter: shouldCopy ? (source) => source === src || shouldCopy(relative(src, source)) : undefined,
+  });
 }
 
 export function cleanDir(dirPath: string): void {
-  if (existsSync(dirPath)) {
-    rmSync(dirPath, { recursive: true, force: true });
-  }
+  rmSync(dirPath, { recursive: true, force: true });
   ensureDir(dirPath);
 }
 

@@ -1,15 +1,17 @@
 import { join } from "node:path";
 
-import type { McpConfig, PermissionsConfig, UlisConfig } from "../schema.js";
+import type { ExtensionsConfig, McpConfig, PermissionsConfig, SkillsConfig, UlisConfig } from "../schema.js";
 import { AgentFrontmatterSchema, RuleFrontmatterSchema, UlisConfigSchema } from "../schema.js";
 import { loadValidatedConfigFile } from "../utils/config-loader.js";
 import { ParseAggregateError, ParseError, readMarkdownDir } from "./_shared.js";
 import { resolveAgentName, type ParsedAgent } from "./agent.js";
+import { loadExtensions } from "./extensions.js";
 import { loadMcp } from "./mcp.js";
 import { loadPermissions } from "./permissions.js";
 import type { ParsedRule } from "./rule.js";
 import type { ParsedSkill } from "./skill.js";
 import { collectSkills } from "./skill.js";
+import { loadSkills } from "./skills.js";
 
 // Re-export individual parsers and types for callers that need them directly
 export { ParseAggregateError, ParseError } from "./_shared.js";
@@ -28,6 +30,8 @@ export interface ParsedProject {
   readonly rules: readonly ParsedRule[];
   readonly mcp: McpConfig;
   readonly permissions: PermissionsConfig | undefined;
+  readonly skillsConfig: SkillsConfig;
+  readonly extensionsConfig: ExtensionsConfig;
   readonly ulisConfig: UlisConfig;
   readonly sourceDir: string;
   readonly sourceDirs?: readonly string[];
@@ -86,6 +90,10 @@ export function parseProject(sourceDir: string, options: ParseProjectOptions = {
   );
   const mcp = collectConfigError(allErrors, () => loadMcp(sourceDir, { source, sourceDir }), { servers: {} });
   const permissions = collectConfigError(allErrors, () => loadPermissions(sourceDir, { source, sourceDir }), {});
+  // The trust gate reads its execution surface off these two files, so a malformed one has to
+  // surface here as a diagnostic rather than as a bare Error at install time.
+  const skillsConfig = collectConfigError(allErrors, () => loadSkills(sourceDir, { source, sourceDir }), {});
+  const extensionsConfig = collectConfigError(allErrors, () => loadExtensions(sourceDir, { source, sourceDir }), {});
 
   if (allErrors.length > 0) throw new ParseAggregateError(allErrors);
 
@@ -95,6 +103,8 @@ export function parseProject(sourceDir: string, options: ParseProjectOptions = {
     rules: rulesResult.items,
     mcp,
     permissions,
+    skillsConfig,
+    extensionsConfig,
     ulisConfig,
     sourceDir,
     sourceDirs: [sourceDir],

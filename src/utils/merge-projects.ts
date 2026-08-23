@@ -1,4 +1,6 @@
+import { mergeExtensionsConfigs } from "../parsers/extensions.js";
 import type { ParsedProject } from "../parsers/index.js";
+import { mergeSkillsConfigs } from "../parsers/skills.js";
 import type { McpConfig, PermissionsConfig } from "../schema.js";
 
 /**
@@ -21,11 +23,27 @@ function mergeMcp(configs: readonly McpConfig[]): McpConfig {
   return { servers };
 }
 
+/**
+ * Deduplicate a list while preserving first-occurrence order, so a single
+ * source repeating an entry doesn't produce duplicate rule strings.
+ */
+function dedupeList(items: readonly string[] | undefined): string[] | undefined {
+  if (items === undefined) return undefined;
+  return [...new Set(items)];
+}
+
 function mergePermissions(configs: readonly (PermissionsConfig | undefined)[]): PermissionsConfig | undefined {
   const defined = configs.filter((c): c is NonNullable<PermissionsConfig> => c != null);
   if (defined.length === 0) return undefined;
 
-  // Last-wins merge for scalars; array concatenation for allow/deny/ask lists.
+  // Base-wins override for every field, including the allow/deny/ask/allowlist
+  // lists: a layer that declares a list field replaces the value inherited
+  // from lower layers outright (no append), and a layer that omits the field
+  // leaves the inherited value untouched. The `{...a, ...b}` spread already
+  // gives this for free — Zod omits undeclared optional keys rather than
+  // setting them to `undefined` — but the list fields are spread out
+  // explicitly below so "declared empty clears it, declaring dedupes it" is
+  // visible in the code instead of relying on that spread behavior silently.
   const result: NonNullable<PermissionsConfig> = {};
 
   for (const config of defined) {
@@ -33,13 +51,10 @@ function mergePermissions(configs: readonly (PermissionsConfig | undefined)[]): 
       result.claude = {
         ...result.claude,
         ...config.claude,
-        allow: [...(result.claude?.allow ?? []), ...(config.claude.allow ?? [])],
-        deny: [...(result.claude?.deny ?? []), ...(config.claude.deny ?? [])],
-        ask: [...(result.claude?.ask ?? []), ...(config.claude.ask ?? [])],
-        additionalDirectories: [
-          ...(result.claude?.additionalDirectories ?? []),
-          ...(config.claude.additionalDirectories ?? []),
-        ],
+        allow: dedupeList(config.claude.allow) ?? result.claude?.allow,
+        deny: dedupeList(config.claude.deny) ?? result.claude?.deny,
+        ask: dedupeList(config.claude.ask) ?? result.claude?.ask,
+        additionalDirectories: dedupeList(config.claude.additionalDirectories) ?? result.claude?.additionalDirectories,
       };
     }
     if (config?.opencode) result.opencode = { ...result.opencode, ...config.opencode };
@@ -48,8 +63,8 @@ function mergePermissions(configs: readonly (PermissionsConfig | undefined)[]): 
       result.cursor = {
         ...result.cursor,
         ...config.cursor,
-        mcpAllowlist: [...(result.cursor?.mcpAllowlist ?? []), ...(config.cursor.mcpAllowlist ?? [])],
-        terminalAllowlist: [...(result.cursor?.terminalAllowlist ?? []), ...(config.cursor.terminalAllowlist ?? [])],
+        mcpAllowlist: dedupeList(config.cursor.mcpAllowlist) ?? result.cursor?.mcpAllowlist,
+        terminalAllowlist: dedupeList(config.cursor.terminalAllowlist) ?? result.cursor?.terminalAllowlist,
       };
     }
   }
@@ -78,6 +93,12 @@ export function mergeProjects(projects: readonly ParsedProject[]): ParsedProject
     rules: deduplicateByName(allRules),
     mcp: mergeMcp(projects.map((p) => p.mcp)),
     permissions: mergePermissions(projects.map((p) => p.permissions)),
+    // Reuse the install-path mergers rather than re-deriving the semantics here: install builds the
+    // same two configs directly from the loaders, and the two paths must not diverge. These merge
+    // per-entry by identity (key ?? name), base-wins on conflict — see mergeSkillsConfigs/
+    // mergeExtensionsConfigs for the full rationale.
+    skillsConfig: mergeSkillsConfigs(projects.map((p) => p.skillsConfig)),
+    extensionsConfig: mergeExtensionsConfigs(projects.map((p) => p.extensionsConfig)),
     ulisConfig: base.ulisConfig,
     sourceDir: base.sourceDir,
     sourceDirs: projects.flatMap((project) => project.sourceDirs ?? [project.sourceDir]),

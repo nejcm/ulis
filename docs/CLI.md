@@ -6,7 +6,11 @@ title: CLI Reference
 
 `ulis <command> [options]`
 
-Running `ulis` with no command prints help. All commands exit non-zero on error with a message on stderr.
+Running `ulis` with no command prints help and exits 0. An unrecognised command exits 1 with a message on
+stderr. All commands exit non-zero on error with a message on stderr.
+
+`--target` must name at least one platform: an empty or comma-only value (`--target ""`, `--target ","`)
+is rejected with a non-zero exit rather than building nothing.
 
 ---
 
@@ -41,12 +45,12 @@ Parse, validate, and generate configs into `<source>/generated/<platform>/` with
 ulis build [-g | --global] [--source <path>] [--target <platforms>] [--preset <names>]
 ```
 
-| Flag                   | Effect                                                                                                                                              |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-g`, `--global`       | Read from `~/.ulis/` instead of `./.ulis/`.                                                                                                         |
-| `--source <path>`      | Explicit source path. Takes precedence over `--global`. A git URL is refused here — see [Remote Sources](/guide/remote-sources).                    |
-| `--target <platforms>` | Comma-separated subset of `claude,codex,cursor,opencode,forgecode`. Default: all.                                                                   |
-| `--preset <names>`     | Apply preset(s) before the base source (comma-separated). Resolved from `~/.ulis/presets/<name>/` first, then bundled presets shipped with the CLI. |
+| Flag                   | Effect                                                                                                                                                                                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `-g`, `--global`       | Read from `~/.ulis/` instead of `./.ulis/`.                                                                                                                                                                                                |
+| `--source <path>`      | Explicit source path. Takes precedence over `--global`. A git URL is refused here — see [Remote Sources](/guide/remote-sources).                                                                                                           |
+| `--target <platforms>` | Comma-separated subset of `claude,codex,cursor,opencode,forgecode`. Default: all. Must name at least one platform.                                                                                                                         |
+| `--preset <names>`     | Apply preset(s) before the base source (comma-separated). Resolved from `~/.ulis/presets/<name>/` first, then bundled presets shipped with the CLI. A name may also be a git repository URL — see [Remote Sources](/guide/remote-sources). |
 
 Output is always written under `<source>/generated/<platform>/`. Existing contents there are cleared before each build.
 
@@ -77,19 +81,19 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
              [--skip-extensions] [--skip-external-skills]
 ```
 
-| Flag                     | Effect                                                                                                                                                     |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `-g`, `--global`         | Read `~/.ulis/` and write to `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.config/opencode/` (Windows: `%USERPROFILE%\.config\opencode\`), and `~/.forge/`. |
-| `--source <path>`        | Override source (still writes to CWD or home depending on `--global`). Accepts a git URL — see [Remote Sources](/guide/remote-sources).                    |
-| `--target <platforms>`   | Only build/install the listed platforms.                                                                                                                   |
-| `-y`, `--yes`            | Skip the "about to overwrite" confirmation prompt — **and the remote-source trust gate**. See [Remote Sources](/guide/remote-sources#the-trust-gate).      |
-| `--skip-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`.                                                                                   |
-| `--backup`               | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.                                                                          |
-| `--no-prune`             | Keep agents and local skills from the previous ULIS install; retained stale entries become unmanaged.                                                      |
-| `--preset <names>`       | Same resolution as `ulis build --preset` (user-global directory, then bundled), or a git URL.                                                              |
-| `--runner <npx\|bunx>`   | Package runner used for `extensions.yaml` entries. `npx` or `bunx`. Overrides `runner` in `config.yaml`. Default: auto-detect (`bunx` if present).         |
-| `--skip-extensions`      | Skip running entries from `extensions.yaml`. Useful in CI where network installs are not desired.                                                          |
-| `--skip-external-skills` | Skip installing external skills declared in `skills.yaml`. Useful in CI where network installs are not desired.                                            |
+| Flag                     | Effect                                                                                                                                                                                                                                                                   |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `-g`, `--global`         | Read `~/.ulis/` and write to `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.config/opencode/` (Windows: `%USERPROFILE%\.config\opencode\`), and `~/.forge/`.                                                                                                               |
+| `--source <path>`        | Override source (still writes to CWD or home depending on `--global`). Accepts a git URL — see [Remote Sources](/guide/remote-sources).                                                                                                                                  |
+| `--target <platforms>`   | Only build/install the listed platforms.                                                                                                                                                                                                                                 |
+| `-y`, `--yes`            | Skip the "about to overwrite" confirmation prompt — **and the remote-source trust gate**, for a source this run resolves itself. It does **not** override the `--skip-rebuild` refusal below. See [Remote Sources](/guide/remote-sources#the-trust-gate).                |
+| `--skip-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`. Refused (`-y` included) if that output was built from a remote source: there is no clone left to preview, so re-run with `--preset <url>` instead. See [Remote Sources](/guide/remote-sources). |
+| `--backup`               | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.                                                                                                                                                                                        |
+| `--no-prune`             | Keep agents and local skills from the previous ULIS install; retained stale entries become unmanaged.                                                                                                                                                                    |
+| `--preset <names>`       | Same resolution as `ulis build --preset` (user-global directory, then bundled), or a git URL.                                                                                                                                                                            |
+| `--runner <npx\|bunx>`   | Package runner used for `extensions.yaml` entries. `npx` or `bunx`. Overrides `runner` in `config.yaml`. Default: auto-detect (`bunx` if present).                                                                                                                       |
+| `--skip-extensions`      | Skip running entries from `extensions.yaml`. Useful in CI where network installs are not desired.                                                                                                                                                                        |
+| `--skip-external-skills` | Skip installing external skills declared in `skills.yaml`. Useful in CI where network installs are not desired.                                                                                                                                                          |
 
 **Preset resolution:** Each name maps to a directory. ULIS checks `~/.ulis/presets/<name>/` first; if that folder is missing, it uses the matching bundled preset next to the CLI (`dist/presets/` when installed). A preset in your home tree with the same folder name **shadows** the bundled one. Multiple `--preset` values merge **left to right**, then the base source (from `--source`, `./.ulis/`, or `~/.ulis/`) is applied last — **the base wins on conflicts**. Interactive runs prompt to continue when a name is missing; with `--yes`, missing presets fail immediately.
 
@@ -103,9 +107,39 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 | Cursor    | generated `agents/` and `skills/` entries by name                            | `mcp.json` `mcpServers`                                                                                        |
 | ForgeCode | generated `.forge/agents` and `.forge/skills` entries by name; `AGENTS.md`   | `.forge/.mcp.json` `mcpServers`, `.forge.toml`                                                                 |
 
-Install records generated agents and local skills in `.ulis-manifest.json` at each selected platform config root. On the first manifest-aware install, ULIS adopts the current set and removes nothing. Later installs remove previously tracked paths that are no longer generated, including platform-disabled entries, while preserving every untracked agent or skill. Manifest validation for all selected platforms completes before any destination is modified. Unselected platforms are untouched. `--no-prune` keeps stale paths but refreshes ownership to the current set. External `skills.yaml` installs are not tracked.
+Install records generated agents, local skills, and root entries in `.ulis-manifest.json` at each selected platform config root. Version 1 manifests migrate without sweeping root entries. On the first manifest-aware install, ULIS adopts the current set and removes nothing. Later installs remove previously tracked paths that are no longer generated, including platform-disabled entries, while preserving every untracked entry. Agent and skill ownership is entry-granular; OpenCode root-directory ownership is directory-granular, so pruning a stale managed root directory removes everything inside it. Manifest validation for all selected platforms completes before any destination is modified. Unselected platforms are untouched. `--no-prune` keeps stale paths but refreshes ownership to the current set. External `skills.yaml` installs are not tracked.
 
 For Codex `config.toml`, Claude `settings.json` / `settings.local.json`, and global `.claude.json`, the existing file is the base: generated values overwrite only matching paths, while absent values remain. Other native configs retain their allowlisted preservation rules. Raw fragments win through the generated output because raw is merged during build. If `--backup` is set, backups include the previous manifest and managed entries before pruning.
+
+### `.env` loading
+
+Before it runs anything, install loads `.env` files into its **own** environment. The child processes it
+later spawns for `extensions.yaml` and `skills.yaml` entries inherit that environment.
+
+Two files are read, in this order (`src/install.ts`, `loadDotEnv`):
+
+1. `<destBase>/.env` — the destination base, i.e. the current directory for a project install or your home directory for `--global`.
+2. `<source>/.env` — the source tree being installed.
+
+Precedence, in full:
+
+- A variable already present in the environment always wins. `.env` only ever **adds** keys, never overwrites one.
+- Because of that, `<destBase>/.env` is read first and therefore wins over `<source>/.env` for the same key.
+- Keys added by either file are removed again when the install finishes, so an in-process install (the TUI) does not leak them into the rest of the session.
+
+Parsing is deliberately minimal: `KEY=value` per line, `#` comments and blank lines skipped, lines with
+no `=` skipped, and one matching pair of surrounding single or double quotes stripped. There is no
+variable expansion, no `export` prefix and no multi-line values.
+
+**Remote sources:** when the source was cloned from a git URL, its `.env` is **not read at all**, and
+the install logs `Skipped the source tree's .env: a remote source's .env is never read.` A cloned `.env`
+is written by whoever owns that repository; reading it would let a repository author set the variables
+that decide where `npx`/`bunx` find and fetch code — `PATH`, `HOME`, `NODE_*`, `npm_*`, `BUN_*`,
+`GIT_*`, `SSH_*`, proxy variables — and so hijack the very commands you approved at the trust gate.
+`<destBase>/.env` is still read, since that file is yours. The same denylist is applied defensively to a
+**local** source's `.env` whenever any remote preset is part of the run.
+
+Preset-only install (`ulis preset install <names...>`) reads `<destBase>/.env` only — it has no single source tree.
 
 ---
 
@@ -139,7 +173,7 @@ The layout is responsive: at 96 columns or wider the plan screen shows actions t
 `ulis tui` renders through [OpenTUI](https://github.com/sst/opentui), whose renderer is only available through Bun's FFI. Every other command runs on Node as usual.
 
 - Under Bun, the TUI runs in-process.
-- Under Node, the CLI locates a `bun` executable (`BUN_INSTALL`, `~/.bun/bin`, then `PATH`), launches the TUI with it in the same working directory and environment, forwards `SIGINT`/`SIGTERM`/`SIGHUP`, and exits with the child's status.
+- Under Node, the CLI locates a `bun` executable (`BUN_INSTALL`, `~/.bun/bin`, then `PATH`), launches the TUI with it in the same working directory and environment, forwards `SIGINT`/`SIGTERM`/`SIGHUP`/`SIGQUIT`, and exits with the child's status.
 - If Bun is not installed, `ulis tui` prints an installation hint and exits with code 1. Use `ulis build`, `ulis install`, and `ulis preset` instead.
 
 Preferences (last-used source, destination, platforms, presets, and install options) persist to `.ulis-tui.json` in your home directory and are only read by the TUI.
@@ -160,7 +194,7 @@ ulis preset install <names...> [-g | --global] [--target <platforms>]
 
 `-l` / `--list` is accepted. The default action is `list`. Each line shows the directory name (what you pass to `--preset`), a `user` or `bundled` label, optional `name` / `description` from `preset.yaml`, and the display title when it differs from the folder name.
 
-`ulis preset install <names...>` installs selected presets **without** merging a project or global source. Names may be comma-separated (`a,b`) or repeated (`a b`) and are merged in the order given. Generated output is temporary and is removed after install.
+`ulis preset install <names...>` installs selected presets **without** merging a project or global source. Names may be comma-separated (`a,b`) or repeated (`a b`) and are merged in the order given. A name may be a user-global or bundled preset directory, or a git repository URL, which is cloned for the run and then discarded — see [Remote Sources](/guide/remote-sources). Generated output is temporary and is removed after install.
 
 | Flag                     | Effect                                                                                       |
 | ------------------------ | -------------------------------------------------------------------------------------------- |
@@ -177,12 +211,22 @@ ulis preset install <names...> [-g | --global] [--target <platforms>]
 
 ## Exit codes
 
-| Code | Meaning                                                                 |
-| ---- | ----------------------------------------------------------------------- |
-| 0    | Success.                                                                |
-| 1    | Source missing, validation error, user declined prompt, or I/O failure. |
+| Code | Meaning                                                                                                                                                                                              |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | Success. Also an interactive **no** at the [trust gate](/guide/remote-sources#the-trust-gate), which installs nothing but is a choice.                                                               |
+| 1    | Source missing, validation error, declined overwrite prompt, a trust gate that cannot be asked (no terminal, no `-y`), I/O failure, or one or more `skills.yaml`/`extensions.yaml` commands failing. |
 
 All errors print a single human-readable line on stderr before exiting.
+
+A stdin that reaches end of input without an answer (`ulis install < /dev/null`, a detached CI job)
+declines rather than waiting, so an unattended run that would have needed an answer exits 1 instead
+of hanging.
+
+A piped answer still answers ordinary prompts — but it must end with a newline. `printf 'y\n' | ulis
+install` is a yes; `printf 'y' | ulis install` is a **no**, because the final partial line never
+reaches the reader before stdin closes. It never answers the trust gate, which requires a real
+terminal: without one the run fails with exit 1 rather than quietly installing nothing. Pass `-y` to
+accept both up front.
 
 ---
 
@@ -208,7 +252,8 @@ Dry-run against a fixture without touching home:
 ulis build --source ./example
 ```
 
-Reinstall from an existing build without regenerating:
+Reinstall from an existing build without regenerating (refused if that build came from a remote
+source — see [Remote Sources](/guide/remote-sources)):
 
 ```bash
 ulis install --skip-rebuild --yes

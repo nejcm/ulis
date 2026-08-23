@@ -37,15 +37,7 @@ export const PLATFORM_DESCRIPTIONS: Record<Platform, string> = {
 
 export const PLATFORM_DIRS: Record<Platform, PlatformDirsEntry> = {
   claude: { home: ".claude", project: ".claude" },
-  opencode: {
-    home: {
-      win32: ".config/opencode",
-      linux: "opencode",
-      darwin: "opencode",
-      default: "opencode",
-    },
-    project: ".opencode",
-  },
+  opencode: { home: ".config/opencode", project: ".opencode" },
   codex: { home: ".codex", project: ".codex" },
   cursor: { home: ".cursor", project: ".cursor" },
   forgecode: { home: ".forge", project: ".forge" },

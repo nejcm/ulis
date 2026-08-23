@@ -3,11 +3,12 @@ import { tmpdir } from "node:os";
 import { basename, join, relative } from "node:path";
 
 import type { Logger } from "../build.js";
-import { formatCommandFailure, runCommand, runSkillCommand } from "../install.js";
+import { REMOTE_CLONE_DIRNAME_PREFIX } from "../config.js";
+import { formatCommandFailure, runCommand, runSkillCommand } from "../install/runner.js";
 import { PresetMetaSchema } from "../schema.js";
 import { commandExists } from "./command.js";
 import { loadConfigFile } from "./config-loader.js";
-import { hasUnredactableCredential, redactUserinfo, sanitizeLogText } from "./redact.js";
+import { hasControlChars, hasUnredactableCredential, redactUserinfo, sanitizeLogText } from "./redact.js";
 
 export interface RemoteSource {
   /** Clone root (or its subdir), ready for the existing code paths. */
@@ -93,7 +94,7 @@ export async function fetchRemoteSource(
     );
   }
 
-  const tempRoot = mkdtempSync(join(tmpdir(), "ulis-remote-"));
+  const tempRoot = mkdtempSync(join(tmpdir(), REMOTE_CLONE_DIRNAME_PREFIX));
   // Never throws: callers run cleanups in a `while (cleanups.length) cleanups.pop()!()` loop and in
   // the `catch` below, where a throw would strand the remaining temp dirs or mask the real error.
   // Windows holds `.git` pack files open for a moment after git exits, so retry before giving up.
@@ -101,7 +102,7 @@ export async function fetchRemoteSource(
     try {
       rmSync(tempRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
     } catch {
-      // ponytail: a wedged handle leaks one temp dir under the OS temp root; the OS reclaims it.
+      // A wedged handle leaks one temp dir under the OS temp root; the OS reclaims it.
     }
   };
   try {
@@ -160,7 +161,7 @@ function runGit(command: string, args: readonly string[], signal: AbortSignal) {
     },
     signal,
     // A hung clone is the failure users hit; SIGTERM leaves git free to ignore it and outlive the
-    // 60s timeout. ponytail: this kills the direct child only — a `git-remote-https`/`ssh`
+    // 60s timeout. This kills the direct child only — a `git-remote-https`/`ssh`
     // grandchild can outlive it on Windows, where signals do not reach the process tree.
     killSignal: "SIGKILL",
   });
@@ -227,6 +228,10 @@ function decodeSegment(segment: string): string {
  */
 function checkSubdir(segments: readonly string[]): string {
   for (const segment of segments) {
+    // `%00` passes the raw-URL check in `parseRepoUrl` and only becomes a control character here.
+    // A NUL reaching `join`/`statSync` throws a TypeError carrying the whole argument instead of
+    // the message that check exists to produce.
+    rejectControlChars(segment, "subdirectory");
     if (segment === "." || segment === ".." || /[/\\:]/u.test(segment)) {
       throw new Error(`Remote source subdirectory must stay inside the repository: ${segments.join("/")}`);
     }
@@ -234,7 +239,17 @@ function checkSubdir(segments: readonly string[]): string {
   return segments.join("/");
 }
 
+/** Deliberately echoes nothing: the offending text is exactly what must not reach a terminal. */
+function rejectControlChars(value: string, label: string): void {
+  if (hasControlChars(value)) {
+    throw new Error(`Remote source ${label} must not contain control characters, percent-encoded or not.`);
+  }
+}
+
 function withCheckedRef(parsed: ParsedRepoUrl): ParsedRepoUrl {
+  // Same reason as `checkSubdir`: a web URL's ref is percent-decoded, so `%00` only shows up now -
+  // and this ref goes straight into `git clone --branch` argv.
+  if (parsed.ref) rejectControlChars(parsed.ref, "ref");
   if (parsed.ref && COMMIT_SHA.test(parsed.ref)) {
     throw new Error(`Remote source refs must be a branch or a tag, not a commit SHA: ${parsed.ref}`);
   }

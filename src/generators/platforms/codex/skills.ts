@@ -3,9 +3,12 @@ import { join } from "node:path";
 import type { ParsedSkill } from "../../../parsers/skill.js";
 import { fileExists, readFile } from "../../../utils/fs.js";
 import { toPlatformSkillMarkdown } from "../../../utils/skill-frontmatter.js";
-import { extraToYamlLines } from "../../shared/yaml.js";
+import { partitionReservedExtras, serializeYamlLines, toYamlComment } from "../../shared/yaml.js";
 import type { FileArtifact } from "../../types.js";
 import { toYamlString } from "./format.js";
+
+/** Root keys this generator emits itself; a pass-through field may not claim one. */
+const RESERVED_SECTIONS = ["model", "interface", "policy", "dependencies"];
 
 export function buildCodexSkillArtifacts(skill: ParsedSkill): FileArtifact[] {
   const artifacts: FileArtifact[] = [];
@@ -72,14 +75,14 @@ export function buildCodexSkillArtifacts(skill: ParsedSkill): FileArtifact[] {
     }
 
     yamlLines.push("policy:");
-    yamlLines.push(`  allow_implicit_invocation: ${fm?.allowImplicitInvocation}`);
+    yamlLines.push(`  allow_implicit_invocation: ${fm?.allowImplicitInvocation !== false}`);
     yamlLines.push("");
 
     if (hasDeps) {
       yamlLines.push("dependencies:");
       yamlLines.push("  tools:");
       for (const dep of codexPlatform!.mcpDependencies!) {
-        yamlLines.push(`    - type: ${dep.type}`);
+        yamlLines.push(`    - type: ${toYamlString(dep.type)}`);
         yamlLines.push(`      value: ${toYamlString(dep.value)}`);
         if (dep.description) yamlLines.push(`      description: ${toYamlString(dep.description)}`);
         if (dep.transport) yamlLines.push(`      transport: ${toYamlString(dep.transport)}`);
@@ -87,7 +90,12 @@ export function buildCodexSkillArtifacts(skill: ParsedSkill): FileArtifact[] {
       }
     }
 
-    yamlLines.push(...extraToYamlLines(codexSkillExtra));
+    // The document's own section names are generated, so a pass-through field may not claim one:
+    // a second `policy:` mapping is a duplicate key that a last-one-wins reader resolves in the
+    // source's favour, which would undo `allow_implicit_invocation`.
+    const { extras, notes } = partitionReservedExtras(codexSkillExtra, RESERVED_SECTIONS);
+    yamlLines.push(...notes.map(toYamlComment));
+    yamlLines.push(...serializeYamlLines(extras));
 
     artifacts.push({
       path: join("skills", skill.name, "agents", "openai.yaml"),

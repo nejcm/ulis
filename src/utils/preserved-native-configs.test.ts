@@ -1,26 +1,34 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { PLATFORMS } from "../platforms.js";
+import { mergeConfigValues } from "./config-merge.js";
 import {
   capturePreservedNativeConfigs,
   getPreservedNativeConfigEntries,
-  mergeConfigValues,
-  omitConfigPaths,
-  pickConfigPaths,
   PreservedNativeConfigParseError,
-  readMergeableConfig,
-  writeMergeableConfig,
+  UnsafeNativeConfigPathError,
   writePreservedNativeConfigs,
   type CapturedPreservedNativeConfig,
-} from "./config-merger.js";
+} from "./preserved-native-configs.js";
 
 const tmpRoots: string[] = [];
 
 function createTempRoot(): string {
-  const root = mkdtempSync(join(tmpdir(), "ulis-config-merger-"));
+  const root = mkdtempSync(join(tmpdir(), "ulis-preserved-native-configs-"));
   tmpRoots.push(root);
   return root;
 }
@@ -48,34 +56,6 @@ afterEach(() => {
   for (const root of tmpRoots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
   }
-});
-
-describe("mergeConfigValues", () => {
-  it("recursively merges objects and replaces arrays at the same path", () => {
-    expect(
-      mergeConfigValues(
-        { generated: true, list: ["generated"], nested: { keep: true, replace: ["generated"] } },
-        { raw: true, list: ["raw"], nested: { replace: ["raw"] } },
-      ),
-    ).toEqual({
-      generated: true,
-      raw: true,
-      list: ["raw"],
-      nested: { keep: true, replace: ["raw"] },
-    });
-  });
-
-  it("replaces root-level non-object values", () => {
-    expect(mergeConfigValues({ generated: true }, ["raw"])).toEqual(["raw"]);
-    expect(mergeConfigValues(["generated"], "raw")).toBe("raw");
-  });
-});
-
-describe("mergeable config helpers", () => {
-  it("reject unsupported config extensions", () => {
-    expect(() => readMergeableConfig("config.txt")).toThrow("Unsupported config extension");
-    expect(() => writeMergeableConfig("config.txt", {})).toThrow("Unsupported config extension");
-  });
 });
 
 describe("preserved native config registry", () => {
@@ -181,65 +161,6 @@ describe("preserved native config registry", () => {
   });
 });
 
-describe("pickConfigPaths", () => {
-  it("copies only selected nested paths", () => {
-    expect(
-      pickConfigPaths(
-        {
-          keep: { nested: true, other: false },
-          missingParent: "not-object",
-          drop: true,
-        },
-        [
-          ["keep", "nested"],
-          ["missingParent", "child"],
-        ],
-      ),
-    ).toEqual({ keep: { nested: true } });
-  });
-
-  it("copies the whole config for an empty path", () => {
-    expect(pickConfigPaths({ keep: true, nested: { value: 1 } }, [[]])).toEqual({
-      keep: true,
-      nested: { value: 1 },
-    });
-  });
-});
-
-describe("omitConfigPaths", () => {
-  it("returns the source with the listed top-level paths removed", () => {
-    expect(omitConfigPaths({ theme: "dark", mcpServers: { a: 1 }, projects: { p: 1 } }, [["mcpServers"]])).toEqual({
-      theme: "dark",
-      projects: { p: 1 },
-    });
-  });
-
-  it("removes nested paths without disturbing siblings", () => {
-    expect(omitConfigPaths({ kept: { keep: true, drop: true, sibling: { v: 1 } } }, [["kept", "drop"]])).toEqual({
-      kept: { keep: true, sibling: { v: 1 } },
-    });
-  });
-
-  it("does not mutate the source object", () => {
-    const source = { mcpServers: { existing: 1 }, theme: "dark" };
-    omitConfigPaths(source, [["mcpServers"]]);
-    expect(source).toEqual({ mcpServers: { existing: 1 }, theme: "dark" });
-  });
-
-  it("is a no-op for paths that don't exist", () => {
-    expect(omitConfigPaths({ a: 1 }, [["missing"], ["a", "missing"]])).toEqual({ a: 1 });
-  });
-
-  it("returns an empty object when the empty path is requested", () => {
-    expect(omitConfigPaths({ a: 1, b: 2 }, [[]])).toEqual({});
-  });
-
-  it("returns an empty object for non-object sources", () => {
-    expect(omitConfigPaths(null, [["a"]])).toEqual({});
-    expect(omitConfigPaths(42, [["a"]])).toEqual({});
-  });
-});
-
 describe("capturePreservedNativeConfigs", () => {
   it("returns undefined preserved config when the target file is missing", () => {
     const root = createTempRoot();
@@ -278,6 +199,157 @@ describe("capturePreservedNativeConfigs", () => {
 });
 
 describe("writePreservedNativeConfigs", () => {
+  // These are the platforms' real config files - the MCP servers and hooks a host agent acts on.
+  // Every write below went through `writeFile`/`cpSync`, which follow a symlink at the destination,
+  // so a link planted at `opencode.json` turned the install into a write to wherever it pointed.
+  // Each case is one of the three branches that writes the target.
+  for (const [branch, plant] of [
+    ["copies generated config", (root: string) => write(join(root, "generated", "config.json"), '{"generated":true}')],
+    ["writes preserved-only config", () => {}],
+    [
+      "merges preserved with generated",
+      (root: string) => write(join(root, "generated", "config.json"), '{"generated":true}'),
+    ],
+  ] as const) {
+    const preserved = branch === "copies generated config" ? undefined : { keep: { existing: true } };
+
+    it(`refuses to write through a symlinked target when it ${branch}`, () => {
+      const root = createTempRoot();
+      const victimPath = join(root, "outside", "victim.json");
+      const targetPath = join(root, "target", "config.json");
+      write(victimPath, '{"victim":true}');
+      mkdirSync(join(root, "target"), { recursive: true });
+      plant(root);
+      symlinkSync(victimPath, targetPath);
+
+      let thrown: unknown;
+      try {
+        writePreservedNativeConfigs([entry(root, preserved)]);
+      } catch (error) {
+        thrown = error;
+      }
+
+      // Thrown as itself, not wrapped: the install path surfaces this message to the user verbatim.
+      expect(thrown).toBeInstanceOf(UnsafeNativeConfigPathError);
+      expect((thrown as Error).message).toBe(
+        `Refusing to write through a symbolic link: ${targetPath}. Remove it, or point it somewhere ULIS is installing to.`,
+      );
+      expect(readJson(victimPath)).toEqual({ victim: true });
+      expect(lstatSync(targetPath).isSymbolicLink()).toBe(true);
+    });
+  }
+
+  // Round three covered the three branches that write and none of the four that do not. A refusal
+  // that holds only where the author was looking is not a refusal, so every branch is named here:
+  // the removal, the two no-ops, and the TOML overlay write.
+  it("refuses to delete a symlinked target when generated and preserved config are absent", () => {
+    const root = createTempRoot();
+    const victimPath = join(root, "outside", "victim.json");
+    const targetPath = join(root, "target", "config.json");
+    write(victimPath, '{"victim":true}');
+    mkdirSync(join(root, "target"), { recursive: true });
+    symlinkSync(victimPath, targetPath);
+
+    expect(() => writePreservedNativeConfigs([entry(root, undefined)])).toThrow(UnsafeNativeConfigPathError);
+    expect(lstatSync(targetPath).isSymbolicLink()).toBe(true);
+    expect(readJson(victimPath)).toEqual({ victim: true });
+  });
+
+  it("refuses a dangling symlinked target rather than stepping over it", () => {
+    const root = createTempRoot();
+    const targetPath = join(root, "target", "config.json");
+    mkdirSync(join(root, "target"), { recursive: true });
+    symlinkSync(join(root, "outside", "gone.json"), targetPath);
+
+    expect(() => writePreservedNativeConfigs([entry(root, undefined)])).toThrow(UnsafeNativeConfigPathError);
+    expect(lstatSync(targetPath).isSymbolicLink()).toBe(true);
+  });
+
+  it("refuses a symlinked target on the overlay preserve branch", () => {
+    const root = createTempRoot();
+    const victimPath = join(root, "outside", "victim.json");
+    const targetPath = join(root, "target", "config.json");
+    write(victimPath, '{"victim":true}');
+    mkdirSync(join(root, "target"), { recursive: true });
+    symlinkSync(victimPath, targetPath);
+
+    expect(() => writePreservedNativeConfigs([{ ...entry(root, undefined), overlay: "json" }])).toThrow(
+      UnsafeNativeConfigPathError,
+    );
+    expect(readJson(victimPath)).toEqual({ victim: true });
+  });
+
+  it("refuses a symlinked target on the TOML overlay write branch", () => {
+    const root = createTempRoot();
+    const victimPath = join(root, "outside", "victim.toml");
+    const targetPath = join(root, "target", "config.toml");
+    write(victimPath, "victim = true\n");
+    write(join(root, "generated", "config.toml"), "generated = true\n");
+    mkdirSync(join(root, "target"), { recursive: true });
+    symlinkSync(victimPath, targetPath);
+
+    expect(() =>
+      writePreservedNativeConfigs([
+        {
+          label: "config.toml",
+          generatedPath: join(root, "generated", "config.toml"),
+          targetPath,
+          preservedPaths: [["keep"]],
+          preservedConfig: { keep: { existing: true } },
+          overlay: "toml",
+        },
+      ]),
+    ).toThrow(UnsafeNativeConfigPathError);
+    expect(readFileSync(victimPath, "utf-8")).toBe("victim = true\n");
+  });
+
+  // These files carry MCP server definitions and the environment values handed to them. Replacing
+  // one must not hand a `0600` config to every local user by recreating it at the default mode.
+  for (const [branch, plant, preserved] of [
+    ["merges preserved with generated", true, { keep: { existing: true } }],
+    ["copies generated config", true, undefined],
+    ["writes preserved-only config", false, { keep: { existing: true } }],
+  ] as const) {
+    it(`preserves a restrictive target mode when it ${branch}`, () => {
+      const root = createTempRoot();
+      const targetPath = join(root, "target", "config.json");
+      if (plant) write(join(root, "generated", "config.json"), '{"generated":true}');
+      write(targetPath, '{"keep":{"existing":true}}');
+      chmodSync(targetPath, 0o600);
+
+      writePreservedNativeConfigs([entry(root, preserved)]);
+
+      expect((statSync(targetPath).mode & 0o777).toString(8)).toBe("600");
+    });
+  }
+
+  // Round four asserted the existing-target branch only, and the fix for it displaced a new bug onto
+  // the branch where the target does not exist yet. Both are pinned here, per writer.
+  for (const [branch, plant, preserved] of [
+    ["merges preserved with generated", true, { keep: { existing: true } }],
+    ["copies generated config", true, undefined],
+    ["writes preserved-only config", false, { keep: { existing: true } }],
+  ] as const) {
+    it(`gives a new target the right mode when it ${branch}`, () => {
+      const root = createTempRoot();
+      const targetPath = join(root, "target", "config.json");
+      if (plant) {
+        const generatedPath = join(root, "generated", "config.json");
+        write(generatedPath, '{"generated":true}');
+        chmodSync(generatedPath, 0o600);
+      }
+      // No target file: nothing to inherit from, so a verbatim copy has to carry the generated
+      // file's mode across, and a serialised write gets whatever a plain write would have made.
+      const referencePath = join(root, "reference.json");
+      write(referencePath, "{}");
+      const expected = plant && preserved === undefined ? "600" : (statSync(referencePath).mode & 0o777).toString(8);
+
+      writePreservedNativeConfigs([entry(root, preserved)]);
+
+      expect((statSync(targetPath).mode & 0o777).toString(8)).toBe(expected);
+    });
+  }
+
   it("writes preserved-only config when generated config is absent", () => {
     const root = createTempRoot();
 

@@ -1,8 +1,10 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { join } from "node:path";
 
-import { PLATFORM_DIRS, isSamePath, platformConfigDir, resolvePlatformDirSegment } from "./platforms.js";
-import { createTempRoot } from "./test-utils/fs.js";
+import { isSamePath, platformConfigDir, resolvePlatformDirSegment } from "./platforms.js";
+import { cleanupTempRoots, createTempRoot } from "./test-utils/fs.js";
+
+afterEach(cleanupTempRoots);
 
 describe("platform paths", () => {
   it("treats equivalent resolved paths as equal", () => {
@@ -21,11 +23,10 @@ describe("platform paths", () => {
     expect(platformConfigDir("forgecode", workspace, userHome)).toBe(join(workspace, ".forge"));
   });
 
-  it("uses OpenCode home segment per OS and .opencode for project installs", () => {
+  it("uses .config/opencode for home installs and .opencode for project installs", () => {
     const userHome = createTempRoot("ulis-platform-ochome-");
     const workspace = createTempRoot("ulis-platform-ocws-");
-    const homeSegment = resolvePlatformDirSegment(PLATFORM_DIRS.opencode.home);
-    expect(platformConfigDir("opencode", userHome, userHome)).toBe(join(userHome, homeSegment));
+    expect(platformConfigDir("opencode", userHome, userHome)).toBe(join(userHome, ".config", "opencode"));
     expect(platformConfigDir("opencode", workspace, userHome)).toBe(join(workspace, ".opencode"));
   });
 });

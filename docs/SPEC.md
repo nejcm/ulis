@@ -23,7 +23,19 @@ ULIS is a CLI (`ulis`) that lets you define AI agent configurations **once** and
 ├── extensions.yaml      (third-party CLI extension installs via npx/bunx)
 ├── permissions.yaml
 └── config.yaml          ◄─── version + name + optional install + runner settings
+
+.ulis/generated/<platform>/.ulis-provenance.json ◄─── remote sources for that platform output, if any
 ```
+
+`ulis build` writes `generated/<platform>/.ulis-provenance.json` whenever a resolved preset carries a remote URL.
+The marker is `{ version: 1, remoteSources: string[] }`; URLs are redacted, deduplicated, and sorted. The writer
+creates it immediately after clearing that platform directory and before writing any payload, so provenance lives
+and is destroyed with the output it describes. A local build writes no marker.
+
+`ulis install --skip-rebuild` reads the selected platforms' markers. A malformed marker, an unsupported version,
+or any recorded remote source makes install refuse before writing a destination. Re-run
+`ulis install --preset <url>` to rebuild and review the source. A root-level `generated/.ulis-provenance.json` from
+the pre-release format also refuses; only a full `ulis build` without `--target` removes that opaque legacy flag.
 
 `ulis install` deploys the generated tree to the per-platform destination (`./.claude/`, `./.forge/`, etc.). Existing unmanaged destination agents and skills are left in place unless a generated entry has the same native name. Codex `config.toml`, Claude `settings.json`, and global `.claude.json` use base-first overlays: generated values overwrite matching paths and absent native values remain. Codex TOML comments and ordering outside generated paths are preserved. Other native configs preserve their allowlisted values or files, such as MCP server maps and ForgeCode `.forge.toml`.
 
@@ -61,7 +73,7 @@ Provider adapters own their own parsing-to-native behavior, generated file layou
 
 Between parsing and generation the orchestrator runs **validators** (`src/validators/`):
 
-- `validateCrossRefs(agents, skills, mcp)` — agent → skill (warn), agent → mcp (**error**)
+- `validateCrossRefs(agents, skills, mcp)` — agent → skill (warn), agent → mcp (**error**), agent → subagent allowlist (warn)
 - `validateCollisions(agents, skills)` — duplicate agent or skill names (**error**)
 
 Errors abort the build (exit code 1, no files written). Warnings print and the build proceeds.
@@ -78,7 +90,7 @@ Capability mismatches are handled with **best-effort + comments**: if a target l
 
 ## 2.2 Presets {#presets}
 
-**Presets** are reusable ULIS source trees. They can be merged into a build before the selected base source (`./.ulis/`, `~/.ulis/`, or `--source`), or installed by themselves with preset-only install. Each preset name resolves to a directory: `~/.ulis/presets/<name>/` is tried first, then bundled presets adjacent to the CLI package. User and bundled trees share the same on-disk layout as a normal source; optional `preset.yaml` carries display metadata only (see [Field Reference — Preset metadata](./REFERENCE.md#preset-metadata-presets-name-preset-yaml)).
+**Presets** are reusable ULIS source trees. They can be merged into a build before the selected base source (`./.ulis/`, `~/.ulis/`, or `--source`), or installed by themselves with preset-only install. Each preset name resolves to a directory: `~/.ulis/presets/<name>/` is tried first, then bundled presets adjacent to the CLI package. User and bundled trees share the same on-disk layout as a normal source; optional `preset.yaml` carries display metadata only (see [Field Reference — Preset metadata](./REFERENCE.md#preset-metadata)).
 
 Parsed preset projects are merged **in CLI order** (comma-separated `--preset` values), then the base project is merged last so **the base wins** on duplicate entities and conflicting config keys. The same rules apply to `build`, `install`, and the TUI (including its validate action) when presets are selected. Discovery and labeling (`user` vs `bundled`) are implemented in `src/presets.ts` and `src/utils/resolve-presets.ts`. Optional fields for `preset.yaml` are documented under [Preset metadata](./REFERENCE.md#preset-metadata).
 
@@ -86,7 +98,7 @@ Preset-only install (`ulis preset install <names...>` and the TUI Presets screen
 
 ### 2.3 Install ownership
 
-Each selected platform config root stores `.ulis-manifest.json` version 1. It contains validated relative paths for agents and local skill directories installed by ULIS. The manifest excludes external `skills.yaml` installs, extension output, preserved native config, and other generated files.
+Each selected platform config root stores `.ulis-manifest.json` version 3. It contains validated relative paths for agents and local skill directories installed by ULIS, plus the individual root-relative files the install writes into the config root, used by OpenCode pruning. Older manifests remain readable and migrate: version 1 carries no root record and prunes no root entries. Version 2 recorded root names rather than files, so a recorded name that is a file is pruned like any other stale entry, while a recorded name that is a directory is pruned only when it is already empty — anything inside it was never recorded as ULIS's own. The manifest excludes external `skills.yaml` installs, extension output, and preserved native config.
 
 Before any selected destination is modified, ULIS reads and validates every selected platform manifest and derives the current managed set from generated output. Missing manifests trigger first-run adoption without pruning. After platform files are installed, ULIS removes `previous managed − current managed`, then atomically writes the current manifest. Ownership is path-based, so user edits to a tracked file do not prevent its removal. OpenCode records `agents/core/...` and `agents/specialized/...` separately.
 
@@ -292,23 +304,23 @@ Hooks are native to Claude Code only. On other targets they are silently dropped
 
 ## 4. Capability Matrix
 
-| Feature                              |   Claude Code   |       OpenCode       |     Codex     | Cursor  | ForgeCode  |
-| ------------------------------------ | :-------------: | :------------------: | :-----------: | :-----: | :--------: |
-| Native agents                        |        ✓        |          ✓           |       ✓       |    ✓    |     ✓      |
-| Native skills/commands               |        ✓        |          ✓           |       ✓       |    ✓    |     ✓      |
-| Hooks (PreToolUse/PostToolUse/Stop)  |        ✓        |          —           |       —       |    —    |     —      |
-| Subagent spawning                    |        ✓        |          ✓           |    comment    |    —    |     —      |
-| Background execution                 |        ✓        |          —           |       —       |    ✓    |     —      |
-| Git worktree isolation               |        ✓        |          —           |       —       |    —    |     —      |
-| Local MCP servers                    |        ✓        |          ✓           |       ✓       |    ✓    |     ✓      |
-| Remote MCP servers                   |        ✓        |          ✓           | localFallback |    ✓    |     ✓      |
+| Feature                              |   Claude Code   |       OpenCode       |     Codex     |   Cursor   | ForgeCode  |
+| ------------------------------------ | :-------------: | :------------------: | :-----------: | :--------: | :--------: |
+| Native agents                        |        ✓        |          ✓           |       ✓       |     ✓      |     ✓      |
+| Native skills/commands               |        ✓        |          ✓           |       ✓       |     ✓      |     ✓      |
+| Hooks (PreToolUse/PostToolUse/Stop)  |        ✓        |          —           |       —       |     —      |     —      |
+| Subagent spawning                    |        ✓        |          ✓           |    comment    |     —      |     —      |
+| Background execution                 |        ✓        |          —           |       —       |     ✓      |     —      |
+| Git worktree isolation               |        ✓        |          —           |       —       |     —      |     —      |
+| Local MCP servers                    |        ✓        |          ✓           |       ✓       |     ✓      |     ✓      |
+| Remote MCP servers                   |        ✓        |          ✓           | localFallback |     ✓      |     ✓      |
 | Fine-grained tool permissions        |        ✓        |          ✓           |       —       | allowlists | tools list |
-| `contextHints` enforcement           |     comment     |       comment        |    comment    | comment |  comment   |
-| `toolPolicy.avoid`                   | disallowedTools |       comment        |    comment    | comment |  comment   |
-| `toolPolicy.requireConfirmation`     | permissionMode  | permission.edit/bash |    comment    | comment |  comment   |
-| `security.permissionLevel: readonly` |    plan mode    |      deny perms      |    comment    | comment |  comment   |
-| `security.blockedCommands`           | PreToolUse hook |       comment        |    comment    | comment |  comment   |
-| `security.rateLimit`                 |     comment     | rate_limit_per_hour  |    comment    | comment |  comment   |
+| `contextHints` enforcement           |     comment     |       comment        |    comment    |  comment   |  comment   |
+| `toolPolicy.avoid`                   | disallowedTools |       comment        |    comment    |  comment   |  comment   |
+| `toolPolicy.requireConfirmation`     | permissionMode  | permission.edit/bash |    comment    |  comment   |  comment   |
+| `security.permissionLevel: readonly` |    plan mode    |      deny perms      |    comment    |  comment   |  comment   |
+| `security.blockedCommands`           | PreToolUse hook |       comment        |    comment    |  comment   |  comment   |
+| `security.rateLimit`                 |     comment     | rate_limit_per_hour  |    comment    |  comment   |  comment   |
 
 **Legend:** ✓ native · comment = emitted as comment in output file · — = not emitted
 

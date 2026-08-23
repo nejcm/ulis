@@ -3,8 +3,34 @@ import { join } from "node:path";
 import type { ParsedAgent } from "../../../parsers/agent.js";
 import { buildPolicyCommentBlock } from "../../../utils/policy-comments.js";
 import { mapTools } from "../../../utils/tool-mapper.js";
-import { extraToYamlLines, toYamlScalar } from "../../shared/yaml.js";
+import { blockedCommandHooks } from "../../shared/security-hooks.js";
+import { partitionReservedExtras, serializeYamlFrontmatter } from "../../shared/yaml.js";
 import type { FileArtifact } from "../../types.js";
+
+/**
+ * Every frontmatter key this generator may emit, reserved against pass-through extras whether or
+ * not a given agent produces it. Reserving only what one run emitted would leave `hooks` free on
+ * any agent that declared none — the exact field the security policy fills in — so the list is
+ * declared once here and checked against the built object below.
+ */
+const CLAUDE_GENERATED_KEYS = new Set([
+  "name",
+  "description",
+  "model",
+  "tools",
+  "disallowedTools",
+  "permissionMode",
+  "maxTurns",
+  "effort",
+  "background",
+  "isolation",
+  "memory",
+  "skills",
+  "mcpServers",
+  "hooks",
+  "color",
+  "initialPrompt",
+]);
 
 /** Serialize the YAML frontmatter block for a Claude subagent. */
 function subagentFrontmatter(agent: ParsedAgent): string {
@@ -21,20 +47,22 @@ function subagentFrontmatter(agent: ParsedAgent): string {
     ...claudeExtra
   } = (claudePlatform ?? {}) as Record<string, unknown>;
 
-  const lines: string[] = ["---"];
+  // Built as a plain object and serialized once: every value — including the pass-through extras —
+  // goes through the shared escaping path, so none of them can forge a sibling frontmatter key.
+  const data: Record<string, unknown> = {};
 
-  lines.push(`name: ${toYamlScalar(agent.name)}`);
-  lines.push(`description: ${toYamlScalar(fm.description)}`);
+  data.name = agent.name;
+  data.description = fm.description;
 
   const model = claudePlatform?.model ?? fm.model;
-  if (model) lines.push(`model: ${toYamlScalar(model)}`);
+  if (model) data.model = model;
 
   const allowedTools = mapTools(fm.tools, "claude");
   const disallowedTools = [...(claudePlatform?.disallowedTools ?? []), ...(fm.toolPolicy?.avoid ?? [])];
 
-  if (allowedTools.length > 0) lines.push(`tools: ${toYamlScalar(allowedTools.join(", "))}`);
+  if (allowedTools.length > 0) data.tools = allowedTools.join(", ");
   if (disallowedTools.length > 0) {
-    lines.push(`disallowedTools: ${toYamlScalar([...new Set(disallowedTools)].join(", "))}`);
+    data.disallowedTools = [...new Set(disallowedTools)].join(", ");
   }
 
   let permissionMode = claudePlatform?.permissionMode;
@@ -43,30 +71,20 @@ function subagentFrontmatter(agent: ParsedAgent): string {
   } else if (fm.security?.requireApproval?.length || fm.toolPolicy?.requireConfirmation?.length) {
     permissionMode ??= "default";
   }
-  if (permissionMode) lines.push(`permissionMode: ${toYamlScalar(permissionMode)}`);
+  if (permissionMode) data.permissionMode = permissionMode;
 
-  if (fm.maxTurns !== undefined) lines.push(`maxTurns: ${fm.maxTurns}`);
-  if (fm.effort) lines.push(`effort: ${fm.effort}`);
-  if (fm.background) lines.push(`background: true`);
-  if (fm.isolation && fm.isolation !== "none") lines.push(`isolation: ${fm.isolation}`);
-  if (fm.memory && fm.memory !== "none") lines.push(`memory: ${fm.memory}`);
+  if (fm.maxTurns !== undefined) data.maxTurns = fm.maxTurns;
+  if (fm.effort) data.effort = fm.effort;
+  if (fm.background) data.background = true;
+  if (fm.isolation && fm.isolation !== "none") data.isolation = fm.isolation;
+  if (fm.memory && fm.memory !== "none") data.memory = fm.memory;
 
-  if (fm.skills && fm.skills.length > 0) {
-    lines.push(`skills:`);
-    for (const s of fm.skills) lines.push(`  - ${toYamlScalar(s)}`);
-  }
-  if (fm.mcpServers && fm.mcpServers.length > 0) {
-    lines.push(`mcpServers:`);
-    for (const s of fm.mcpServers) lines.push(`  - ${toYamlScalar(s)}`);
-  }
+  if (fm.skills && fm.skills.length > 0) data.skills = [...fm.skills];
+  if (fm.mcpServers && fm.mcpServers.length > 0) data.mcpServers = [...fm.mcpServers];
 
-  // Merge explicit hooks with blocked-command hooks derived from security policy.
-  const blockedCmds = fm.security?.blockedCommands ?? [];
-  const blockedHookEntries = blockedCmds.map((cmd) => ({
-    matcher: `Bash(${cmd}*)`,
-    command: `echo "Blocked by ULIS security policy: ${cmd}" && exit 1`,
-  }));
-  const mergedPreToolUse = [...(fm.hooks?.PreToolUse ?? []), ...blockedHookEntries];
+  // Merge explicit hooks with blocked-command hooks derived from security policy. The derivation
+  // lives in `blockedCommandHooks` so the trust preview enumerates exactly what is generated here.
+  const mergedPreToolUse = [...(fm.hooks?.PreToolUse ?? []), ...blockedCommandHooks(fm.security)];
   const mergedHooks = {
     ...(fm.hooks ?? {}),
     ...(mergedPreToolUse.length > 0 ? { PreToolUse: mergedPreToolUse } : {}),
@@ -74,31 +92,35 @@ function subagentFrontmatter(agent: ParsedAgent): string {
 
   const hasHooks = Object.values(mergedHooks).some((v) => Array.isArray(v) && v.length > 0);
   if (hasHooks) {
-    lines.push(`hooks:`);
+    const hooks: Record<string, unknown> = {};
     for (const [event, entries] of Object.entries(mergedHooks)) {
       if (!entries || (entries as unknown[]).length === 0) continue;
-      lines.push(`  ${event}:`);
-      for (const entry of entries as Array<{ matcher?: string; command: string }>) {
-        if (entry.matcher) {
-          lines.push(`    - matcher: ${toYamlScalar(entry.matcher)}`);
-          lines.push(`      hooks:`);
-          lines.push(`        - type: command`);
-          lines.push(`          command: ${toYamlScalar(entry.command)}`);
-        } else {
-          lines.push(`    - type: command`);
-          lines.push(`      command: ${toYamlScalar(entry.command)}`);
-        }
-      }
+      hooks[event] = (entries as Array<{ matcher?: string; command: string }>).map((entry) =>
+        entry.matcher
+          ? { matcher: entry.matcher, hooks: [{ type: "command", command: entry.command }] }
+          : { type: "command", command: entry.command },
+      );
+    }
+    data.hooks = hooks;
+  }
+
+  if (fm.color) data.color = fm.color;
+  if (claudePlatform?.initialPrompt) data.initialPrompt = claudePlatform.initialPrompt;
+
+  // Keeps `CLAUDE_GENERATED_KEYS` honest: a field added above but not declared there would other-
+  // wise be reserved on the runs that emit it and claimable by an extra on the runs that do not.
+  for (const key of Object.keys(data)) {
+    if (!CLAUDE_GENERATED_KEYS.has(key)) {
+      throw new Error(`Claude frontmatter key is not declared in CLAUDE_GENERATED_KEYS: ${key}`);
     }
   }
 
-  if (fm.color) lines.push(`color: ${toYamlScalar(fm.color)}`);
-  if (claudePlatform?.initialPrompt) lines.push(`initialPrompt: ${toYamlScalar(claudePlatform.initialPrompt)}`);
+  // Pass-through extras land last, and an extra that names a key ULIS owns is dropped: the
+  // generated `hooks` and `tools` carry the security policy, so the source side must not win.
+  const { extras, notes } = partitionReservedExtras(claudeExtra, CLAUDE_GENERATED_KEYS);
+  Object.assign(data, extras);
 
-  lines.push(...extraToYamlLines(claudeExtra));
-
-  lines.push("---");
-  return lines.join("\n");
+  return serializeYamlFrontmatter(data, notes);
 }
 
 export function buildClaudeAgentArtifact(agent: ParsedAgent): FileArtifact {
