@@ -1,14 +1,15 @@
+// installCmd and presetInstallCmd: generated-config install, Claude agent frontmatter names, remote
+// source cloning and cleanup, global skill scope, SIGINT handling during clone/write (including
+// double-Ctrl-C force-quit and post-clone cleanup-then-exit), preset installs, --yes fast failure,
+// and the declined-overwrite-prompt exit path run through a real child process.
 import { afterEach, describe, expect, it } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 
 import { __test } from "../install.js";
 import { __test as installInterrupt } from "../utils/interrupt.js";
 import { logger as log } from "../utils/logger.js";
-import { buildCmd } from "./build.js";
-import { initCmd } from "./init.js";
 import { installCmd } from "./install.js";
 import { presetInstallCmd } from "./preset.js";
 
@@ -95,83 +96,6 @@ function captureLog(lines: string[]): () => void {
 }
 
 describe("commands", () => {
-  it("initCmd scaffolds a project-local source tree", async () => {
-    const projectRoot = createTempRoot();
-    writeFileSync(join(projectRoot, "package.json"), JSON.stringify({ name: "command-test" }));
-    process.chdir(projectRoot);
-
-    await initCmd();
-
-    expect(existsSync(join(projectRoot, ".ulis", "config.yaml"))).toBe(true);
-    expect(existsSync(join(projectRoot, ".ulis", "extensions.yaml"))).toBe(true);
-    expect(existsSync(join(projectRoot, ".ulis", "agents", ".gitkeep"))).toBe(true);
-    expect(readFileSync(join(projectRoot, ".ulis", "config.yaml"), "utf8")).toContain("name: command-test");
-    expect(readFileSync(join(projectRoot, ".ulis", "extensions.yaml"), "utf8")).toContain("extensions");
-    expect(readFileSync(join(projectRoot, ".gitignore"), "utf8")).toContain("/.ulis/generated/");
-  });
-
-  it("initCmd points global schema refs at the installed package", async () => {
-    const homeRoot = createTempRoot();
-
-    await initCmd({ global: true, homeDir: homeRoot });
-
-    const installedSchemas = pathToFileURL(resolve(join(import.meta.dirname, "../../schemas"))).href;
-    expect(readFileSync(join(homeRoot, ".ulis", "config.yaml"), "utf8")).toContain(
-      `$schema=${installedSchemas}/config.schema.json`,
-    );
-  });
-
-  it("buildCmd writes selected generated output under the project source tree", async () => {
-    const projectRoot = createTempRoot();
-    copyFixtureSource(projectRoot);
-    process.chdir(projectRoot);
-
-    await buildCmd({ target: "claude" });
-
-    expect(existsSync(join(projectRoot, ".ulis", "generated", "claude", "agents", "worker.md"))).toBe(true);
-    expect(existsSync(join(projectRoot, ".ulis", "generated", "opencode"))).toBe(false);
-  });
-
-  it("buildCmd honors explicit --source over project-local source", async () => {
-    const projectRoot = createTempRoot();
-    copyFixtureSource(projectRoot, "custom-source");
-    process.chdir(projectRoot);
-
-    await buildCmd({ source: "custom-source", target: "cursor" });
-
-    expect(existsSync(join(projectRoot, "custom-source", "generated", "cursor", "agents", "worker.mdc"))).toBe(true);
-    expect(existsSync(join(projectRoot, ".ulis", "generated"))).toBe(false);
-  });
-
-  it("buildCmd with an empty target does not default to all platforms", async () => {
-    const projectRoot = createTempRoot();
-    copyFixtureSource(projectRoot);
-    process.chdir(projectRoot);
-
-    await buildCmd({ target: "" });
-
-    expect(existsSync(join(projectRoot, ".ulis", "generated"))).toBe(false);
-  });
-
-  it("buildCmd rejects a remote source before doing any work", async () => {
-    const projectRoot = createTempRoot();
-    copyFixtureSource(projectRoot);
-    process.chdir(projectRoot);
-
-    await expect(buildCmd({ source: "https://github.com/o/r", target: "claude" })).rejects.toThrow(
-      "build writes generated output into the source tree, and a remote source is discarded after the run. " +
-        "Use `ulis install --source <url>` instead.",
-    );
-
-    // Rejected before any work: no clone, no generated output.
-    expect(existsSync(join(projectRoot, ".ulis", "generated"))).toBe(false);
-  });
-
-  it("buildCmd rejects an unsupported protocol instead of pointing at install", async () => {
-    // `ulis install` would refuse `git://` too, so sending the user there would waste a round trip.
-    await expect(buildCmd({ source: "git://github.com/o/r", target: "claude" })).rejects.toThrow(/HTTPS or SSH/u);
-  });
-
   it("installCmd installs generated config into the project platform directory", async () => {
     const projectRoot = createTempRoot();
     copyFixtureSource(projectRoot);
@@ -384,10 +308,6 @@ describe("commands", () => {
     expect(cloned.map(existsSync)).toEqual([false, false]);
   });
 
-  // "Press again to force quit". The first press defers its exit until the clone unwinds; a second
-  // one must not be swallowed, or SIGINT, SIGTERM and SIGHUP would all be ignored until a wedged
-  // clone times out, leaving SIGKILL as the only way out. Stopping at once can leave the temp
-  // directory the clone still owns - that is the cost of the second press, not a regression.
   it("installCmd force-quits when Ctrl-C is pressed twice during the clone", async () => {
     const projectRoot = createTempRoot();
     process.chdir(projectRoot);

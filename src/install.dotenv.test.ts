@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { join } from "node:path";
 
-import { __test } from "./install.js";
+import { __test, runInstall } from "./install.js";
 import { loadDotEnv } from "./install/dotenv.js";
-import { cleanupInstallTempRoots, createTempRoot, write } from "./test-utils/install.js";
+import { cleanupInstallTempRoots, createTempRoot, silentLogger, write } from "./test-utils/install.js";
 
 afterEach(() => {
   __test.resetRuntimeDependencies();
@@ -47,5 +47,34 @@ describe("loadDotEnv", () => {
     const untrusted: NodeJS.ProcessEnv = {};
     loadDotEnv(root, untrusted, { untrusted: true });
     expect(untrusted).toEqual({ TEAM_TOKEN: "t" });
+  });
+});
+
+describe("runInstall", () => {
+  it("restores process.env after loading the source .env", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, "source");
+    write(join(sourceDir, "config.yaml"), "version: 1\nname: test\n");
+    write(join(sourceDir, ".env"), "ULIS_TEST_REMOTE_ENV=from-source\nULIS_TEST_PREEXISTING=overwritten\n");
+    process.env.ULIS_TEST_PREEXISTING = "kept";
+
+    try {
+      await runInstall({
+        sourceDir,
+        destBase: root,
+        userHome: root,
+        globalInstall: true,
+        platforms: ["codex"],
+        rebuild: true,
+        installExtensions: false,
+        installSkills: false,
+        logger: silentLogger,
+      });
+
+      expect(process.env.ULIS_TEST_REMOTE_ENV).toBeUndefined();
+      expect(process.env.ULIS_TEST_PREEXISTING).toBe("kept");
+    } finally {
+      delete process.env.ULIS_TEST_PREEXISTING;
+    }
   });
 });
