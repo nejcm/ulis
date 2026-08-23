@@ -1,10 +1,12 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { join } from "node:path";
 
 import { z } from "zod";
 
-import { createTempRoot, writeTextFile } from "../test-utils/fs.js";
+import { cleanupTempRoots, createTempRoot, writeTextFile } from "../test-utils/fs.js";
 import { loadRequiredConfigFile, loadValidatedConfigFile } from "./config-loader.js";
+
+afterEach(cleanupTempRoots);
 
 function writeConfig(root: string, filename: string, contents: string): void {
   writeTextFile(join(root, filename), contents);

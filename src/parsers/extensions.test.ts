@@ -1,8 +1,10 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { join } from "node:path";
 
-import { createTempRoot, writeTextFile } from "../test-utils/fs.js";
+import { cleanupTempRoots, createTempRoot, writeTextFile } from "../test-utils/fs.js";
 import { loadExtensions, mergeExtensionsConfigs } from "./extensions.js";
+
+afterEach(cleanupTempRoots);
 
 describe("loadExtensions", () => {
   it("returns empty config when extensions.yaml is empty", () => {

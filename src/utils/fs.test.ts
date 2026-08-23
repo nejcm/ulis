@@ -1,9 +1,11 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { createTempRoot } from "../test-utils/fs.js";
+import { cleanupTempRoots, createTempRoot } from "../test-utils/fs.js";
 import { cleanDir } from "./fs.js";
+
+afterEach(cleanupTempRoots);
 
 describe("cleanDir", () => {
   it("replaces self-referential, looping, and dangling symlinks", () => {

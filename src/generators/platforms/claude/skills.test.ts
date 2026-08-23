@@ -1,13 +1,15 @@
-import { describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { afterEach, describe, expect, it } from "bun:test";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { ParsedSkill } from "../../../parsers/skill.js";
+import { cleanupTempRoots, createTempRoot } from "../../../test-utils/fs.js";
 import type { ProjectBundle } from "../../types.js";
 import { writeResult } from "../../writer.js";
 import { generateClaude } from "./index.js";
 import { buildClaudeSkillDirs } from "./skills.js";
+
+afterEach(cleanupTempRoots);
 
 const silentLogger = { info() {}, success() {}, warn() {}, error() {}, dim() {}, header() {} };
 
@@ -125,7 +127,7 @@ describe("buildClaudeSkillDirs", () => {
 
 describe("generateClaude — skill wiring", () => {
   it("includes local skills in post.skillDirs", () => {
-    const sourceDir = mkdtempSync(join(tmpdir(), "ulis-claude-skills-"));
+    const sourceDir = createTempRoot("ulis-claude-skills-");
     const skill = makeSkill();
     const result = generateClaude(createProject(sourceDir, [skill]));
     expect(result.post.skillDirs).toHaveLength(1);
@@ -133,7 +135,7 @@ describe("generateClaude — skill wiring", () => {
   });
 
   it("filters out skills explicitly disabled for claude", () => {
-    const sourceDir = mkdtempSync(join(tmpdir(), "ulis-claude-skills-"));
+    const sourceDir = createTempRoot("ulis-claude-skills-");
     const skill = makeSkill({
       frontmatter: {
         name: "implement-plan",
@@ -150,13 +152,13 @@ describe("generateClaude — skill wiring", () => {
   });
 
   it("produces no skillDirs when there are no local skills", () => {
-    const sourceDir = mkdtempSync(join(tmpdir(), "ulis-claude-skills-"));
+    const sourceDir = createTempRoot("ulis-claude-skills-");
     const result = generateClaude(createProject(sourceDir, []));
     expect(result.post.skillDirs).toEqual([]);
   });
 
   it("copies the skill directory to outDir/skills/<name>/SKILL.md end-to-end", () => {
-    const root = mkdtempSync(join(tmpdir(), "ulis-claude-skills-e2e-"));
+    const root = createTempRoot("ulis-claude-skills-e2e-");
     const sourceDir = join(root, "source");
     const outDir = join(root, "out");
     const skillDir = join(sourceDir, "skills", "implement-plan");

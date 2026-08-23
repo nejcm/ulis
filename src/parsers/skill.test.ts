@@ -1,8 +1,10 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { join, resolve } from "node:path";
 
-import { createTempRoot, writeTextFile } from "../test-utils/fs.js";
+import { cleanupTempRoots, createTempRoot, writeTextFile } from "../test-utils/fs.js";
 import { parseSkills } from "./skill.js";
+
+afterEach(cleanupTempRoots);
 
 const fixturesDir = resolve(join(import.meta.dirname, "../../tests/fixtures/skills"));
 

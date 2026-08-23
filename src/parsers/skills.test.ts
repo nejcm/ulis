@@ -1,8 +1,10 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { join } from "node:path";
 
-import { createTempRoot, writeTextFile } from "../test-utils/fs.js";
+import { cleanupTempRoots, createTempRoot, writeTextFile } from "../test-utils/fs.js";
 import { loadSkills, mergeSkillsConfigs } from "./skills.js";
+
+afterEach(cleanupTempRoots);
 
 describe("loadSkills", () => {
   it("returns empty config for empty skills.yaml", () => {

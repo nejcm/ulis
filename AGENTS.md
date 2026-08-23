@@ -23,7 +23,7 @@ This repo has no `CLAUDE.md`, and should not get one. `AGENTS.md` is the single 
 So:
 
 - Never run `ulis install` (or a preset install) against a real destination to test a change. Build instead — `bun run dev` writes only to `example/generated/`.
-- If you must exercise the install path, pass an explicit home/dest base pointing at a temp directory. Every install entry point takes one; that is how `src/install.test.ts` does it. `bun run dev:install` does this for you: it copies `example/` into a fresh temp directory and installs there, so nothing reaches this repo's own `.claude/`, `.codex/` or `.cursor/`.
+- If you must exercise the install path, pass an explicit home/dest base pointing at a temp directory. Every install entry point takes one; that is how `src/install.runinstall-native-config.test.ts` does it. `bun run dev:install` does this for you: it copies `example/` into a fresh temp directory and installs there, so nothing reaches this repo's own `.claude/`, `.codex/` or `.cursor/`.
 - The prune and manifest reconciliation logic is the code that deletes user files. Changes there need a test proving unmanaged entries survive.
 
 ## What we never compromise on

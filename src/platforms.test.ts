@@ -1,8 +1,10 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { join } from "node:path";
 
 import { isSamePath, platformConfigDir, resolvePlatformDirSegment } from "./platforms.js";
-import { createTempRoot } from "./test-utils/fs.js";
+import { cleanupTempRoots, createTempRoot } from "./test-utils/fs.js";
+
+afterEach(cleanupTempRoots);
 
 describe("platform paths", () => {
   it("treats equivalent resolved paths as equal", () => {

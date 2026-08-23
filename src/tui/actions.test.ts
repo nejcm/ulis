@@ -4,9 +4,11 @@ import { cpSync, existsSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { __test as installTest, runPresetInstall } from "../install.js";
-import { createTempRoot, writeTextFile } from "../test-utils/fs.js";
+import { cleanupTempRoots, createTempRoot, writeTextFile } from "../test-utils/fs.js";
 import { reviewFingerprint } from "./selectors.js";
 import { createInitialState } from "./state-model.js";
+
+afterEach(cleanupTempRoots);
 
 const fixturesDir = resolve(import.meta.dirname, "../../tests/fixtures");
 

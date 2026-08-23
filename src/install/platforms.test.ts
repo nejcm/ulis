@@ -1,9 +1,9 @@
-import { describe, expect, it, spyOn } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { PLATFORMS, platformConfigDir, type Platform } from "../platforms.js";
-import { createTempRoot, writeTextFile } from "../test-utils/fs.js";
+import { cleanupTempRoots, createTempRoot, writeTextFile } from "../test-utils/fs.js";
 import * as installFs from "./fs.js";
 import {
   detectInstallCollisions,
@@ -14,6 +14,8 @@ import {
   installOpencode,
 } from "./platforms.js";
 import type { InstallContext } from "./types.js";
+
+afterEach(cleanupTempRoots);
 
 function write(path: string, content = ""): void {
   writeTextFile(path, content);

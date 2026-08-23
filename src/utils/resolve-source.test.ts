@@ -4,8 +4,10 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { __test } from "../install.js";
-import { createTempRoot } from "../test-utils/fs.js";
+import { cleanupTempRoots, createTempRoot } from "../test-utils/fs.js";
 import { resolveSource, resolveSourceOrRemote } from "./resolve-source.js";
+
+afterEach(cleanupTempRoots);
 
 describe("resolveSource", () => {
   it("uses an explicit source while keeping global installs pointed at home", () => {
