@@ -10,9 +10,11 @@ import {
   mkdirSync,
   openSync,
   readdirSync,
+  readlinkSync,
   realpathSync,
   rmdirSync,
   rmSync,
+  symlinkSync,
   unlinkSync,
   type Stats,
 } from "node:fs";
@@ -394,9 +396,10 @@ function removeForReplacement(targetPath: string): void {
  *
  * The claim on the name *is* the create, not a check before one. An `lstat` first and a copy after
  * leaves two runs able to agree the name is free: the loser's `copyIntoTarget` would then remove the
- * winner's file backup, or descend into and merge with the winner's directory backup. `mkdir` and
- * `copyFile` with `COPYFILE_EXCL` both fail with EEXIST instead, having touched nothing, so the
- * loser simply moves on to the next name.
+ * winner's file backup, or descend into and merge with the winner's directory backup. `mkdir`,
+ * `copyFile` with `COPYFILE_EXCL`, and `symlink` all fail with EEXIST instead, having touched
+ * nothing, so the loser simply moves on to the next name - one exclusive primitive per entry type
+ * this writes, which is why none of the three branches below is a `cpSync`.
  */
 export function copyToNewPath(sourcePath: string, targetPath: string): boolean {
   const sourceStats = statsOf(sourcePath);
@@ -412,11 +415,40 @@ export function copyToNewPath(sourcePath: string, targetPath: string): boolean {
 
   if (sourceStats?.isFile()) return copyFileToNewPath(sourcePath, targetPath);
 
-  // A symlink, or something `cpSync` refuses anyway. No exclusive create reproduces these, so the
-  // claim is `errorOnExist`: a run that loses the name is told so and moves to the next one, rather
-  // than aborting the install over a backup path another run got to first.
+  if (sourceStats?.isSymbolicLink()) return copySymlinkToNewPath(sourcePath, targetPath);
+
+  // Whatever else `cpSync` refuses anyway - a FIFO or a socket. There is no exclusive-create
+  // primitive for these and none is needed: `cpSync` cannot write one regardless of what is at
+  // `targetPath`, so this always ends in a thrown `InstallError` rather than a name being claimed.
   try {
     cpSync(sourcePath, targetPath, { recursive: true, force: false, errorOnExist: true });
+    return true;
+  } catch (error) {
+    if (isErrnoIn(error, EXISTS_CODES)) return false;
+    throw new InstallError(`Failed to copy ${sourcePath} -> ${targetPath}`, error);
+  }
+}
+
+/**
+ * Write one symlink source to a path that must not exist, via `readlink` + `symlink` rather than
+ * `cpSync`.
+ *
+ * `cpSync`'s `errorOnExist` does not hold here: given a source that is itself a symlink, it refuses
+ * an existing *file or directory* at the target but silently replaces an existing *symlink* there -
+ * confirmed on this runtime - which is exactly the shape a backup name collision takes, since every
+ * backup this function writes is either a file, a directory, or (this case) a symlink. A losing run
+ * would then overwrite the winner's symlink backup and report success. `symlinkSync` has no such
+ * gap: it refuses EEXIST against anything already at the path, file, directory, or symlink alike,
+ * having touched nothing.
+ *
+ * It is also the wrong copy even when the name is free: `cpSync` writes a symlink but rewrites a
+ * *relative* link text to an absolute path - confirmed on this runtime, dangling sources included -
+ * so a backup of `docs -> ../shared` would come back pointing at wherever `../shared` resolved on
+ * the machine that made it. `readlink` + `symlink` reproduces the link text verbatim.
+ */
+function copySymlinkToNewPath(sourcePath: string, targetPath: string): boolean {
+  try {
+    symlinkSync(readlinkSync(sourcePath), targetPath);
     return true;
   } catch (error) {
     if (isErrnoIn(error, EXISTS_CODES)) return false;
@@ -602,3 +634,16 @@ function copyNestedNamedDirectory(
     }
   }
 }
+
+/**
+ * Test-only seam onto the private primitives whose state-after-inspection behaviour a caller-level
+ * test cannot reliably force: `copyLeaf`'s exclusive create (the target is removed by the caller
+ * moments before this runs, and a real race cannot be scripted deterministically), `unlinkManagedEntry`'s
+ * refusal of a directory, and `reserveDirectory`'s owner-only reservation window. Exposes exactly
+ * these three and nothing else - not a general escape hatch, and not exported from the package entry.
+ */
+export const __test = {
+  copyLeaf,
+  unlinkManagedEntry,
+  reserveDirectory,
+};
