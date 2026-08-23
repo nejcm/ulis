@@ -1869,4 +1869,210 @@ describe("remote install consent", () => {
     expect(state.remoteCommands).toEqual([]);
     expect(state.screen).not.toBe("installReview");
   });
+
+  it("discards a superseded preparation's clone and publishes the newer one", async () => {
+    const secondUrl = "https://github.com/o/r2";
+    const cloned = mockClone();
+    const harness = await createHarness();
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+
+    // Overlapping preparations for two different sources: the second bumps the generation and
+    // aborts the first before the first ever resumes from its own await.
+    const first = harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    state.customSource = secondUrl;
+    const second = harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    await Promise.all([first, second]);
+
+    // Never the first: a stale preparation resuming after the newer one published must not win.
+    expect(state.remoteCommandSource).toBe(secondUrl);
+    expect(cloned.map(existsSync)).toEqual([false, true]);
+
+    await harness.controller.shutdown(0);
+  });
+
+  it("discards a superseded preparation that rejects after being superseded", async () => {
+    const secondUrl = "https://github.com/o/r2";
+    const cloned: string[] = [];
+    let rejectFirst: ((error: Error) => void) | undefined;
+    installTest.setRuntimeDependencies({
+      runCommand(_lookup: string, args: readonly string[]) {
+        return { status: args[0] === "gh" ? 1 : 0 } as never;
+      },
+      async runAsyncCommand(command: string, args: readonly string[]) {
+        if (command !== "git") return { status: 0, stdout: "", stderr: "" };
+        const dir = args[args.length - 1]!;
+        cloned.push(join(dir, ".."));
+        // The first clone hangs, then fails, only after the second preparation has published.
+        if (cloned.length === 1) {
+          return new Promise<never>((_resolve, reject) => {
+            rejectFirst = reject;
+          });
+        }
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, "config.yaml"), "version: 1\n", "utf-8");
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    } as never);
+
+    const harness = await createHarness();
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+
+    const first = harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    await Bun.sleep(10);
+    state.customSource = secondUrl;
+    await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+
+    expect(state.remoteCommandSource).toBe(secondUrl);
+    expect(state.screen).toBe("installReview");
+
+    // The superseded first preparation now fails; its own catch handling must not clobber the
+    // review the second preparation already published.
+    rejectFirst?.(new Error("boom"));
+    await first;
+
+    expect(state.remoteCommandSource).toBe(secondUrl);
+    expect(state.screen).toBe("installReview");
+    expect(state.notice).toBe("");
+
+    await harness.controller.shutdown(0);
+  });
+
+  it("does not let a superseded preparation's cleanup clear an active prepareAbort", async () => {
+    const cloned: string[] = [];
+    const releases: (() => void)[] = [];
+    installTest.setRuntimeDependencies({
+      runCommand(_lookup: string, args: readonly string[]) {
+        return { status: args[0] === "gh" ? 1 : 0 } as never;
+      },
+      async runAsyncCommand(command: string, args: readonly string[]) {
+        if (command !== "git") return { status: 0, stdout: "", stderr: "" };
+        const dir = args[args.length - 1]!;
+        cloned.push(join(dir, ".."));
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, "config.yaml"), "version: 1\n", "utf-8");
+        await new Promise<void>((resolve) => {
+          releases.push(resolve);
+        });
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    } as never);
+
+    const harness = await createHarness();
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.platforms = ["claude"];
+
+    state.customSource = `${url}/a`;
+    const first = harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    await Bun.sleep(10);
+
+    state.customSource = `${url}/b`;
+    const second = harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    await Bun.sleep(10);
+
+    state.customSource = `${url}/c`;
+    const third = harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    await Bun.sleep(10);
+
+    // Let the twice-superseded first settle while the third is still the live preparation.
+    releases[0]?.();
+    await first;
+
+    // A stale preparation's own cleanup must not clear `prepareAbort` out from under the still
+    // in-flight third preparation: cancelling must still reach it.
+    state.logs = [];
+    await harness.controller.handleEffect({ type: "cancelRunning" });
+    expect(state.logs).toContain("[warn] Stopping remote fetch...");
+
+    releases[1]?.();
+    releases[2]?.();
+    await Promise.all([second, third]);
+    await harness.controller.shutdown(0);
+  });
+
+  it("discards a preparation invalidated mid-clone even when its own controller was never aborted", async () => {
+    // `prepareRemoteInstall`'s post-clone check and its `abort.signal.aborted` check normally fire
+    // together, because superseding a preparation always aborts its controller first - so a test
+    // that only supersedes through the normal call path cannot isolate the post-clone check from
+    // that backstop. Bumping `prepareGeneration` directly (the same reflection `preparedRemote`
+    // tests above already use) reproduces staleness without touching `prepareAbort`, isolating it.
+    const cloned = mockClone();
+    const harness = await createHarness();
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+
+    const internals = harness.controller as unknown as { prepareGeneration: number };
+    const preparing = harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    internals.prepareGeneration += 1;
+    await preparing;
+
+    expect(state.remoteCommandSource).toBe("");
+    expect(state.screen).not.toBe("installReview");
+    expect(cloned.map(existsSync)).toEqual([false]);
+
+    // The discard path never reaches `clearSpinner()` (nothing to redraw for a stale
+    // preparation), so the spinner interval only stops here, same as every other test above.
+    await harness.controller.shutdown(0);
+  });
+
+  it("does not reuse a stale published review while a differently-keyed clone is in flight", async () => {
+    // The reuse fast path's `prepareAbort == null` guard is redundant whenever the invariant
+    // "starting a new fetch always disposes the previous `preparedRemote` first" holds - so it can
+    // only matter if that invariant is ever violated. Reflection manufactures the violation
+    // directly (an in-flight fetch coexisting with a stale `preparedRemote` for the key being
+    // asked for) rather than relying on another bug to produce it, so this test exercises the
+    // guard on its own. The assertion below it, on the other hand, checks that invariant itself
+    // on the real call path - the property that actually matters, kept alongside the guard check
+    // rather than in place of it.
+    const cloned = mockClone();
+    const harness = await createHarness();
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+
+    await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    const internals = harness.controller as unknown as {
+      preparedRemote: { cleanup: () => void } | undefined;
+      prepareAbort: AbortController | undefined;
+    };
+    const staleReview = internals.preparedRemote;
+    expect(staleReview).toBeDefined();
+    // Capture and chain to the real cleanup, same as the reflection sites this pattern is borrowed
+    // from (above, and `signals.test.ts`): replacing it outright would strand the clone on disk.
+    const realCleanup = staleReview!.cleanup;
+    let staleCleanupCalls = 0;
+    staleReview!.cleanup = (() => {
+      staleCleanupCalls += 1;
+      realCleanup();
+    }) as never;
+
+    // Simulate an in-flight fetch for the same key coexisting with the stale review - impossible
+    // through the normal call path, since starting that fetch would have disposed it first.
+    internals.prepareAbort = new AbortController();
+
+    const second = harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    // The invariant the guard exists to protect, checked on the real call path rather than through
+    // reflection: once this (genuine) second preparation is under way, the fetch it is running
+    // means nothing may be reused, so `preparedRemote` must be undefined for as long as it is
+    // in flight.
+    expect(internals.prepareAbort).toBeDefined();
+    expect(internals.preparedRemote).toBeUndefined();
+    await second;
+
+    // A real fetch must run rather than reusing the stale entry: the stale review is disposed and
+    // a second clone is made, rather than being silently republished untouched.
+    expect(staleCleanupCalls).toBe(1);
+    expect(cloned).toHaveLength(2);
+
+    await harness.controller.shutdown(0);
+  });
 });

@@ -1,28 +1,20 @@
 import type { CliRenderer } from "@opentui/core";
 
 import type { Logger } from "../build.js";
-import { planRemoteCommands } from "../install/trust-gate.js";
-import type { Platform } from "../platforms.js";
 import type { InterruptGuard } from "../utils/interrupt.js";
-import { sanitizeConsentText } from "../utils/redact.js";
-import { resolvePresets, type ResolvedPreset } from "../utils/resolve-presets.js";
-import { resolveSourceOrRemote } from "../utils/resolve-source.js";
 import { initializeMissingSource, runTuiAction } from "./actions.js";
 import { TuiApp } from "./app.js";
 import { readClipboardText } from "./clipboard.js";
 import { applyFlowPreferences, loadTuiPreferences, saveTuiPreferences, snapshotTuiPreferences } from "./preferences.js";
 import { listTuiPresets } from "./presets.js";
-import { planSource, remotePresetRef, reviewFingerprint, selectedPresets } from "./selectors.js";
 import {
-  createInitialState,
-  formatActionTitle,
-  PRESET_INSTALL_REVIEW_START_ROW,
-  type PlannedSource,
-  type PreparedRemoteInstall,
-  type TuiEffect,
-  type TuiScreen,
-  type TuiState,
-} from "./state-model.js";
+  disposePreparedRemote,
+  prepareRemoteInstall,
+  type PreparedReview,
+  type RemoteReviewHost,
+} from "./remote-review.js";
+import { reviewFingerprint } from "./selectors.js";
+import { createInitialState, formatActionTitle, type TuiEffect, type TuiState } from "./state-model.js";
 
 const SPINNER_INTERVAL_MS = 120;
 const MAX_RETAINED_LOGS = 80;
@@ -57,25 +49,6 @@ export interface TuiControllerOptions {
   readonly cwd?: string;
   /** Overrides the home directory used in rendered plans and workflow execution. */
   readonly userHome?: string;
-}
-
-/**
- * A prepared review plus the bookkeeping only the controller needs: what was fetched, so a review
- * regenerated for the same remote can reuse the clone instead of going back to the network.
- */
-interface PreparedReview extends PreparedRemoteInstall {
-  /** Identity of the fetch itself. Options change the command list, not the tree it is read from. */
-  readonly cloneKey: string;
-  readonly remotePresets: readonly ResolvedPreset[];
-}
-
-/** Everything the command list is planned from, captured at the same instant as the fingerprint. */
-interface PrepareSnapshot {
-  readonly fingerprint: string;
-  readonly platforms: readonly Platform[];
-  readonly presetInstallExtensions: boolean;
-  readonly skipExternalSkills: boolean;
-  readonly localPresets: readonly ResolvedPreset[];
 }
 
 /**
@@ -134,7 +107,7 @@ export class TuiController {
       options.interruptGuard.onCleanup(() => this.renderer.destroy());
       options.interruptGuard.onCleanup(() => this.app.destroy());
       options.interruptGuard.onCleanup(() => this.clearSpinner());
-      options.interruptGuard.onCleanup(() => this.disposePreparedRemote());
+      options.interruptGuard.onCleanup(() => disposePreparedRemote(this.remoteReviewHost()));
       options.interruptGuard.onCleanup(() => {
         for (const cleanup of [...this.inFlightCleanups]) {
           try {
@@ -152,7 +125,7 @@ export class TuiController {
   }
 
   async handleEffect(effect: TuiEffect): Promise<void> {
-    if (effect.discardRemoteReview) this.disposePreparedRemote();
+    if (effect.discardRemoteReview) disposePreparedRemote(this.remoteReviewHost());
     if (effect.type === "none") return;
 
     if (effect.type === "exit") {
@@ -178,7 +151,7 @@ export class TuiController {
     }
 
     if (effect.type === "prepareRemoteInstall") {
-      const running = this.prepareRemoteInstall(effect.action);
+      const running = prepareRemoteInstall(this.remoteReviewHost(), effect.action);
       this.preparePromises.add(running);
       try {
         await running;
@@ -232,7 +205,7 @@ export class TuiController {
         reviewFingerprint(this.state, this.preparedRemote.action, this.options.cwd, this.options.userHome)
         ? this.preparedRemote
         : undefined;
-    if (this.preparedRemote && !prepared) this.disposePreparedRemote();
+    if (this.preparedRemote && !prepared) disposePreparedRemote(this.remoteReviewHost());
     try {
       await this.runWithLogs(
         formatActionTitle(effect.action),
@@ -246,7 +219,7 @@ export class TuiController {
           }),
       );
     } finally {
-      this.disposePreparedRemote();
+      disposePreparedRemote(this.remoteReviewHost());
     }
   }
 
@@ -342,177 +315,54 @@ export class TuiController {
     this.spinnerTimer = undefined;
   }
 
-  /** Tears the UI down and exits. Exposed for tests through `options.exit`. */
   /**
-   * Clone the remote source (and/or preset ref) so the review screen can list the exact commands it
-   * will run. The clone is kept and handed to the install, so consent applies to what executes.
+   * Adapts this controller to {@link RemoteReviewHost}, the contract `remote-review.ts` prepares
+   * and disposes reviews through. `preparedRemote`/`prepareGeneration`/`prepareAbort` are get/set
+   * pairs closing over this controller's own private fields, so a write through the host writes
+   * the fields `controller.test.ts` reflects into directly.
    */
-  private async prepareRemoteInstall(action: "install" | "presetInstall"): Promise<void> {
-    const plan = planSource(this.state, this.options.cwd, this.options.userHome);
-    const remoteRef = remotePresetRef(this.state);
-    // `action` rides along even though `publishReview` replans for whichever action is asked for:
-    // it costs one string and removes any need to reason about cross-action reuse at all.
-    const cloneKey = JSON.stringify([action, plan.remote ? plan.sourceDir : "", remoteRef ?? "", plan.globalInstall]);
-
-    // The review screen's own toggles are part of the fingerprint, so using them has to regenerate
-    // the review. They change the command list, never the tree it is planned from, so replan from
-    // the clone already on disk rather than putting a network round trip behind every checkbox.
-    if (this.prepareAbort == null && this.preparedRemote?.cloneKey === cloneKey) {
-      const reused = this.preparedRemote;
-      this.publishReview(action, plan, remoteRef, cloneKey, this.snapshotPrepareInputs(action), {
-        sourceDir: reused.sourceDir,
-        remotePresets: reused.remotePresets,
-        cleanup: reused.cleanup,
-      });
-      this.render();
-      return;
-    }
-
-    // One preparation at a time: a second one must not overwrite the first's clone without
-    // disposing it, and a completion that arrives after being superseded must throw its own away.
-    this.prepareAbort?.abort();
-    this.disposePreparedRemote();
-    const generation = ++this.prepareGeneration;
-    const abort = new AbortController();
-    this.prepareAbort = abort;
-
-    // Snapshot every input the command list depends on at the same instant as the fingerprint.
-    // Reading them back after the awaits would let a change made during the clone (and reverted
-    // afterwards) produce a review that omits commands the matching fingerprint then permits.
-    const snapshot = this.snapshotPrepareInputs(action);
-    const cleanups: (() => void)[] = [];
-    const disposeAll = () => {
-      while (cleanups.length > 0) cleanups.pop()!();
-    };
-    // Visible to shutdown, so an in-flight clone is never stranded on disk.
-    this.inFlightCleanups.add(disposeAll);
-
-    // Fetching is a network operation, so it gets the same running screen as every other long
-    // operation: progress is visible, its logs stream, `q` cancels it, and - because that screen
-    // takes no editing keys - the plan cannot drift out from under the review being prepared.
-    const title = action === "install" ? "Fetch remote source" : "Fetch remote presets";
-    // A superseded preparation inherits the running screen; the plan screen is the only way in.
-    const originScreen: TuiScreen = this.state.screen === "running" ? "plan" : this.state.screen;
-    this.state.notice = "";
-    this.state.logs = [`Starting: ${title}`];
-    this.state.screen = "running";
-    this.state.runningSpinnerFrame = 0;
-    this.startSpinner();
-    this.render();
-
-    try {
-      const source = plan.remote
-        ? await resolveSourceOrRemote({
-            source: plan.sourceDir,
-            global: plan.globalInstall,
-            logger: this.createLogger(),
-            signal: abort.signal,
-          })
-        : undefined;
-      if (source) cleanups.push(source.cleanup);
-
-      const remote = remoteRef
-        ? await resolvePresets([remoteRef], {
-            nonInteractive: true,
-            logger: this.createLogger(),
-            signal: abort.signal,
-          })
-        : undefined;
-      if (remote) cleanups.push(remote.cleanup);
-
-      if (generation !== this.prepareGeneration) {
-        // Superseded while cloning: this result is stale, so discard it rather than publish it.
-        disposeAll();
-        return;
-      }
-      // Cancelled mid-clone: keep the result off the screen as well as off the disk.
-      if (abort.signal.aborted) throw new Error(`${title} stopped by user.`);
-
-      this.clearSpinner();
-      this.publishReview(action, plan, remoteRef, cloneKey, snapshot, {
-        sourceDir: source?.sourceDir,
-        remotePresets: remote?.presets ?? [],
-        cleanup: disposeAll,
-      });
-    } catch (error) {
-      disposeAll();
-      if (generation !== this.prepareGeneration) return;
-      this.clearSpinner();
-      // A failed clone is a notice, never a crash.
-      this.state.screen = originScreen;
-      this.state.notice = abort.signal.aborted
-        ? `${title} stopped by user.`
-        : error instanceof Error
-          ? error.message
-          : String(error);
-      this.state.remoteCommands = [];
-      this.state.remoteCommandSource = "";
-    } finally {
-      this.inFlightCleanups.delete(disposeAll);
-      if (this.prepareAbort === abort) this.prepareAbort = undefined;
-    }
-    this.render();
-  }
-
-  private snapshotPrepareInputs(action: "install" | "presetInstall"): PrepareSnapshot {
+  private remoteReviewHost(): RemoteReviewHost {
+    const self = this;
     return {
-      fingerprint: reviewFingerprint(this.state, action, this.options.cwd, this.options.userHome),
-      platforms: [...this.state.platforms],
-      presetInstallExtensions: this.state.presetInstallExtensions,
-      skipExternalSkills: this.state.skipExternalSkills,
-      localPresets: selectedPresets(this.state),
-    };
-  }
-
-  /** Plan the command list from an already-resolved clone and show it on the review screen. */
-  private publishReview(
-    action: "install" | "presetInstall",
-    plan: PlannedSource,
-    remoteRef: string | undefined,
-    cloneKey: string,
-    snapshot: PrepareSnapshot,
-    clone: { sourceDir?: string; remotePresets: readonly ResolvedPreset[]; cleanup: () => void },
-  ): void {
-    const presets = [...snapshot.localPresets, ...clone.remotePresets];
-    const commands = planRemoteCommands({
-      sourceDir: action === "install" ? (clone.sourceDir ?? plan.sourceDir) : undefined,
-      presets,
-      platforms: snapshot.platforms,
-      destBase: plan.destBase,
+      // Captured values, not accessors like the three below - safe only because `state` is
+      // `readonly` (its properties mutate in place, so the same object stays current) and
+      // `options` is `private readonly` with fields nothing reassigns. If either ever becomes
+      // reassignable, this host goes stale and must switch to a getter too.
+      state: this.state,
+      cwd: this.options.cwd,
       userHome: this.options.userHome,
-      globalInstall: plan.globalInstall,
-      installExtensions: action === "presetInstall" ? snapshot.presetInstallExtensions : true,
-      installSkills: !snapshot.skipExternalSkills,
-    });
-
-    this.preparedRemote = {
-      action,
-      fingerprint: snapshot.fingerprint,
-      cloneKey,
-      sourceDir: clone.sourceDir,
-      remotePresets: clone.remotePresets,
-      presets,
-      commands,
-      cleanup: clone.cleanup,
+      get preparedRemote() {
+        return self.preparedRemote;
+      },
+      set preparedRemote(value) {
+        self.preparedRemote = value;
+      },
+      get prepareGeneration() {
+        return self.prepareGeneration;
+      },
+      set prepareGeneration(value) {
+        self.prepareGeneration = value;
+      },
+      get prepareAbort() {
+        return self.prepareAbort;
+      },
+      set prepareAbort(value) {
+        self.prepareAbort = value;
+      },
+      render: () => this.render(),
+      createLogger: () => this.createLogger(),
+      startSpinner: () => this.startSpinner(),
+      clearSpinner: () => this.clearSpinner(),
+      trackCleanup: (cleanup) => {
+        this.inFlightCleanups.add(cleanup);
+      },
+      untrackCleanup: (cleanup) => {
+        this.inFlightCleanups.delete(cleanup);
+      },
     };
-    this.state.remoteCommands = commands;
-    this.state.remoteCommandSource = sanitizeConsentText(plan.remote ? plan.sourceDir : (remoteRef ?? ""));
-
-    const screen = action === "install" ? "installReview" : "presetInstallReview";
-    if (this.state.screen !== screen) {
-      this.state.screen = screen;
-      // Land on "Start", never on a toggle: a confirming Enter must not flip an option instead.
-      this.state.cursor = action === "install" ? 0 : PRESET_INSTALL_REVIEW_START_ROW;
-    }
   }
 
-  private disposePreparedRemote(): void {
-    this.preparedRemote?.cleanup();
-    this.preparedRemote = undefined;
-    this.state.remoteCommands = [];
-    this.state.remoteCommandSource = "";
-  }
-
+  /** Tears the UI down and exits. Exposed for tests through `options.exit`. */
   async shutdown(code: number): Promise<void> {
     this.clearSpinner();
     if (this.shutdownStarted) {
@@ -560,7 +410,7 @@ export class TuiController {
     } else {
       for (const cleanup of [...this.inFlightCleanups]) cleanup();
       this.inFlightCleanups.clear();
-      this.disposePreparedRemote();
+      disposePreparedRemote(this.remoteReviewHost());
       this.clearSpinner();
       this.app.destroy();
       this.renderer.destroy();
