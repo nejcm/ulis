@@ -1,4 +1,4 @@
-import type { Tone } from "./view.js";
+import type { Tone } from "./view/index.js";
 
 /**
  * ULIS palette. Accents are fixed teal/cyan so the brand reads the same in every

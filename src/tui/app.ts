@@ -29,7 +29,7 @@ import {
   type ScreenView,
   type ViewPane,
   type ViewRow,
-} from "./view.js";
+} from "./view/index.js";
 
 const ULIS_LOGO = [
   " _   _ _     ___ ____  ",

@@ -10,7 +10,7 @@ import { TuiController, type TuiControllerOptions } from "./controller.js";
 import { handleTuiKey } from "./keys.js";
 import { planItems, reviewFingerprint } from "./selectors.js";
 import { PRESET_INSTALL_REVIEW_START_ROW, type TuiState } from "./state-model.js";
-import { MIN_COLUMNS, MIN_ROWS, SPLIT_COLUMNS } from "./view.js";
+import { MIN_COLUMNS, MIN_ROWS, SPLIT_COLUMNS } from "./view/index.js";
 
 /** Comfortably above `key-codes.ts`'s 35 ms duplicate-key window. */
 const KEY_DELAY_MS = 60;

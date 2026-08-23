@@ -7,7 +7,7 @@ import {
   PRESET_INSTALL_REVIEW_START_ROW,
   type PlanItemId,
 } from "./state-model.js";
-import { buildScreenView, MIN_COLUMNS, MIN_ROWS, SPLIT_COLUMNS, splitLogTag } from "./view.js";
+import { buildScreenView, MIN_COLUMNS, MIN_ROWS, SPLIT_COLUMNS, splitLogTag } from "./view/index.js";
 
 describe("splitLogTag", () => {
   it("separates colored status tags from unstyled message text", () => {
