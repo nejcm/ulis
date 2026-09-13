@@ -37,15 +37,22 @@ export function cleanDir(dirPath: string): void {
  * If `outDir/AGENTS.md` exists, write alias files (e.g. CLAUDE.md) alongside
  * it that reference AGENTS.md. Existing files at those paths are left
  * untouched so platform-specific overrides win.
+ *
+ * `content` is required and has no default: it must be whatever the target
+ * harness treats as an *include* of AGENTS.md, not prose about it. A plain
+ * markdown link is inert — Claude Code loads `@AGENTS.md` and renders
+ * `[AGENTS.md](./AGENTS.md)` as text the model has no reason to act on — so a
+ * default here would let a new platform ship an alias that silently delivers
+ * no instructions at all.
  */
-export function writeAgentsAliases(outDir: string, aliases: readonly string[]): readonly string[] {
+export function writeAgentsAliases(outDir: string, aliases: readonly string[], content: string): readonly string[] {
   const agentsPath = join(outDir, "AGENTS.md");
   if (!existsSync(agentsPath)) return [];
   const written: string[] = [];
   for (const alias of aliases) {
     const aliasPath = join(outDir, alias);
     if (existsSync(aliasPath)) continue;
-    writeFile(aliasPath, `See [AGENTS.md](./AGENTS.md) for instructions.\n`);
+    writeFile(aliasPath, content);
     written.push(alias);
   }
   return written;

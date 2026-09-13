@@ -335,6 +335,7 @@ describe("writeResult", () => {
         post: {
           rawDirs: [rawDir],
           aliasFiles: ["CLAUDE.md"],
+          aliasContent: "@AGENTS.md\n",
           skillDirs: [],
           appendAfterRaw: [{ path: "AGENTS.md", content: "## Rules\n\nRead rules.\n" }],
         },
@@ -344,7 +345,27 @@ describe("writeResult", () => {
     );
 
     expect(read(join(outDir, "AGENTS.md"))).toBe("Raw instructions.\n\n## Rules\n\nRead rules.\n");
-    expect(read(join(outDir, "CLAUDE.md"))).toBe("See [AGENTS.md](./AGENTS.md) for instructions.\n");
+    expect(read(join(outDir, "CLAUDE.md"))).toBe("@AGENTS.md\n");
+  });
+
+  it("refuses aliasFiles without aliasContent", () => {
+    const outDir = createTempRoot("ulis-writer-");
+
+    expect(() =>
+      writeResult(
+        {
+          artifacts: [],
+          post: {
+            rawDirs: [],
+            aliasFiles: ["CLAUDE.md"],
+            skillDirs: [],
+            appendAfterRaw: [{ path: "AGENTS.md", content: "Generated instructions.\n" }],
+          },
+        },
+        outDir,
+        "claude",
+      ),
+    ).toThrow(/aliasContent/u);
   });
 
   it("creates appendAfterRaw files before alias creation", () => {
@@ -356,6 +377,7 @@ describe("writeResult", () => {
         post: {
           rawDirs: [],
           aliasFiles: ["CLAUDE.md"],
+          aliasContent: "@AGENTS.md\n",
           skillDirs: [],
           appendAfterRaw: [{ path: "AGENTS.md", content: "Generated instructions.\n" }],
         },
@@ -365,6 +387,6 @@ describe("writeResult", () => {
     );
 
     expect(read(join(outDir, "AGENTS.md"))).toBe("Generated instructions.\n");
-    expect(read(join(outDir, "CLAUDE.md"))).toBe("See [AGENTS.md](./AGENTS.md) for instructions.\n");
+    expect(read(join(outDir, "CLAUDE.md"))).toBe("@AGENTS.md\n");
   });
 });

@@ -30,6 +30,7 @@ export function generateClaude(project: ProjectBundle): GenerationResult {
     post: {
       rawDirs: rawDirs(project, "claude"),
       aliasFiles: ["CLAUDE.md"],
+      aliasContent: "@AGENTS.md\n",
       skillDirs: buildClaudeSkillDirs(enabledSkillsFor(project.skills, "claude")),
     },
   };

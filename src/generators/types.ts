@@ -25,6 +25,13 @@ export interface PostEmit {
   readonly rawDirs: readonly string[];
   /** Alias filenames to write alongside an emitted AGENTS.md (e.g. "CLAUDE.md"). */
   readonly aliasFiles: readonly string[];
+  /**
+   * Body for each alias file. Required whenever `aliasFiles` is non-empty: it
+   * must be an include directive in the target harness's own dialect (Claude
+   * Code: `@AGENTS.md`), because a markdown link is inert prose that delivers
+   * no instructions.
+   */
+  readonly aliasContent?: string;
   /** Skill directories to deep-copy (used by platforms that ship skills as dirs). */
   readonly skillDirs: readonly {
     readonly name: string;
