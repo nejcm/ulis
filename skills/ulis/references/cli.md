@@ -14,15 +14,15 @@ Use this when you need exact flags, destinations, or preset/remote behavior.
 
 ## Project vs global destinations
 
-| | Project (default) | `--global` |
-| --- | --- | --- |
-| Source | `./.ulis/` | `~/.ulis/` |
-| Generated | `<source>/generated/<platform>/` | same, under that source |
-| Claude | `./.claude/` | `~/.claude/` |
-| Codex | `./.codex/` | `~/.codex/` |
-| Cursor | `./.cursor/` | `~/.cursor/` |
-| OpenCode | `./.opencode/` | `~/.config/opencode/` (Windows: `%USERPROFILE%\.config\opencode\`) |
-| ForgeCode | `./.forge/` | `~/.forge/` |
+|           | Project (default)                | `--global`                                                         |
+| --------- | -------------------------------- | ------------------------------------------------------------------ |
+| Source    | `./.ulis/`                       | `~/.ulis/`                                                         |
+| Generated | `<source>/generated/<platform>/` | same, under that source                                            |
+| Claude    | `./.claude/`                     | `~/.claude/`                                                       |
+| Codex     | `./.codex/`                      | `~/.codex/`                                                        |
+| Cursor    | `./.cursor/`                     | `~/.cursor/`                                                       |
+| OpenCode  | `./.opencode/`                   | `~/.config/opencode/` (Windows: `%USERPROFILE%\.config\opencode\`) |
+| ForgeCode | `./.forge/`                      | `~/.forge/`                                                        |
 
 `init` in project mode also appends `/.ulis/generated/` to `.gitignore`. Global init does not write a gitignore.
 
@@ -64,19 +64,19 @@ ulis install --skip-rebuild --yes
 ulis install --source https://github.com/acme/ulis-config#main
 ```
 
-| Flag | Effect |
-| --- | --- |
-| `-g`, `--global` | Home source and home destinations |
-| `--source <path\|url>` | Override source. Git URL allowed here |
-| `--target` | Subset of platforms |
-| `-y`, `--yes` | Skip overwrite **and** remote trust gate |
-| `--skip-rebuild` | Use existing `generated/`. Refused if provenance says remote |
-| `--backup` | Timestamped copies of existing platform dirs |
-| `--no-prune` | Keep stale managed agents/local skills; they become unmanaged |
-| `--preset` | Layer presets, then base source |
-| `--runner npx\|bunx` | Runner for `extensions.yaml` |
-| `--skip-extensions` | Do not run `extensions.yaml` |
-| `--skip-external-skills` | Do not run `skills.yaml` |
+| Flag                     | Effect                                                        |
+| ------------------------ | ------------------------------------------------------------- |
+| `-g`, `--global`         | Home source and home destinations                             |
+| `--source <path\|url>`   | Override source. Git URL allowed here                         |
+| `--target`               | Subset of platforms                                           |
+| `-y`, `--yes`            | Skip overwrite **and** remote trust gate                      |
+| `--skip-rebuild`         | Use existing `generated/`. Refused if provenance says remote  |
+| `--backup`               | Timestamped copies of existing platform dirs                  |
+| `--no-prune`             | Keep stale managed agents/local skills; they become unmanaged |
+| `--preset`               | Layer presets, then base source                               |
+| `--runner npx\|bunx`     | Runner for `extensions.yaml`                                  |
+| `--skip-extensions`      | Do not run `extensions.yaml`                                  |
+| `--skip-external-skills` | Do not run `skills.yaml`                                      |
 
 Ownership: `.ulis-manifest.json` in each selected platform root. First manifest-aware install adopts the current set and prunes nothing. Later installs prune `previous managed − current generated` for **selected** platforms only. External `skills.yaml` installs are not in the manifest.
 
@@ -116,13 +116,13 @@ Trust gate lists commands from `skills.yaml`/`extensions.yaml`, generated `comma
 
 ## Reverse of each install toggle
 
-| On (or default) | Off |
-| --- | --- |
-| prune (default) | `--no-prune` |
-| rebuild (default) | `--skip-rebuild` (blocked if generated from remote) |
-| run `extensions.yaml` | `--skip-extensions` |
-| run `skills.yaml` | `--skip-external-skills` |
-| overwrite in place (default) | `--backup` |
+| On (or default)              | Off                                                 |
+| ---------------------------- | --------------------------------------------------- |
+| prune (default)              | `--no-prune`                                        |
+| rebuild (default)            | `--skip-rebuild` (blocked if generated from remote) |
+| run `extensions.yaml`        | `--skip-extensions`                                 |
+| run `skills.yaml`            | `--skip-external-skills`                            |
+| overwrite in place (default) | `--backup`                                          |
 
 ## Exit codes
 
