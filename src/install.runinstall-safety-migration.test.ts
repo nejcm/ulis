@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync } from "node:fs";
+import { createServer, type Server } from "node:net";
 import { join } from "node:path";
 
 import { runBuild, type Logger } from "./build.js";
@@ -14,6 +15,16 @@ import {
   silentLogger,
   write,
 } from "./test-utils/install.js";
+
+// A real listening unix socket, the shape a live Codex `ipc.sock` takes in the destination
+// directory a `--backup` install copies aside.
+function listenOnUnixSocket(path: string): Promise<Server> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(path, () => resolve(server));
+  });
+}
 
 afterEach(() => {
   __test.resetRuntimeDependencies();
@@ -111,6 +122,56 @@ describe("runInstall", () => {
     for (const backup of backups) {
       expect(read(join(projectDir, backup, "keep.md"))).toBe("Original.\n");
     }
+  });
+
+  // A live unix socket in the destination (Codex's `ipc.sock`, reported against a real ~/.codex) is
+  // not a file `cpSync` can reproduce. It must not abort the platform's install: the socket is
+  // process state a backup could never restore anyway, so the right outcome is the rest of the
+  // directory backed up, the socket named in a warning rather than silently missing, and install
+  // proceeding normally.
+  it("backs up a destination directory containing a live socket, warns about it by path, and still installs", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "codex", "AGENTS.md"), "Generated instructions.\n");
+    write(join(projectDir, ".codex", "config.toml"), "keep = true\n");
+    const socketPath = join(projectDir, ".codex", "ipc", "ipc.sock");
+    mkdirSync(join(projectDir, ".codex", "ipc"), { recursive: true });
+    const server = await listenOnUnixSocket(socketPath);
+    const warnings: string[] = [];
+
+    try {
+      const installed = await runInstall({
+        sourceDir,
+        outputDir,
+        destBase: projectDir,
+        userHome,
+        platforms: ["codex"],
+        rebuild: false,
+        backup: true,
+        logger: {
+          ...silentLogger,
+          warn(message) {
+            warnings.push(message);
+          },
+        },
+      });
+
+      expect(installed).toEqual(["codex"]);
+    } finally {
+      server.close();
+    }
+
+    expect(read(join(projectDir, ".codex", "AGENTS.md"))).toBe("Generated instructions.\n");
+    expect(warnings.some((message) => message.includes(socketPath))).toBe(true);
+
+    const backupDir = readdirSync(projectDir).find((entry) => entry.startsWith(".codex.") && entry.endsWith(".backup"));
+    expect(backupDir).toBeDefined();
+    expect(read(join(projectDir, backupDir!, "config.toml"))).toBe("keep = true\n");
+    expect(existsSync(join(projectDir, backupDir!, "ipc", "ipc.sock"))).toBe(false);
   });
 
   // The generated set changing a name from a directory to a file must not take the directory's

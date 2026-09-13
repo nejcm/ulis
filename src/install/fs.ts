@@ -343,7 +343,7 @@ export function filesystemIdentity(path: string): string | undefined {
  * it is deliberately left open - see CHANGELOG. The native config files that `preserved-native-configs.ts`
  * writes into the destination follow the same rule, and carry the same residual.
  */
-function copyIntoTarget(sourcePath: string, targetPath: string): void {
+function copyIntoTarget(sourcePath: string, targetPath: string, onUnsupportedEntry?: (path: string) => void): void {
   const sourceStats = statsOf(sourcePath);
   if (sourceStats?.isDirectory()) {
     const created = !isRealDirectory(targetPath);
@@ -352,11 +352,19 @@ function copyIntoTarget(sourcePath: string, targetPath: string): void {
       createDirectoryExclusively(targetPath);
     }
     for (const entry of readDirectoryEntries(sourcePath)) {
-      copyIntoTarget(join(sourcePath, entry), join(targetPath, entry));
+      copyIntoTarget(join(sourcePath, entry), join(targetPath, entry), onUnsupportedEntry);
     }
     // Mode after contents, the order `cpSync` uses: a read-only source directory must not lock us
     // out of filling the copy of it first.
     if (created) applyMode(targetPath, sourceStats.mode);
+    return;
+  }
+
+  // Only a caller that opted in (backupDirectory's tree walk, over a live destination) is asked to
+  // tolerate a socket or FIFO; the generated tree this also copies never contains one, so a caller
+  // that didn't opt in still gets the throw below.
+  if (onUnsupportedEntry && sourceStats && !sourceStats.isFile() && !sourceStats.isSymbolicLink()) {
+    onUnsupportedEntry(sourcePath);
     return;
   }
 
@@ -401,12 +409,16 @@ function removeForReplacement(targetPath: string): void {
  * nothing, so the loser simply moves on to the next name - one exclusive primitive per entry type
  * this writes, which is why none of the three branches below is a `cpSync`.
  */
-export function copyToNewPath(sourcePath: string, targetPath: string): boolean {
+export function copyToNewPath(
+  sourcePath: string,
+  targetPath: string,
+  onUnsupportedEntry?: (path: string) => void,
+): boolean {
   const sourceStats = statsOf(sourcePath);
   if (sourceStats?.isDirectory()) {
     if (!reserveDirectory(targetPath)) return false;
     for (const entry of readDirectoryEntries(sourcePath)) {
-      copyIntoTarget(join(sourcePath, entry), join(targetPath, entry));
+      copyIntoTarget(join(sourcePath, entry), join(targetPath, entry), onUnsupportedEntry);
     }
     // After the contents, as everywhere else here, and through a handle rather than the path.
     applyMode(targetPath, sourceStats.mode);

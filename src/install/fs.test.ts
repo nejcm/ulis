@@ -9,6 +9,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { createServer, type Server } from "node:net";
 import { join } from "node:path";
 
 import { cleanupTempRoots, createTempRoot } from "../test-utils/fs.js";
@@ -18,6 +19,16 @@ import { __test, backupPath, copyPlatformContents, copyToNewPath, filesystemIden
 const { copyLeaf, reserveDirectory, unlinkManagedEntry } = __test;
 
 afterEach(cleanupTempRoots);
+
+// A real listening unix socket, not just a path that looks like one: `cpSync` and `lstat` both need
+// an actual socket inode to reproduce what trips over `~/.codex/ipc/ipc.sock` in production.
+function listenOnUnixSocket(path: string): Promise<Server> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(path, () => resolve(server));
+  });
+}
 
 // fs.ts: the destination-mutation safety rules - symlink refusal at a destination path, exclusive
 // creation, mode preservation, the sweep-before-copy ordering, narrow (non-recursive) removal of
@@ -164,6 +175,53 @@ describe("copyToNewPath: symlinks", () => {
     expect(copyToNewPath(source, target)).toBe(false);
     expect(lstatSync(target).isSymbolicLink()).toBe(true);
     expect(readlinkSync(target)).toBe("nowhere.txt");
+  });
+});
+
+describe("copyToNewPath: entries a plain copy cannot reproduce (sockets, FIFOs)", () => {
+  it("throws for a top-level socket source, with no opt-in caller to tolerate it", async () => {
+    const root = createTempRoot();
+    const source = join(root, "source.sock");
+    const target = join(root, "target.sock");
+    const server = await listenOnUnixSocket(source);
+    try {
+      expect(() => copyToNewPath(source, target)).toThrow(InstallError);
+    } finally {
+      server.close();
+    }
+  });
+
+  it("skips a socket nested in a directory copy when the caller opts in, and copies everything else", async () => {
+    const root = createTempRoot();
+    const source = join(root, "source-dir");
+    const target = join(root, "target-dir");
+    mkdirSync(source, { recursive: true });
+    writeFileSync(join(source, "keep.txt"), "kept");
+    const server = await listenOnUnixSocket(join(source, "ipc.sock"));
+    const skipped: string[] = [];
+    try {
+      expect(copyToNewPath(source, target, (path) => skipped.push(path))).toBe(true);
+    } finally {
+      server.close();
+    }
+
+    expect(skipped).toEqual([join(source, "ipc.sock")]);
+    expect(readFileSync(join(target, "keep.txt"), "utf-8")).toBe("kept");
+    expect(existsSync(join(target, "ipc.sock"))).toBe(false);
+  });
+
+  it("aborts the whole directory copy on a nested socket when the caller does not opt in", async () => {
+    const root = createTempRoot();
+    const source = join(root, "source-dir");
+    const target = join(root, "target-dir");
+    mkdirSync(source, { recursive: true });
+    writeFileSync(join(source, "keep.txt"), "kept");
+    const server = await listenOnUnixSocket(join(source, "ipc.sock"));
+    try {
+      expect(() => copyToNewPath(source, target)).toThrow(InstallError);
+    } finally {
+      server.close();
+    }
   });
 });
 

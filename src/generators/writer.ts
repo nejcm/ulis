@@ -67,7 +67,11 @@ export function writeResult(
   }
 
   if (result.post.aliasFiles.length > 0) {
-    const aliases = writeAgentsAliases(outDir, result.post.aliasFiles);
+    const { aliasContent } = result.post;
+    if (!aliasContent) {
+      throw new Error(`${platform}: aliasFiles requires aliasContent (an include directive, e.g. "@AGENTS.md")`);
+    }
+    const aliases = writeAgentsAliases(outDir, result.post.aliasFiles, aliasContent);
     for (const alias of aliases) logger.success(alias);
   }
 

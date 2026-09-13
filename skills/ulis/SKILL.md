@@ -1,7 +1,10 @@
 ---
 name: ulis
-description: Explains how to use the ulis CLI and TUI to scaffold, build, validate, and install multi-platform AI tool configs from one source tree. Use when a user asks how to work with ulis, which command to run, how project/global mode behaves, how presets merge, or how to navigate the TUI.
-argumentHint: "[task-or-question]"
+description: >-
+  Use the ulis CLI and author a .ulis/ source tree that generates Claude Code,
+  Codex, Cursor, OpenCode, and ForgeCode configs. Use whenever the user mentions
+  ulis, @nejcm/ulis or .ulis/. Do not invent platform dialects; edit the ULIS 
+  source and run the CLI.
 allowImplicitInvocation: true
 tools:
   read: true
@@ -9,49 +12,121 @@ tools:
 tags:
   - ulis
   - cli
-  - tui
-  - docs
-platforms:
-  codex:
-    displayName: ULIS Guide
-    shortDescription: Explain ulis CLI and TUI workflows
-    brandColor: "#0f766e"
+  - source
 ---
 
-# ULIS Usage Guide
+# ULIS
 
-Help with `ulis` usage, not general coding.
+`ulis` (`@nejcm/ulis`) reads one source tree and writes native configs for Claude Code, Codex, Cursor, OpenCode, and ForgeCode.
 
-## What to cover
+Docs: https://nejcm.github.io/ulis/ · field reference is generated from Zod, not from this skill.
 
-- Pick the right source mode: `--source <path>` first, then `--global`, otherwise `./.ulis/` in the current directory only.
-- Distinguish `init`, `build`, `install`, `preset`, and `tui`.
-- Explain where generated output and installed files go for project mode vs global mode.
-- Prefer exact commands over abstract advice.
+This skill is for using the CLI and editing a source tree. It is not for changing the ulis compiler itself.
 
-## Workflow
+## Decide the job
 
-1. Identify the user's goal:
-   - start a new config tree
-   - inspect or validate without installing
-   - build generated files
-   - install to platform directories
-   - browse presets
-   - use the TUI
-2. Give the narrowest command that matches that goal.
-3. State important side effects:
-   - `build` writes only to `<source>/generated/<platform>/`
-   - `install` rebuilds unless `--skip-rebuild` is used
-   - project mode writes into the current project; global mode writes into the home directory
-4. If the user is unsure which files to edit, point them to `.ulis/agents/`, `.ulis/skills/`, `mcp.yaml`, `skills.yaml`, `permissions.yaml`, and `raw/`.
+| User wants | Do this |
+| --- | --- |
+| New tree | `ulis init` or `ulis init --global` |
+| Edit agents, skills, MCP, permissions, raw files | Edit the **source**, then `ulis build` to check |
+| See generated files without touching tools | `ulis build` |
+| Deploy into Claude/Cursor/Codex/… dirs | `ulis install` (read [Install safety](#install-safety) first) |
+| Shared layer on top of their tree | `--preset <names>` or `ulis preset install` |
+| Guided UI | `ulis tui` (needs Bun) |
 
-## Guardrails
+Give the narrowest command. Prefer `build` until they ask to install.
 
-- Do not claim ulis walks up parent directories; it does not.
-- Do not describe generated output as canonical source; `.ulis/` or `~/.ulis/` is the source of truth.
-- Mention presets merge left to right, then the base source wins on conflicts.
-- For non-destructive help, prefer `ulis build` or `ulis tui` before `ulis install`.
+## Source vs destination
 
-## References
+**Source** is what you edit: `./.ulis/` (project), `~/.ulis/` (global), `--source <path>`, or a git URL on install only.
 
-See [references/cli-tui.md](references/cli-tui.md) for command patterns, TUI controls, and common answers.
+**Destination** is where install writes native files: project dirs under CWD, or home dirs with `--global`.
+
+Generated files under `<source>/generated/<platform>/` are build output. Do not treat them as the source of truth. Do not hand-edit destination files to "fix" ULIS; change the source and rebuild.
+
+Resolution order for `build` and `install`:
+
+1. `--source <path>`
+2. `--global` → `~/.ulis/`
+3. `./.ulis/` in the current directory only
+
+There is no walk-up. Missing source: hint `ulis init` or `ulis init --global`.
+
+`--source` on `build` must be a local path. A git URL is refused because build would write into a clone that is thrown away. Use `ulis install --source <git-url>` or clone first.
+
+## Install safety
+
+`ulis install` writes real tool dirs. With `--global` that is `$HOME`: `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.config/opencode/`, `~/.forge/`.
+
+Two defaults that surprise people:
+
+- **Prune is on.** Install deletes destination agents and local skills that are in the ownership manifest but not in the current generated set. `--no-prune` keeps them and they become unmanaged.
+- **Backup is off.** `--backup` copies aside first (`*.backup.YYYYMMDD_HHMMSS`).
+
+Other rules:
+
+- `-y` / `--yes` skips the overwrite prompt **and** the remote-source trust gate. Do not pass `-y` on a git URL the user has not reviewed.
+- `--skip-rebuild` installs whatever is already in `generated/`. It is refused (even with `-y`) if that output was built from a remote source. Re-run with `--preset <url>` or `--source <url>` so the clone can be previewed again.
+- Unmanaged destination entries and allowlisted native config (MCP maps, hooks, Codex trusted projects, `.forge.toml`, and similar) survive unless generated output overwrites the same path.
+- There is no `ulis uninstall`. Removal is prune against a shrinking generated set, or the user deleting files by hand.
+
+Install phases: **build → files → skills.yaml → extensions.yaml**. Skip network phases with `--skip-external-skills` and `--skip-extensions`.
+
+Before `ulis install` for someone else, state the source, destination (project vs home), whether prune will delete named entries, and whether `--backup` is on.
+
+## Author a source
+
+Scaffold, then fill files. Read [references/source.md](references/source.md) before inventing filenames or YAML keys.
+
+```text
+.ulis/
+├── config.yaml
+├── mcp.yaml
+├── permissions.yaml
+├── skills.yaml
+├── extensions.yaml
+├── agents/           # {name}.md
+├── skills/           # {name}/SKILL.md
+├── commands/
+├── rules/
+└── raw/all/          # every platform
+    └── <platform>/   # one of claude, codex, cursor, opencode, forgecode
+```
+
+Local skills live under `skills/<name>/`. External installs (`npx skills add …`) live in `skills.yaml`. Those are different.
+
+`raw/all/` is injected into every platform. `raw/<platform>/` is that target only. Raw values win at the same path. `raw/common/` is not a directory ULIS reads.
+
+After edits, `ulis build` (optionally `--target claude,cursor`). Check diagnostics. Install only when they want destinations updated.
+
+## Commands at a glance
+
+```bash
+npm i -g @nejcm/ulis   # or: bun add -g @nejcm/ulis
+# Node 20.3+. TUI also needs Bun.
+
+ulis init
+ulis init --global
+
+ulis build [--source <path>] [--global] [--target <platforms>] [--preset <names>]
+ulis install [--source <path>] [--global] [--target <platforms>] [--preset <names>]
+             [--yes] [--backup] [--no-prune] [--skip-rebuild]
+             [--skip-extensions] [--skip-external-skills] [--runner npx|bunx]
+
+ulis preset list
+ulis preset install <names...> [--global] [--yes] [--backup] [--no-prune]
+
+ulis tui
+```
+
+Platforms: `claude`, `codex`, `cursor`, `opencode`, `forgecode`. `--target` must name at least one.
+
+Flags, presets, remote URLs, TUI keys, and project vs home paths: [references/cli.md](references/cli.md).
+
+## How to answer
+
+1. Name the source you will use.
+2. If they need a file change, edit source files, not generated or destination trees.
+3. Quote a command they can paste. Include `--global` only when they asked for home-level config.
+4. If the next step is install, mention prune and backup in one sentence.
+5. If validation fails, read the diagnostic (`file`, `field`, `fix`) instead of guessing.

@@ -263,7 +263,7 @@ function backupDirectory(targetDir: string, context: InstallContext): void {
     return;
   }
 
-  logInfo(context, `[backup] ${targetDir} -> ${copyToUnusedBackupPath(targetDir, context)}`);
+  reportBackup(targetDir, copyToUnusedBackupPath(targetDir, context), context);
 }
 
 function backupFile(targetPath: string, context: InstallContext): void {
@@ -271,21 +271,39 @@ function backupFile(targetPath: string, context: InstallContext): void {
     return;
   }
 
-  logInfo(context, `[backup] ${targetPath} -> ${copyToUnusedBackupPath(targetPath, context)}`);
+  reportBackup(targetPath, copyToUnusedBackupPath(targetPath, context), context);
+}
+
+function reportBackup(sourcePath: string, result: BackupResult, context: InstallContext): void {
+  logInfo(context, `[backup] ${sourcePath} -> ${result.path}`);
+  for (const skipped of result.skipped) {
+    logWarn(context, `[backup] left out of the backup, not a file, directory, or symlink: ${skipped}`);
+  }
+}
+
+interface BackupResult {
+  readonly path: string;
+  readonly skipped: readonly string[];
 }
 
 /**
- * Copy `sourcePath` to the first backup name nothing is using, and return it.
+ * Copy `sourcePath` to the first backup name nothing is using, and return it plus any entry inside
+ * it that a plain copy cannot reproduce - a live socket or FIFO, the shape a backup of a running
+ * platform's config directory can contain (Codex's `ipc.sock`, for one). Skipped rather than failed:
+ * the entry is process state, not configuration, and a backup missing it is still worth having
+ * rather than aborting the platform's install over a file the backup was never going to restore
+ * anyway.
  *
  * Never to a name already taken: the timestamp resolves to the second, so two installs moments
  * apart compute the same one, and overwriting would delete the earlier backup - or, for a name that
  * happened to exist already, whatever was there. `copyToNewPath` also refuses to write through a
  * symbolic link, which this predictable name is otherwise a fine place to plant.
  */
-function copyToUnusedBackupPath(sourcePath: string, context: InstallContext): string {
+function copyToUnusedBackupPath(sourcePath: string, context: InstallContext): BackupResult {
+  const skipped: string[] = [];
   for (let attempt = 1; attempt <= MAX_BACKUP_ATTEMPTS; attempt += 1) {
     const candidate = backupPath(sourcePath, context.timestamp, attempt);
-    if (copyToNewPath(sourcePath, candidate)) return candidate;
+    if (copyToNewPath(sourcePath, candidate, (path) => skipped.push(path))) return { path: candidate, skipped };
   }
   throw new InstallError(
     `Found no unused backup path for ${sourcePath} after ${MAX_BACKUP_ATTEMPTS} attempts. Remove some of its .backup copies and retry.`,
@@ -310,6 +328,10 @@ function logHeader(context: InstallContext, message: string): void {
 
 function logInfo(context: InstallContext, message: string): void {
   context.logger?.info(message);
+}
+
+function logWarn(context: InstallContext, message: string): void {
+  context.logger?.warn(message);
 }
 
 function logSuccess(context: InstallContext, message: string): void {
