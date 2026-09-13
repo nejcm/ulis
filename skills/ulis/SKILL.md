@@ -25,14 +25,14 @@ This skill is for using the CLI and editing a source tree. It is not for changin
 
 ## Decide the job
 
-| User wants | Do this |
-| --- | --- |
-| New tree | `ulis init` or `ulis init --global` |
-| Edit agents, skills, MCP, permissions, raw files | Edit the **source**, then `ulis build` to check |
-| See generated files without touching tools | `ulis build` |
-| Deploy into Claude/Cursor/Codex/… dirs | `ulis install` (read [Install safety](#install-safety) first) |
-| Shared layer on top of their tree | `--preset <names>` or `ulis preset install` |
-| Guided UI | `ulis tui` (needs Bun) |
+| User wants                                       | Do this                                                       |
+| ------------------------------------------------ | ------------------------------------------------------------- |
+| New tree                                         | `ulis init` or `ulis init --global`                           |
+| Edit agents, skills, MCP, permissions, raw files | Edit the **source**, then `ulis build` to check               |
+| See generated files without touching tools       | `ulis build`                                                  |
+| Deploy into Claude/Cursor/Codex/… dirs           | `ulis install` (read [Install safety](#install-safety) first) |
+| Shared layer on top of their tree                | `--preset <names>` or `ulis preset install`                   |
+| Guided UI                                        | `ulis tui` (needs Bun)                                        |
 
 Give the narrowest command. Prefer `build` until they ask to install.
 
