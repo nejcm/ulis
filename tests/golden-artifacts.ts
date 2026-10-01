@@ -50,11 +50,13 @@ You are a minimal worker agent used for testing.
       "model": "claude-haiku-4-5-20251001",
       "tools": {
         "read": true,
-        "write": false,
+        "glob": true,
+        "grep": true,
+        "list": true,
         "edit": true,
         "bash": false,
-        "search": false,
-        "browser": false
+        "webfetch": false,
+        "websearch": false
       },
       "permission": {
         "edit": "deny",

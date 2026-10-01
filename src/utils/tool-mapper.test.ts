@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 
 import type { ToolPermissions } from "../schema.js";
-import { mapTools } from "./tool-mapper.js";
+import { mapOpencodeTools, mapTools } from "./tool-mapper.js";
 
 const empty: ToolPermissions = {
   read: false,
@@ -67,11 +67,40 @@ describe("mapTools — cursor", () => {
 });
 
 describe("mapTools — opencode/codex", () => {
-  it("returns empty for opencode (uses structured tools)", () => {
+  it("returns empty for opencode (see mapOpencodeTools)", () => {
     expect(mapTools(all, "opencode")).toEqual([]);
   });
 
-  it("returns empty for codex (uses structured tools)", () => {
+  it("returns empty for codex (no per-agent tool list)", () => {
     expect(mapTools(all, "codex")).toEqual([]);
+  });
+});
+
+describe("mapOpencodeTools", () => {
+  it("maps canonical flags to OpenCode tool ids as booleans", () => {
+    expect(mapOpencodeTools({ ...empty, read: true, write: true, search: true, browser: true })).toEqual({
+      read: true,
+      glob: true,
+      grep: true,
+      list: true,
+      edit: true,
+      bash: false,
+      webfetch: true,
+      websearch: true,
+    });
+  });
+
+  it("maps any subagent permission to task", () => {
+    expect(mapOpencodeTools({ ...empty, agent: ["reviewer"] }).task).toBe(true);
+    expect(mapOpencodeTools({ ...empty, agent: false }).task).toBe(false);
+    expect(mapOpencodeTools(empty)).not.toHaveProperty("task");
+  });
+
+  it("turns the string form into an allowlist", () => {
+    expect(Object.entries(mapOpencodeTools("read, bash"))).toEqual([
+      ["*", false],
+      ["read", true],
+      ["bash", true],
+    ]);
   });
 });
