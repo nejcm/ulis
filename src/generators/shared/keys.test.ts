@@ -424,7 +424,7 @@ Body.
     expect(new Set(Object.keys(frontmatter))).toEqual(new Set(["name", "description", "tools", "hooks"]));
     expect(frontmatter.tools).toBe("Read, Glob, Grep");
     expect(frontmatter.hooks).toMatchObject({
-      PreToolUse: [{ matcher: "Bash(rm*)", hooks: [{ type: "command" }] }],
+      PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", if: "Bash(rm*)" }] }],
     });
     // The drop is reported in the artifact rather than happening silently.
     expect(artifact).toContain("# ULIS dropped");

@@ -9,10 +9,11 @@ disallowedTools: Bash
 permissionMode: plan
 hooks:
   PreToolUse:
-    - matcher: "Bash(rm -rf*)"
+    - matcher: Bash
       hooks:
         - type: command
-          command: "echo \\"Blocked by ULIS security policy\\" && exit 1"
+          if: "Bash(rm -rf*)"
+          command: "echo \\"Blocked by ULIS security policy\\" >&2; exit 2"
 ---
 
 <!--

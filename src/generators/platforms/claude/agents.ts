@@ -102,11 +102,10 @@ function subagentFrontmatter(agent: ParsedAgent): string {
     const hooks: Record<string, unknown> = {};
     for (const [event, entries] of Object.entries(mergedHooks)) {
       if (!entries || (entries as unknown[]).length === 0) continue;
-      hooks[event] = (entries as Array<{ matcher?: string; command: string }>).map((entry) =>
-        entry.matcher
-          ? { matcher: entry.matcher, hooks: [{ type: "command", command: entry.command }] }
-          : { type: "command", command: entry.command },
-      );
+      hooks[event] = (entries as Array<{ matcher?: string; if?: string; command: string }>).map((entry) => ({
+        ...(entry.matcher ? { matcher: entry.matcher } : {}),
+        hooks: [{ type: "command", ...(entry.if ? { if: entry.if } : {}), command: entry.command }],
+      }));
     }
     data.hooks = hooks;
   }

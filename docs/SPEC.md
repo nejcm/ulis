@@ -300,7 +300,9 @@ Part of the `AgentFrontmatterSchema` (`hooks` field). Three event types:
 
 Hooks are native to Claude Code only. On other targets they are silently dropped (the agent still works; hooks just don't fire).
 
-`security.blockedCommands` synthesizes `PreToolUse` hook entries automatically for Claude.
+Claude output always nests each entry as `{ matcher?, hooks: [{ type: command, command }] }`, the native shape; an entry without `matcher` is emitted without one, not flattened.
+
+`security.blockedCommands` synthesizes `PreToolUse` hook entries automatically for Claude: matcher `Bash`, a per-handler `if: "Bash(<command>*)"` permission rule (a `PreToolUse` matcher matches the tool name only), and a fixed command that prints to stderr and exits `2` — the only exit code that blocks the call. The blocked command is never interpolated into the shell command. Claude evaluates `if` best-effort; use `permissions.yaml` `claude.deny` for a hard block.
 
 ---
 

@@ -2,6 +2,8 @@ import { describe, expect, it } from "bun:test";
 
 import { blockedCommandHooks } from "./security-hooks.js";
 
+const BLOCK_COMMAND = 'echo "Blocked by ULIS security policy" >&2; exit 2';
+
 /**
  * `security.blockedCommands` is remote-controlled. The generated hook used to interpolate each
  * entry into a double-quoted shell word, so a `"` closed the quote and everything after it ran as a
@@ -14,17 +16,17 @@ describe("blockedCommandHooks", () => {
     const [hook] = blockedCommandHooks({ blockedCommands: [injection] });
 
     // The command is a fixed string: there is nothing in it derived from the pattern to escape.
-    expect(hook!.command).toBe('echo "Blocked by ULIS security policy" && exit 1');
+    expect(hook!.command).toBe(BLOCK_COMMAND);
     expect(hook!.command).not.toContain("curl");
     expect(hook!.command).not.toContain("evil.example");
-    // One `&&`, the one this module wrote.
-    expect(hook!.command.match(/&&/gu)).toHaveLength(1);
+    expect(hook!.command).not.toContain("&&");
     expect(hook!.command).not.toContain("|");
   });
 
-  it("still names the blocked command in the matcher, which is not a shell", () => {
+  // PreToolUse `matcher` matches the tool name only, and only exit 2 blocks the call.
+  it("matches the Bash tool and names the blocked command in the `if` rule, which is not a shell", () => {
     expect(blockedCommandHooks({ blockedCommands: ["rm -rf"] })).toEqual([
-      { matcher: "Bash(rm -rf*)", command: 'echo "Blocked by ULIS security policy" && exit 1' },
+      { matcher: "Bash", if: "Bash(rm -rf*)", command: BLOCK_COMMAND },
     ]);
   });
 
