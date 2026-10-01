@@ -332,7 +332,7 @@ describe("Codex generator", () => {
     expect(get(m, "config.toml")).toContain("[mcp_servers.test-local]");
   });
 
-  it("preserves a server's disabled flag in config.toml", () => {
+  it("emits a disabled server as enabled = false in config.toml", () => {
     const config = runProject("codex", {
       ...buildProject(),
       mcp: {
@@ -346,7 +346,7 @@ describe("Codex generator", () => {
       },
     });
 
-    expect(get(config, "config.toml")).toContain('[mcp_servers.disabled]\ncommand = "node"\ndisabled = true');
+    expect(get(config, "config.toml")).toContain('[mcp_servers.disabled]\ncommand = "node"\nenabled = false');
   });
 
   it("does not emit implicit root config defaults", () => {

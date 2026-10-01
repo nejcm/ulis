@@ -1,5 +1,5 @@
 import type { ParsedAgent } from "../../../parsers/agent.js";
-import { mcpServersFor, translateEnvMap } from "../../../utils/mcp-block.js";
+import { mcpServerEnabled, mcpServersFor, translateEnvMap } from "../../../utils/mcp-block.js";
 import type { ProjectBundle } from "../../types.js";
 
 const OPENCODE_DEFAULT_MODEL = "anthropic/sonnet";
@@ -71,7 +71,7 @@ function buildMcpBlock(mcp: ProjectBundle["mcp"]): Record<string, unknown> {
     if (server.type === "local") {
       const entry: Record<string, unknown> = {
         type: "local",
-        enabled: server.enabled ?? true,
+        enabled: mcpServerEnabled(server) ?? true,
         command: server.command ? [server.command, ...(server.args ?? [])] : undefined,
       };
       const environment = translateEnvMap(server.env, "opencode_env");
@@ -80,7 +80,7 @@ function buildMcpBlock(mcp: ProjectBundle["mcp"]): Record<string, unknown> {
     } else {
       const entry: Record<string, unknown> = {
         type: "remote",
-        enabled: server.enabled ?? true,
+        enabled: mcpServerEnabled(server) ?? true,
         url: server.url,
       };
       const headers = translateEnvMap(server.headers, "opencode_header");

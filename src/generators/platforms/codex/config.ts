@@ -1,5 +1,6 @@
+import type { McpServer } from "../../../schema.js";
 import { translateEnvVar } from "../../../utils/env-var.js";
-import { mcpServersFor } from "../../../utils/mcp-block.js";
+import { mcpServerEnabled, mcpServersFor } from "../../../utils/mcp-block.js";
 import { toTomlKey, toTomlTableHeader } from "../../shared/keys.js";
 import type { ProjectBundle } from "../../types.js";
 import { toTomlString } from "./format.js";
@@ -44,6 +45,11 @@ function codexHttpHeaderLines(headers: Record<string, string> | undefined): stri
   return lines;
 }
 
+function pushEnabledLine(lines: string[], server: McpServer): void {
+  const enabled = mcpServerEnabled(server);
+  if (enabled !== undefined) lines.push(`enabled = ${enabled}`);
+}
+
 export function buildCodexConfigToml(project: ProjectBundle): string {
   const lines: string[] = [];
 
@@ -74,7 +80,7 @@ export function buildCodexConfigToml(project: ProjectBundle): string {
         const args = server.args.map((a) => toTomlString(translateEnvVar(a, "codex"))).join(", ");
         lines.push(`args = [${args}]`);
       }
-      if (server.disabled !== undefined) lines.push(`disabled = ${JSON.stringify(server.disabled)}`);
+      pushEnabledLine(lines, server);
       if (server.env) {
         lines.push("");
         lines.push(toTomlTableHeader("mcp_servers", name, "env"));
@@ -87,14 +93,14 @@ export function buildCodexConfigToml(project: ProjectBundle): string {
       lines.push(toTomlTableHeader("mcp_servers", name));
       lines.push(`url = ${toTomlString(server.url)}`);
       for (const headerLine of codexHttpHeaderLines(server.headers)) lines.push(headerLine);
-      if (server.disabled !== undefined) lines.push(`disabled = ${JSON.stringify(server.disabled)}`);
+      pushEnabledLine(lines, server);
       lines.push("");
     } else if (server.localFallback) {
       lines.push(toTomlTableHeader("mcp_servers", name));
       lines.push(`command = ${toTomlString(server.localFallback.command)}`);
       const args = server.localFallback.args.map((a) => toTomlString(translateEnvVar(a, "codex"))).join(", ");
       lines.push(`args = [${args}]`);
-      if (server.disabled !== undefined) lines.push(`disabled = ${JSON.stringify(server.disabled)}`);
+      pushEnabledLine(lines, server);
       lines.push("");
     }
   }
