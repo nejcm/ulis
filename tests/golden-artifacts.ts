@@ -130,6 +130,26 @@ You are a minimal worker agent used for testing.\\
 `,
   },
   cursor: {
+    "mcp.json": `{
+  "mcpServers": {
+    "test-local": {
+      "command": "node",
+      "args": [
+        "./mcp-server.js"
+      ],
+      "env": {
+        "API_KEY": "\${env:TEST_API_KEY}"
+      }
+    },
+    "test-remote": {
+      "url": "https://mcp.example.com/sse",
+      "headers": {
+        "Authorization": "Bearer \${env:TEST_REMOTE_TOKEN}"
+      }
+    }
+  }
+}
+`,
     "agents/worker.mdc": `---
 description: "A minimal test agent, focus: safe changes"
 model: claude-haiku-4-5-20251001

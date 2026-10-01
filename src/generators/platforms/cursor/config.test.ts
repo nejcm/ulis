@@ -22,11 +22,11 @@ describe("buildCursorConfigArtifacts", () => {
   it("writes placeholders in Cursor's ${env:VAR} syntax", () => {
     const servers = mcpServersFor({
       remote: { type: "remote", url: "https://x/${REGION}", headers: { Authorization: "Bearer ${TOKEN}" } },
-      local: { type: "local", command: "node", args: ["--key", "${KEY}"] },
+      local: { type: "local", command: "node", args: ["--key", "${KEY}"], env: { API_KEY: "${KEY}", MODE: "ci" } },
     });
     expect(servers).toEqual({
       remote: { url: "https://x/${env:REGION}", headers: { Authorization: "Bearer ${env:TOKEN}" } },
-      local: { command: "node", args: ["--key", "${env:KEY}"] },
+      local: { command: "node", args: ["--key", "${env:KEY}"], env: { API_KEY: "${env:KEY}", MODE: "ci" } },
     });
   });
 

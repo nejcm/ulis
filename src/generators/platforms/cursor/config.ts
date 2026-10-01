@@ -18,6 +18,8 @@ export function buildCursorConfigArtifacts(project: ProjectBundle): FileArtifact
       const entry: Record<string, unknown> = {};
       if (server.command) entry.command = translateEnvVar(server.command, "cursor");
       if (server.args) entry.args = server.args.map((arg) => translateEnvVar(arg, "cursor"));
+      const env = translateEnvMap(server.env, "cursor");
+      if (env) entry.env = env;
       mcpServers[name] = entry;
     }
   }
