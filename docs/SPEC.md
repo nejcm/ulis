@@ -144,14 +144,14 @@ You are a focused implementation agent. Read specs carefully before writing code
 
 **Key fields:**
 
-| Field          | Purpose                                                                                                                                                            |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `model`        | Canonical alias: `opus`, `sonnet`, `haiku`, `inherit`. Mapped per-platform.                                                                                        |
-| `tools`        | Permission groups: `read`, `write`, `edit`, `bash`, `search`, `browser`, `agent`.                                                                                  |
-| `contextHints` | Advisory window hints. Emitted as comments (no native equivalent on any current target).                                                                           |
-| `toolPolicy`   | `prefer`/`avoid` → comments. `requireConfirmation` → native permission controls where supported.                                                                   |
-| `security`     | `permissionLevel: readonly` → Claude `plan` mode + OpenCode deny perms. `blockedCommands` → Claude PreToolUse hooks. `rateLimit` → OpenCode `rate_limit_per_hour`. |
-| `platforms`    | Per-target overrides. Applied last; they win over derived values from canonical fields.                                                                            |
+| Field          | Purpose                                                                                                                                                                                             |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `model`        | Canonical alias: `opus`, `sonnet`, `haiku`, `inherit`. Mapped per-platform.                                                                                                                         |
+| `tools`        | Permission groups: `read`, `write`, `edit`, `bash`, `search`, `browser`, `agent`. Claude: an object that grants nothing becomes `disallowedTools` covering every mapped tool, `Agent` and `mcp__*`. |
+| `contextHints` | Advisory window hints. Emitted as comments (no native equivalent on any current target).                                                                                                            |
+| `toolPolicy`   | `prefer`/`avoid` → comments. `requireConfirmation` → native permission controls where supported.                                                                                                    |
+| `security`     | `permissionLevel: readonly` → Claude `plan` mode + OpenCode deny perms. `blockedCommands` → Claude PreToolUse hooks. `rateLimit` → OpenCode `rate_limit_per_hour`.                                  |
+| `platforms`    | Per-target overrides. Applied last; they win over derived values from canonical fields.                                                                                                             |
 
 ### 3.2 Skill
 

@@ -2,7 +2,7 @@ import { join } from "node:path";
 
 import type { ParsedAgent } from "../../../parsers/agent.js";
 import { buildPolicyCommentBlock } from "../../../utils/policy-comments.js";
-import { mapTools } from "../../../utils/tool-mapper.js";
+import { allMappedToolNames, mapTools } from "../../../utils/tool-mapper.js";
 import { blockedCommandHooks } from "../../shared/security-hooks.js";
 import { partitionReservedExtras, serializeYamlFrontmatter } from "../../shared/yaml.js";
 import type { FileArtifact } from "../../types.js";
@@ -58,7 +58,14 @@ function subagentFrontmatter(agent: ParsedAgent): string {
   if (model) data.model = model;
 
   const allowedTools = mapTools(fm.tools, "claude");
-  const disallowedTools = [...(claudePlatform?.disallowedTools ?? []), ...(fm.toolPolicy?.avoid ?? [])];
+  // Claude reads an omitted `tools` as "inherit everything" and an empty one as a launch error,
+  // so an all-false canonical object becomes a deny-list instead.
+  const denyAll = typeof fm.tools === "object" && allowedTools.length === 0;
+  const disallowedTools = [
+    ...(claudePlatform?.disallowedTools ?? []),
+    ...(fm.toolPolicy?.avoid ?? []),
+    ...(denyAll ? [...allMappedToolNames("claude"), "Agent", "mcp__*"] : []),
+  ];
 
   if (allowedTools.length > 0) data.tools = allowedTools.join(", ");
   if (disallowedTools.length > 0) {

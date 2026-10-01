@@ -40,6 +40,11 @@ const PLATFORM_TOOL_NAMES: Record<
   },
 };
 
+/** Every tool name `mapTools` can emit for a list-based platform, in declaration order. */
+export function allMappedToolNames(platform: keyof typeof PLATFORM_TOOL_NAMES): string[] {
+  return Object.values(PLATFORM_TOOL_NAMES[platform]).flat();
+}
+
 /**
  * Map canonical `ToolPermissions` to a flat list of platform-specific tool
  * names. Returns an empty array for platforms that do not consume a tool list
