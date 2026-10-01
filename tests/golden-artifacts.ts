@@ -87,6 +87,14 @@ You are a minimal worker agent used for testing.
   }
 }
 `,
+    "agents/worker.md": `<!--
+  [ULIS contextHints]
+    maxInputTokens: 20000
+    priority: high
+-->
+
+You are a minimal worker agent used for testing.
+`,
   },
   codex: {
     "config.toml": `[mcp_servers.test-local]

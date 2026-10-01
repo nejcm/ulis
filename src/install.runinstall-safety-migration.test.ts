@@ -50,8 +50,7 @@ describe("runInstall", () => {
     const outside = join(root, "outside");
     mkdirSync(userHome, { recursive: true });
     mkdirSync(outside, { recursive: true });
-    mkdirSync(join(outputDir, "opencode", "agents", "core"), { recursive: true });
-    mkdirSync(join(outputDir, "opencode", "agents", "specialized"), { recursive: true });
+    mkdirSync(join(outputDir, "opencode", "agents"), { recursive: true });
     write(join(outputDir, "opencode", "AGENTS.md"), "Generated instructions.\n");
     mkdirSync(join(projectDir, ".opencode"), { recursive: true });
     symlinkSync(outside, join(projectDir, ".opencode", "agents"), "dir");

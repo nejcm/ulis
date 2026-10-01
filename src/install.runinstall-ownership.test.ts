@@ -78,7 +78,7 @@ describe("runInstall", () => {
     write(join(outputDir, "codex", "skills", "managed", "SKILL.md"), "Generated codex skill.\n");
     write(join(outputDir, "cursor", "agents", "managed.mdc"), "Generated cursor agent.\n");
     write(join(outputDir, "cursor", "skills", "managed", "SKILL.md"), "Generated cursor skill.\n");
-    write(join(outputDir, "opencode", "agents", "specialized", "managed.md"), "Generated opencode agent.\n");
+    write(join(outputDir, "opencode", "agents", "managed.md"), "Generated opencode agent.\n");
     write(join(outputDir, "opencode", "skills", "managed", "SKILL.md"), "Generated opencode skill.\n");
     createForgecodeOutput(outputDir);
     write(join(outputDir, "forgecode", ".forge", "agents", "managed.md"), "Generated forge agent.\n");
@@ -96,7 +96,7 @@ describe("runInstall", () => {
     write(join(projectDir, ".cursor", "agents", "local.mdc"), "Local cursor agent.\n");
     write(join(projectDir, ".cursor", "skills", "managed", "SKILL.md"), "Old cursor skill.\n");
     write(join(projectDir, ".cursor", "skills", "local", "SKILL.md"), "Local cursor skill.\n");
-    write(join(projectDir, ".opencode", "agents", "specialized", "managed.md"), "Old opencode agent.\n");
+    write(join(projectDir, ".opencode", "agents", "managed.md"), "Old opencode agent.\n");
     write(join(projectDir, ".opencode", "agents", "specialized", "local.md"), "Local opencode agent.\n");
     write(join(projectDir, ".opencode", "skills", "managed", "SKILL.md"), "Old opencode skill.\n");
     write(join(projectDir, ".opencode", "skills", "local", "SKILL.md"), "Local opencode skill.\n");
@@ -127,9 +127,7 @@ describe("runInstall", () => {
     expect(read(join(projectDir, ".cursor", "agents", "local.mdc"))).toBe("Local cursor agent.\n");
     expect(read(join(projectDir, ".cursor", "skills", "managed", "SKILL.md"))).toBe("Generated cursor skill.\n");
     expect(read(join(projectDir, ".cursor", "skills", "local", "SKILL.md"))).toBe("Local cursor skill.\n");
-    expect(read(join(projectDir, ".opencode", "agents", "specialized", "managed.md"))).toBe(
-      "Generated opencode agent.\n",
-    );
+    expect(read(join(projectDir, ".opencode", "agents", "managed.md"))).toBe("Generated opencode agent.\n");
     expect(read(join(projectDir, ".opencode", "agents", "specialized", "local.md"))).toBe("Local opencode agent.\n");
     expect(read(join(projectDir, ".opencode", "skills", "managed", "SKILL.md"))).toBe("Generated opencode skill.\n");
     expect(read(join(projectDir, ".opencode", "skills", "local", "SKILL.md"))).toBe("Local opencode skill.\n");
@@ -156,7 +154,7 @@ describe("runInstall", () => {
       ["claude", ".claude", "agents/managed.md", "skills/managed"],
       ["codex", ".codex", "agents/managed.toml", "skills/managed"],
       ["cursor", ".cursor", "agents/managed.mdc", "skills/managed"],
-      ["opencode", ".opencode", "agents/specialized/managed.md", "skills/managed"],
+      ["opencode", ".opencode", "agents/managed.md", "skills/managed"],
       ["forgecode", ".forge", ".forge/agents/managed.md", ".forge/skills/managed"],
     ] as const;
 

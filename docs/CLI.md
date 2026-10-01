@@ -99,13 +99,13 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 
 **Install strategy per platform:**
 
-| Platform  | Managed entries                                                              | Preserved native config                                                                                        |
-| --------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Claude    | generated `agents/` and `skills/` entries by name; `commands/`, `rules/`, …  | all `settings.json` / `settings.local.json` and global `.claude.json` values; project `.mcp.json` `mcpServers` |
-| OpenCode  | generated `agents/core`, `agents/specialized`, and `skills/` entries by name | `opencode.json` `mcp`                                                                                          |
-| Codex     | generated `agents/` and `skills/` entries by name                            | all `config.toml` values; unrelated comments and order                                                         |
-| Cursor    | generated `agents/` and `skills/` entries by name                            | `mcp.json` `mcpServers`                                                                                        |
-| ForgeCode | generated `.forge/agents` and `.forge/skills` entries by name; `AGENTS.md`   | `.forge/.mcp.json` `mcpServers`, `.forge.toml`                                                                 |
+| Platform  | Managed entries                                                             | Preserved native config                                                                                        |
+| --------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Claude    | generated `agents/` and `skills/` entries by name; `commands/`, `rules/`, … | all `settings.json` / `settings.local.json` and global `.claude.json` values; project `.mcp.json` `mcpServers` |
+| OpenCode  | generated `agents/` and `skills/` entries by name                           | `opencode.json` `mcp`                                                                                          |
+| Codex     | generated `agents/` and `skills/` entries by name                           | all `config.toml` values; unrelated comments and order                                                         |
+| Cursor    | generated `agents/` and `skills/` entries by name                           | `mcp.json` `mcpServers`                                                                                        |
+| ForgeCode | generated `.forge/agents` and `.forge/skills` entries by name; `AGENTS.md`  | `.forge/.mcp.json` `mcpServers`, `.forge.toml`                                                                 |
 
 Install records generated agents, local skills, and root entries in `.ulis-manifest.json` at each selected platform config root. Version 1 manifests migrate without sweeping root entries. On the first manifest-aware install, ULIS adopts the current set and removes nothing. Later installs remove previously tracked paths that are no longer generated, including platform-disabled entries, while preserving every untracked entry. Agent and skill ownership is entry-granular; OpenCode root-directory ownership is directory-granular, so pruning a stale managed root directory removes everything inside it. Manifest validation for all selected platforms completes before any destination is modified. Unselected platforms are untouched. `--no-prune` keeps stale paths but refreshes ownership to the current set. External `skills.yaml` installs are not tracked.
 

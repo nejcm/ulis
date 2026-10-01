@@ -718,7 +718,7 @@ Body.
     const paths = {
       claude: join("agents", "evil.md"),
       cursor: join("agents", "evil.mdc"),
-      opencode: join("agents", "specialized", "evil.md"),
+      opencode: join("agents", "evil.md"),
       forgecode: join(".forge", "agents", "evil.md"),
     } as const;
 

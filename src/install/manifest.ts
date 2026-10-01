@@ -280,7 +280,9 @@ function isAllowedManagedPath(platform: Platform, kind: "agents" | "skills", val
   const layout = MANAGED_PLATFORM_LAYOUTS[platform];
   if (!value.endsWith(layout.agentExtension) || parts[0] !== "agents") return false;
   const category = parts.length === 3 ? parts[1] : "";
-  return parts.length === (category ? 3 : 2) && layout.agentDirectories.includes(category);
+  const knownCategory =
+    layout.agentDirectories.includes(category) || (layout.legacyAgentDirectories ?? []).includes(category);
+  return parts.length === (category ? 3 : 2) && knownCategory;
 }
 
 function pruneStaleEntries(platform: Platform, ownership: PlatformOwnership, logger?: Logger): number {
