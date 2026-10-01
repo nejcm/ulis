@@ -53,4 +53,19 @@ describe("buildCodexConfigToml", () => {
       env_http_headers: { "X-Tenant": "TENANT" },
     });
   });
+
+  it("forwards same-name env placeholders through env_vars and keeps the rest literal", () => {
+    const servers = configFor({
+      gh: {
+        type: "local",
+        command: "gh-mcp",
+        env: { GITHUB_TOKEN: "${GITHUB_TOKEN}", RENAMED: "${OTHER}", MODE: "ci" },
+      },
+    });
+    expect(servers.gh).toEqual({
+      command: "gh-mcp",
+      env_vars: ["GITHUB_TOKEN"],
+      env: { RENAMED: "${OTHER}", MODE: "ci" },
+    });
+  });
 });

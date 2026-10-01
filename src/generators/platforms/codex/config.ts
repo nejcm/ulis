@@ -83,12 +83,15 @@ export function buildCodexConfigToml(project: ProjectBundle): string {
         lines.push(`args = [${args}]`);
       }
       pushEnabledLine(lines, server);
-      if (server.env) {
+      // Codex `env` values are literal; `env_vars` forwards a variable under its own name and cannot rename it.
+      const envEntries = Object.entries(server.env ?? {});
+      const forwarded = envEntries.filter(([k, v]) => EXACT_ENV_PLACEHOLDER.exec(v)?.[1] === k);
+      const literal = envEntries.filter((entry) => !forwarded.includes(entry));
+      if (forwarded.length > 0) lines.push(`env_vars = [${forwarded.map(([k]) => toTomlString(k)).join(", ")}]`);
+      if (literal.length > 0) {
         lines.push("");
         lines.push(toTomlTableHeader("mcp_servers", name, "env"));
-        for (const [k, v] of Object.entries(server.env)) {
-          lines.push(`${toTomlKey(k)} = ${toTomlString(translateEnvVar(v, "codex"))}`);
-        }
+        for (const [k, v] of literal) lines.push(`${toTomlKey(k)} = ${toTomlString(v)}`);
       }
       lines.push("");
     } else if (server.url) {

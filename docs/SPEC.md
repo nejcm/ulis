@@ -220,7 +220,7 @@ Defined once in `.ulis/mcp.yaml` (JSON is also accepted for backwards compatibil
 
 `localFallback` is used for Codex, which only supports local command-based MCP servers.
 
-Environment variables use `${VAR}` syntax everywhere. The build translates to platform-specific syntax (OpenCode headers use `{env:VAR}`).
+Environment variables use `${VAR}` syntax everywhere. The build translates to platform-specific syntax (OpenCode headers use `{env:VAR}`). Codex interpolates nothing: a local server's `KEY: ${KEY}` becomes `env_vars = ["KEY"]`, a remote header that is exactly `${VAR}` becomes `env_http_headers`, and `Authorization: Bearer ${VAR}` becomes `bearer_token_env_var`; any other placeholder is written literally because Codex has no way to rename or embed a variable.
 
 ### 3.4 Skill / Extension registry entries
 
