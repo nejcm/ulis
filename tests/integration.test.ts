@@ -458,7 +458,7 @@ describe("Cursor generator", () => {
     expect(mcp.mcpServers).toHaveProperty("test-remote");
   });
 
-  it("preserves a server's disabled flag in mcp.json", () => {
+  it("leaves a disabled server out of mcp.json", () => {
     const m = runProject("cursor", {
       ...buildProject(),
       mcp: {
@@ -472,14 +472,7 @@ describe("Cursor generator", () => {
       },
     });
 
-    expect(JSON.parse(get(m, "mcp.json"))).toEqual({
-      mcpServers: {
-        disabled: {
-          command: "npx",
-          disabled: true,
-        },
-      },
-    });
+    expect(JSON.parse(get(m, "mcp.json"))).toEqual({ mcpServers: {} });
   });
 
   it("emits permissions.json when Cursor allowlists are configured", () => {
