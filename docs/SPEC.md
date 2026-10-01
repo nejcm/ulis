@@ -174,7 +174,7 @@ Run the following checks...
 
 Skills become:
 
-- **Claude**: skill directories in `generated/claude/skills/`
+- **Claude**: skill directories in `generated/claude/skills/`. Canonical fields become native frontmatter: `argumentHint` → `argument-hint`, `allowModelInvocation: false` → `disable-model-invocation: true`, `userInvocable: false` → `user-invocable: false`, `isolation: fork` → `context: fork`, `tools` → `allowed-tools` (skipped when the source already sets `allowed-tools`), `hooks` → nested Claude hook groups; `effort` and `paths` pass as-is. `platforms.claude` extras win.
 - **OpenCode**: skill directories in `generated/opencode/skills/`
 - **Codex**: skill directories in `generated/codex/skills/`
 - **Cursor**: skill directories in `generated/cursor/skills/`

@@ -119,6 +119,59 @@ describe("buildClaudeSkillDirs", () => {
     expect(extra).toMatchObject({ shell: "bash", customField: "x" });
   });
 
+  it("translates canonical invocation, execution and tool fields to native Claude keys", () => {
+    const skills: ParsedSkill[] = [
+      makeSkill({
+        frontmatter: {
+          name: "implement-plan",
+          description: "d",
+          argumentHint: "[plan]",
+          userInvocable: false,
+          allowModelInvocation: false,
+          allowImplicitInvocation: true,
+          effort: "high",
+          isolation: "fork",
+          paths: ["src/**"],
+          tools: { read: true, write: false, edit: false, bash: true, search: false, browser: false },
+          hooks: { PreToolUse: [{ matcher: "Bash", command: "./check.sh" }], Stop: [{ command: "./done.sh" }] },
+          tags: [],
+          platforms: { claude: { enabled: true, effort: "low" } as never },
+        },
+      }),
+    ];
+    expect(buildClaudeSkillDirs(skills)[0]?.extraFrontmatter).toEqual({
+      "argument-hint": "[plan]",
+      "disable-model-invocation": true,
+      "user-invocable": false,
+      effort: "low",
+      context: "fork",
+      paths: ["src/**"],
+      "allowed-tools": "Read, Glob, Grep, Bash",
+      hooks: {
+        PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "./check.sh" }] }],
+        Stop: [{ hooks: [{ type: "command", command: "./done.sh" }] }],
+      },
+    });
+  });
+
+  it("leaves a literal allowed-tools in the source untouched", () => {
+    const skills: ParsedSkill[] = [
+      makeSkill({
+        frontmatter: {
+          name: "implement-plan",
+          description: "d",
+          userInvocable: true,
+          allowModelInvocation: true,
+          allowImplicitInvocation: true,
+          "allowed-tools": "Read",
+          tools: { read: true, write: true, edit: false, bash: false, search: false, browser: false },
+          tags: [],
+        },
+      }),
+    ];
+    expect(buildClaudeSkillDirs(skills)[0]?.extraFrontmatter).toEqual({});
+  });
+
   it("returns an empty object when no model or extras are set", () => {
     const dirs = buildClaudeSkillDirs([makeSkill()]);
     expect(dirs[0]?.extraFrontmatter).toEqual({});
