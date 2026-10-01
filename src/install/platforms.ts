@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -301,9 +301,12 @@ interface BackupResult {
  */
 function copyToUnusedBackupPath(sourcePath: string, context: InstallContext): BackupResult {
   const skipped: string[] = [];
+  // A symlinked root (`~/.codex -> dotfiles/codex`) copied as a link would back up the live tree the
+  // install is about to change; nested links are still copied as links.
+  const contentPath = lstatSync(sourcePath).isSymbolicLink() ? realpathSync(sourcePath) : sourcePath;
   for (let attempt = 1; attempt <= MAX_BACKUP_ATTEMPTS; attempt += 1) {
     const candidate = backupPath(sourcePath, context.timestamp, attempt);
-    if (copyToNewPath(sourcePath, candidate, (path) => skipped.push(path))) return { path: candidate, skipped };
+    if (copyToNewPath(contentPath, candidate, (path) => skipped.push(path))) return { path: candidate, skipped };
   }
   throw new InstallError(
     `Found no unused backup path for ${sourcePath} after ${MAX_BACKUP_ATTEMPTS} attempts. Remove some of its .backup copies and retry.`,

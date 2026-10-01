@@ -102,7 +102,7 @@ Each selected platform config root stores `.ulis-manifest.json` version 3. It co
 
 Before any selected destination is modified, ULIS reads and validates every selected platform manifest and derives the current managed set from generated output. Missing manifests trigger first-run adoption without pruning. After platform files are installed, ULIS removes `previous managed − current managed`, then atomically writes the current manifest. Ownership is path-based, so user edits to a tracked file do not prevent its removal. OpenCode records `agents/core/...` and `agents/specialized/...` separately.
 
-Pruning is enabled by default. `--no-prune` retains stale paths but replaces the manifest with the current set, making retained paths unmanaged. Empty or platform-disabled output is authoritative for selected platforms; unselected platform destinations and manifests remain untouched. Backups are taken before installation and therefore contain the prior manifest and any entries later pruned.
+Pruning is enabled by default. `--no-prune` retains stale paths but replaces the manifest with the current set, making retained paths unmanaged. Empty or platform-disabled output is authoritative for selected platforms; unselected platform destinations and manifests remain untouched. Backups are taken before installation and therefore contain the prior manifest and any entries later pruned. A platform root that is itself a symlink is backed up as a real copy of the directory it points to, not as another link to the live tree.
 
 ---
 

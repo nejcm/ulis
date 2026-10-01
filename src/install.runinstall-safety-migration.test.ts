@@ -174,6 +174,40 @@ describe("runInstall", () => {
     expect(existsSync(join(projectDir, backupDir!, "ipc", "ipc.sock"))).toBe(false);
   });
 
+  it("backs up the contents behind a symlinked platform root, keeping nested links as links", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const dotfiles = join(root, "dotfiles", "codex");
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "codex", "AGENTS.md"), "Generated instructions.\n");
+    write(join(dotfiles, "AGENTS.md"), "Old instructions.\n");
+    symlinkSync("../shared", join(dotfiles, "linked"));
+    mkdirSync(projectDir, { recursive: true });
+    symlinkSync(dotfiles, join(projectDir, ".codex"), "dir");
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["codex"],
+      rebuild: false,
+      backup: true,
+      logger: silentLogger,
+    });
+
+    expect(read(join(dotfiles, "AGENTS.md"))).toBe("Generated instructions.\n");
+    const backupDir = readdirSync(projectDir).find((entry) => entry.startsWith(".codex.") && entry.endsWith(".backup"));
+    expect(backupDir).toBeDefined();
+    const backupPath = join(projectDir, backupDir!);
+    expect(lstatSync(backupPath).isDirectory()).toBe(true);
+    expect(read(join(backupPath, "AGENTS.md"))).toBe("Old instructions.\n");
+    expect(lstatSync(join(backupPath, "linked")).isSymbolicLink()).toBe(true);
+  });
+
   // The generated set changing a name from a directory to a file must not take the directory's
   // contents with it. The sweep deliberately keeps descendants a previous install never recorded,
   // and a recursive removal here would destroy exactly the files it had just saved.
