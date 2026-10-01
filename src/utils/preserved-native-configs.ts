@@ -178,9 +178,9 @@ function capturePreservedConfig(
  * These are the platform's real config files - the MCP servers and hooks a host agent acts on - and
  * `writeFile` follows a link at the destination, so one planted at `opencode.json` or `.claude.json`
  * made the install write wherever it pointed, with content the planter already influences since the
- * existing file is what gets preserved and merged into the result. Remove-then-exclusive-create is
- * the same pair `src/install/fs.ts` uses: the link is unlinked as a link, and the create fails
- * rather than adopting anything that appears in between.
+ * existing file is what gets preserved and merged into the result. The write goes to an exclusively
+ * created sibling that is then renamed over the target: the rename replaces a link as a link, and a
+ * failed write leaves the existing file in place.
  */
 function writeDestinationFile(filePath: string, content: string | Buffer, sourceMode?: number): void {
   refuseSymlinkAt(filePath);
@@ -200,8 +200,8 @@ function copyDestinationFile(sourcePath: string, filePath: string): void {
 /**
  * Refuse a symbolic link where a native config file belongs.
  *
- * Safety does not rest on this check: both writers above unlink and create exclusively, so neither
- * can follow a link whatever this reports. It exists to fail loudly and name the path, because a
+ * Safety does not rest on this check: both writers above create a sibling exclusively and rename it
+ * into place, so neither can follow a link whatever this reports. It exists to fail loudly and name the path, because a
  * link here is about as likely to be a dotfile manager's as an attacker's, and quietly replacing a
  * deliberate one is its own kind of data loss. That is also why an `lstat` which cannot answer is
  * simply left alone - the write below fails on the same error, so nothing is decided by the silence.

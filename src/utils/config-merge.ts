@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import {
   closeSync,
   cpSync,
@@ -5,11 +6,12 @@ import {
   lstatSync,
   openSync,
   readdirSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, extname, join } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import { patch as patchToml, TomlDocument, TomlFormat } from "@decimalturn/toml-patch";
@@ -182,30 +184,38 @@ function writeGeneratedFile(filePath: string, content: string | Buffer): void {
 }
 
 /**
- * Does not refuse a symlink at `filePath` — it unlinks whatever is there and creates fresh in its
- * place. A caller writing into a destination where a symlink could point somewhere else must refuse
+ * Does not refuse a symlink at `filePath` — the rename replaces whatever is there without following
+ * it. A caller writing into a destination where a symlink could point somewhere else must refuse
  * first: `writeDestinationFile` in `preserved-native-configs.ts` does that before calling this.
  */
 export function writeFileExclusively(filePath: string, content: string | Buffer, sourceMode?: number): void {
   ensureDir(dirname(filePath));
   // The mode to land on: the one the file being replaced already had, or - when there is nothing to
-  // replace - the mode of the file being copied in. `rmSync` takes the old mode away with the inode
-  // and a fresh create lands at the process umask, so a `0600` config holding MCP environment values
-  // came back `0644` and readable by every local user. A verbatim copy of a `0600` generated file
-  // onto a path that does not exist yet has the same problem from the other side.
+  // replace - the mode of the file being copied in. A fresh create lands at the process umask, so a
+  // `0600` config holding MCP environment values came back `0644` and readable by every local user.
+  // A verbatim copy of a `0600` generated file onto a path that does not exist yet has the same
+  // problem from the other side.
   const mode = existingFileMode(filePath) ?? sourceMode;
-  rmSync(filePath, { force: true });
+  // Written to a sibling and renamed over the target, so a failed write leaves the old file intact;
+  // removing first lost the MCP servers and hooks it held whenever the write then failed.
+  const tempPath = join(dirname(filePath), `.${basename(filePath)}.ulis-${randomBytes(6).toString("hex")}.tmp`);
   // Created, written and chmodded through one descriptor. `wx` is the exclusive create; `fchmodSync`
   // needs no path, and resolving the path a second time to `chmod` it would leave a window for a
   // concurrent writer to swap in a symlink and have us change permissions on a file outside the
   // destination. `applyMode` in `src/install/fs.ts` avoids the same window the same way.
-  const handle = openSync(filePath, "wx", mode ?? 0o666);
+  const handle = openSync(tempPath, "wx", mode ?? 0o666);
   try {
-    writeFileSync(handle, content);
-    // The mode passed to `open` is masked by the umask; this restores it exactly.
-    if (mode !== undefined) fchmodSync(handle, mode);
-  } finally {
-    closeSync(handle);
+    try {
+      writeFileSync(handle, content);
+      // The mode passed to `open` is masked by the umask; this restores it exactly.
+      if (mode !== undefined) fchmodSync(handle, mode);
+    } finally {
+      closeSync(handle);
+    }
+    renameSync(tempPath, filePath);
+  } catch (error) {
+    rmSync(tempPath, { force: true });
+    throw error;
   }
 }
 

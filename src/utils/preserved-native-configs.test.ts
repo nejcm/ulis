@@ -1,7 +1,9 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
+import * as fs from "node:fs";
 import {
   chmodSync,
   existsSync,
+  readdirSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -349,6 +351,26 @@ describe("writePreservedNativeConfigs", () => {
       expect((statSync(targetPath).mode & 0o777).toString(8)).toBe(expected);
     });
   }
+
+  it("keeps the existing target when the write fails part-way", () => {
+    const root = createTempRoot();
+    const targetPath = join(root, "target", "config.json");
+    const original = '{"keep":{"existing":true},"mcp":{"server":"x"}}';
+    write(join(root, "generated", "config.json"), '{"generated":true}');
+    write(targetPath, original);
+    const writeSpy = spyOn(fs, "writeFileSync").mockImplementation(() => {
+      throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC" });
+    });
+
+    try {
+      expect(() => writePreservedNativeConfigs([entry(root, { keep: { existing: true } })])).toThrow();
+    } finally {
+      writeSpy.mockRestore();
+    }
+
+    expect(readFileSync(targetPath, "utf-8")).toBe(original);
+    expect(readdirSync(dirname(targetPath))).toEqual(["config.json"]);
+  });
 
   it("writes preserved-only config when generated config is absent", () => {
     const root = createTempRoot();
