@@ -298,6 +298,29 @@ Run the review workflow.
     expect(command).toContain("Run the review workflow.");
     expect(get(m, "commands/README.md")).toBe("Command docs.\n");
   });
+
+  it("skips commands disabled per platform and applies claude overrides", () => {
+    const sourceDir = createTempSource();
+    write(
+      join(sourceDir, "commands", "oc-only.md"),
+      "---\ndescription: OpenCode only\nplatforms:\n  claude:\n    enabled: false\n---\n\nBody.\n",
+    );
+    write(
+      join(sourceDir, "commands", "claude-only.md"),
+      "---\ndescription: Claude only\nmodel: haiku\nplatforms:\n  opencode:\n    enabled: false\n  claude:\n    model: sonnet\n    argument-hint: '[x]'\n---\n\nBody.\n",
+    );
+
+    const oc = runProject("opencode", { ...buildProject(), sourceDir });
+    expect(oc.has("commands/oc-only.md")).toBe(true);
+    expect(oc.has("commands/claude-only.md")).toBe(false);
+
+    const claude = runProject("claude", { ...buildProject(), sourceDir });
+    expect(claude.has("commands/oc-only.md")).toBe(false);
+    const command = get(claude, "commands/claude-only.md");
+    expect(command).toContain("model: sonnet");
+    expect(command).toContain("argument-hint:");
+    expect(command).not.toContain("enabled");
+  });
 });
 
 // ─── Codex ───────────────────────────────────────────────────────────────────

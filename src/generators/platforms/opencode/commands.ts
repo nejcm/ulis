@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-import { parseCommands } from "../../../parsers/command.js";
+import { enabledCommandsFor, parseCommands } from "../../../parsers/command.js";
 import { fileExists, readFile } from "../../../utils/fs.js";
 import { serializeYamlFrontmatter } from "../../shared/yaml.js";
 import type { FileArtifact } from "../../types.js";
@@ -10,7 +10,7 @@ export function buildOpencodeCommandArtifacts(sourceDir: string): FileArtifact[]
   const commandsSrc = join(sourceDir, "commands");
   if (!fileExists(commandsSrc)) return artifacts;
 
-  for (const cmd of parseCommands(commandsSrc)) {
+  for (const cmd of enabledCommandsFor(parseCommands(commandsSrc), "opencode")) {
     const fm = cmd.frontmatter as Record<string, unknown>;
     const ocPlatform = (fm.platforms as Record<string, unknown> | undefined)?.opencode as
       | Record<string, unknown>

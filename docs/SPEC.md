@@ -180,6 +180,8 @@ Skills become:
 - **Cursor**: skill directories in `generated/cursor/skills/`
 - **ForgeCode**: skill directories in `generated/forgecode/.forge/skills/`
 
+Commands (`.ulis/commands/*.md`) are emitted for Claude and OpenCode only. `platforms.claude` / `platforms.opencode` take `enabled` (default `true`; `false` skips the command on that platform) and `model`; other keys pass through to that platform's frontmatter.
+
 ### 3.3 MCP Server
 
 Defined once in `.ulis/mcp.yaml` (JSON is also accepted for backwards compatibility). Each server may declare a `targets` list to restrict it to specific platforms.
