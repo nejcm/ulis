@@ -1,16 +1,17 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
 
-import matter from "gray-matter";
 import { parse as parseToml } from "smol-toml";
 
 import { analyzePresets, analyzeProject, type Logger } from "../build.js";
 import { generate, type GenerationResult, type ProjectBundle } from "../generators/index.js";
 import type { Platform } from "../platforms.js";
 import type { PermissionsConfig } from "../schema.js";
+import { isMergeable, mergeConfigValues, parseMergeableConfig } from "../utils/config-merge.js";
 import { NATIVE_CONFIG_FILENAMES } from "../utils/preserved-native-configs.js";
 import { sanitizeLogText } from "../utils/redact.js";
 import type { ResolvedPreset } from "../utils/resolve-presets.js";
+import { parseFrontmatter } from "../utils/safe-matter.js";
 
 /**
  * What a source will make the user's agents run, read off the output rather than off the input.
@@ -91,12 +92,7 @@ export function previewInstalledExecution(inputs: PreviewInputs): string[] {
   for (const platform of inputs.platforms) {
     const result = generate(platform, project);
     if (!result) continue;
-    for (const artifact of result.artifacts) {
-      const contents = typeof artifact.contents === "string" ? artifact.contents : artifact.contents.toString("utf8");
-      const scan = commandsIn(contents, artifact.path);
-      previews.push(...scan.findings.map((finding) => runsLine(platform, artifact.path, finding)));
-    }
-    previews.push(...copiedTreePreviews(result, platform));
+    previews.push(...outputPreviews(simulatedOutput(result), platform));
   }
 
   previews.push(...approvalSettingPreviews(project.permissions));
@@ -132,8 +128,12 @@ function commandsIn(contents: string | undefined, path: string): FileScan {
   if (contents === undefined) return { findings: [], readable: false };
   const parsed = structuredValue(contents, path);
   if (parsed === undefined) return { findings: textScanCommands(contents), readable: false };
+  return commandsInValue(parsed);
+}
+
+function commandsInValue(value: unknown): FileScan {
   const found: string[] = [];
-  walk(parsed, found, 0);
+  walk(value, found, 0, new WeakSet());
   return { findings: found, readable: true };
 }
 
@@ -148,7 +148,7 @@ function structuredValue(contents: string, path: string): unknown {
       case ".mdc":
       case ".markdown": {
         // Only the frontmatter is configuration; the body is prose the agent reads, not runs.
-        const { data } = matter(contents);
+        const { data } = parseFrontmatter(contents);
         return data;
       }
       default:
@@ -159,20 +159,23 @@ function structuredValue(contents: string, path: string): unknown {
   }
 }
 
-function walk(node: unknown, found: string[], depth: number): void {
+function walk(node: unknown, found: string[], depth: number, seen: WeakSet<object>): void {
   // A `raw/` file is attacker-controlled data, and 40,000 nested objects would otherwise end the
   // run with a RangeError from somewhere unrelated. Nothing legitimate is this deep.
   if (depth > MAX_WALK_DEPTH) return;
+  if (node === null || typeof node !== "object") return;
+  // Frontmatter YAML aliases share nodes; revisiting them makes an alias chain exponential.
+  if (seen.has(node)) return;
+  seen.add(node);
   if (Array.isArray(node)) {
-    for (const item of node) walk(item, found, depth + 1);
+    for (const item of node) walk(item, found, depth + 1, seen);
     return;
   }
-  if (node === null || typeof node !== "object") return;
   const record = node as Record<string, unknown>;
   // Two shapes in the wild: `command: "npx"` with a separate `args`, and OpenCode's
   // `command: ["npx", "-y", …]` where the whole argv is the one field.
   const argv = commandArgv(record);
-  if (argv.length > 0) found.push(`runs: ${formatCommandPreview(argv)}`);
+  if (argv.length > 0) found.push(`runs: ${formatCommandPreview(argv)}${envSuffix(record)}`);
   else if (typeof record.url === "string" && record.url.length > 0) {
     // A remote MCP server runs no local process, but it is the same trust decision: on its next
     // launch the agent connects to that endpoint, every tool the endpoint advertises becomes
@@ -186,7 +189,15 @@ function walk(node: unknown, found: string[], depth: number): void {
       found.push(`runs ${formatCommandPreview([key])}: ${formatCommandPreview([value])}`);
     }
   }
-  for (const value of Object.values(record)) walk(value, found, depth + 1);
+  for (const value of Object.values(record)) walk(value, found, depth + 1, seen);
+}
+
+/** Names only: values can hold the user's own credentials when a remote preset layers over a local source. */
+function envSuffix(record: Record<string, unknown>): string {
+  const env = record.env ?? record.environment;
+  if (env === null || typeof env !== "object" || Array.isArray(env)) return "";
+  const names = Object.keys(env);
+  return names.length > 0 ? ` (env: ${formatCommandPreview(names)})` : "";
 }
 
 function commandArgv(record: Record<string, unknown>): string[] {
@@ -222,30 +233,80 @@ function unquote(value: string): string {
 }
 
 /**
- * Trees the writer copies or merges through untouched: `raw/`, skill directories, doc directories.
- * These never pass a generator, so nothing above sees them.
- *
- * A file is named when the destination itself makes it run - a platform's own config file (matched
- * case-insensitively, since `Settings.json` is `settings.json` on macOS and Windows), a directory a
- * platform auto-loads, an executable extension - or when its contents declare a command. That is
- * deliberately four overlapping rules rather than one list of filenames: the previous version
- * matched basenames only, and `raw/opencode/plugin/pwn.js` walked straight past it.
+ * The platform output as the writer leaves it, in the writer's order: skill directories, generated
+ * artifacts, copied trees, then `raw/` fragments - each deep-merged over whatever is already at its
+ * path with the writer's own merge, or replacing it when it cannot be merged. A fragment that
+ * rewrites a generated command is previewed as the command it produces, not as two halves.
  */
-function copiedTreePreviews(result: GenerationResult, platform: Platform): string[] {
-  const previews: string[] = [];
-  const trees = [
-    ...result.post.rawDirs.map((dir) => ({ dir, destRelative: "" })),
-    ...(result.post.copyDirs ?? []).map((copy) => ({ dir: copy.src, destRelative: copy.destRelative })),
-    ...result.post.skillDirs.map((skill) => ({
-      dir: skill.dir,
-      destRelative: join(result.post.skillsDestRelative ?? "skills", skill.name),
-    })),
-  ];
+interface OutputFile {
+  readonly contents: string | undefined;
+  readonly value?: unknown;
+  /** Written by copying a tree (`raw/`, skills, docs) rather than by a generator. */
+  readonly copied: boolean;
+}
 
-  for (const tree of trees) {
-    for (const relative of walkFiles(tree.dir)) {
-      const destination = tree.destRelative ? join(tree.destRelative, relative) : relative;
-      const scan = commandsIn(readTextFile(join(tree.dir, relative)), relative);
+function simulatedOutput(result: GenerationResult): Map<string, OutputFile> {
+  const output = new Map<string, OutputFile>();
+  const copyTree = (dir: string, destRelative: string): void => {
+    for (const relative of walkFiles(dir)) {
+      output.set(join(destRelative, relative), { contents: readTextFile(join(dir, relative)), copied: true });
+    }
+  };
+
+  for (const skill of result.post.skillDirs) {
+    copyTree(skill.dir, join(result.post.skillsDestRelative ?? "skills", skill.name));
+  }
+  for (const artifact of result.artifacts) {
+    const contents = typeof artifact.contents === "string" ? artifact.contents : artifact.contents.toString("utf8");
+    output.set(join(artifact.path), { contents, copied: false });
+  }
+  for (const copy of result.post.copyDirs ?? []) copyTree(copy.src, copy.destRelative);
+  for (const rawDir of result.post.rawDirs) {
+    for (const relative of walkFiles(rawDir)) {
+      const destination = join(relative);
+      const fragment = readTextFile(join(rawDir, relative));
+      output.set(destination, mergedFragment(output.get(destination), destination, fragment));
+    }
+  }
+  for (const append of result.post.appendAfterRaw ?? []) {
+    const destination = join(append.path);
+    const existing = output.get(destination);
+    const base = existing?.contents === undefined ? "" : `${existing.contents.trimEnd()}\n\n`;
+    output.set(destination, { contents: base + append.content, copied: existing?.copied ?? false });
+  }
+  return output;
+}
+
+function mergedFragment(
+  existing: OutputFile | undefined,
+  destination: string,
+  fragment: string | undefined,
+): OutputFile {
+  if (existing === undefined || fragment === undefined || !isMergeable(destination)) {
+    return { contents: fragment, copied: true };
+  }
+  try {
+    const base = existing.value ?? parseMergeableConfig(destination, existing.contents ?? "");
+    const value = mergeConfigValues(base, parseMergeableConfig(destination, fragment));
+    return { contents: fragment, value, copied: true };
+  } catch {
+    // The writer copies the fragment over as-is when the merge fails.
+    return { contents: fragment, copied: true };
+  }
+}
+
+/**
+ * A copied file is named when the destination itself makes it run - a platform's own config file
+ * (matched case-insensitively, since `Settings.json` is `settings.json` on macOS and Windows), a
+ * directory a platform auto-loads, an executable extension - or when its contents declare a command.
+ * That is deliberately four overlapping rules rather than one list of filenames: the previous
+ * version matched basenames only, and `raw/opencode/plugin/pwn.js` walked straight past it.
+ */
+function outputPreviews(output: ReadonlyMap<string, OutputFile>, platform: Platform): string[] {
+  const previews: string[] = [];
+  for (const [destination, file] of output) {
+    const scan = file.value === undefined ? commandsIn(file.contents, destination) : commandsInValue(file.value);
+    if (file.copied) {
       const runsByWhereItLands = runsByDestination(destination);
       if (scan.findings.length === 0 && !runsByWhereItLands) continue;
       // A file that lands somewhere it will be executed, and that this module could not open - too
@@ -253,8 +314,8 @@ function copiedTreePreviews(result: GenerationResult, platform: Platform): strin
       // nothing in. Saying so is the difference between "clean" and "unexamined".
       const caveat = runsByWhereItLands && !scan.readable ? " (contents not readable by the preview)" : "";
       previews.push(`installs ${formatCommandPreview([`${platform}/${destination}`])}${caveat}`);
-      for (const finding of scan.findings) previews.push(runsLine(platform, destination, finding));
     }
+    for (const finding of scan.findings) previews.push(runsLine(platform, destination, finding));
   }
   return previews;
 }

@@ -148,14 +148,18 @@ function tomlTableHeaders(content: string): TomlTableHeader[] {
 
 const MERGE_EXTS = new Set([".json", ".toml", ".yaml", ".yml"]);
 
-function isMergeable(filePath: string): boolean {
+export function isMergeable(filePath: string): boolean {
   return MERGE_EXTS.has(extname(filePath).toLowerCase());
 }
 
 export function readMergeableConfig(filePath: string): unknown {
+  return parseMergeableConfig(filePath, () => readFile(filePath));
+}
+
+export function parseMergeableConfig(filePath: string, contents: string | (() => string)): unknown {
   const ext = extname(filePath).toLowerCase();
   if (!MERGE_EXTS.has(ext)) throw new Error(`Unsupported config extension: ${ext}`);
-  const content = readFile(filePath);
+  const content = typeof contents === "string" ? contents : contents();
   if (ext === ".json") return JSON.parse(content) as unknown;
   if (ext === ".toml") return smolToml.parse(content);
   return parseYaml(content) as unknown;

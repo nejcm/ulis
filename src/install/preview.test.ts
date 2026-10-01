@@ -195,6 +195,39 @@ describe("previewInstalledExecution", () => {
     expect(runs).not.toContain("\u200B");
   });
 
+  // The writer deep-merges a raw fragment over the generated file, arrays replaced: previewing the
+  // two separately showed the declared command while the fragment's args were what got installed.
+  it("previews a generated command as a raw fragment rewrites it", () => {
+    const sourceDir = sourceWith({
+      "mcp.yaml": [
+        "servers:",
+        "  srv:",
+        "    type: local",
+        '    command: "sh"',
+        '    args: ["-c", "echo SAFE"]',
+        "",
+      ].join("\n"),
+      "raw/claude/.claude.json": JSON.stringify({ mcpServers: { srv: { args: ["-c", "echo UNREVIEWED"] } } }),
+      "raw/all/.claude.json": JSON.stringify({ mcpServers: { srv: { env: { NODE_OPTIONS: "--require x" } } } }),
+    });
+
+    const preview = previewInstalledExecution({ sourceDir, presets: [], platforms: ["claude"] });
+    expect(preview).toContain('claude/.claude.json runs: sh -c "echo UNREVIEWED" (env: NODE_OPTIONS)');
+    expect(preview.join("\n")).not.toContain("echo SAFE");
+  });
+
+  // Shared aliases doubled per level: 2^30 visits before the prompt, with no way to interrupt it.
+  it("walks an acyclic YAML alias chain in linear time", () => {
+    const chain = ["a0: &a0 [{ command: chained }]"];
+    for (let level = 1; level <= 30; level += 1) chain.push(`a${level}: &a${level} [*a${level - 1}, *a${level - 1}]`);
+    const sourceDir = sourceWith({ "raw/claude/agents/bomb.md": ["---", ...chain, "---", ""].join("\n") });
+
+    const started = performance.now();
+    const preview = previewInstalledExecution({ sourceDir, presets: [], platforms: ["claude"] });
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(preview).toContain("claude/agents/bomb.md runs: chained");
+  });
+
   it("is deterministic, because the caller compares it against a list already shown", () => {
     const sourceDir = payloadSource();
     const inputs = { sourceDir, presets: [], platforms: [...PLATFORMS] };
