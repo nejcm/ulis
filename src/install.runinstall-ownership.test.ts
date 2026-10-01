@@ -21,18 +21,25 @@ afterEach(() => {
   cleanupInstallTempRoots();
 });
 
-// Fails the copy of one generated file, so the opencode installer stops part-way: `agents/core` is
-// copied before `agents/specialized`, which fixes what the failed run did and did not reach.
+// Fails the copy of one generated file. Listings are sorted so the agent copy order, and with it what
+// the failed run did and did not reach, follows the file names.
 async function installFailingAt(failingSuffix: string, options: Parameters<typeof runInstall>[0]): Promise<void> {
   const realCopyFileSync = fs.copyFileSync;
+  const realReaddirSync = fs.readdirSync;
   const copySpy = spyOn(fs, "copyFileSync").mockImplementation((source, target, mode) => {
     if (String(target).endsWith(failingSuffix)) throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
     realCopyFileSync(source, target, mode);
   });
+  const readdirSpy = spyOn(fs, "readdirSync").mockImplementation(((path: fs.PathLike, readOptions?: unknown) => {
+    const entries = (realReaddirSync as (p: fs.PathLike, o?: unknown) => (string | fs.Dirent)[])(path, readOptions);
+    const name = (entry: string | fs.Dirent) => (typeof entry === "string" ? entry : entry.name);
+    return entries.sort((left, right) => (name(left) < name(right) ? -1 : name(left) > name(right) ? 1 : 0));
+  }) as typeof fs.readdirSync);
   try {
     await expect(runInstall(options)).rejects.toThrow();
   } finally {
     copySpy.mockRestore();
+    readdirSpy.mockRestore();
   }
 }
 
@@ -560,36 +567,38 @@ describe("runInstall", () => {
 
   it("records the entries a failed install wrote, so a later install prunes them", async () => {
     const { outputDir, projectDir, options } = opencodeInstall(createTempRoot());
-    write(join(outputDir, "opencode", "agents", "core", "keep.md"), "Keep.\n");
+    const agents = join(outputDir, "opencode", "agents");
+    write(join(agents, "keep.md"), "Keep.\n");
     await runInstall(options);
 
-    write(join(outputDir, "opencode", "agents", "core", "new.md"), "New.\n");
-    write(join(outputDir, "opencode", "agents", "specialized", "blocked.md"), "Blocked.\n");
-    await installFailingAt("blocked.md", options);
-    expect(read(join(projectDir, ".opencode", "agents", "core", "new.md"))).toBe("New.\n");
+    write(join(agents, "a-new.md"), "New.\n");
+    write(join(agents, "b-blocked.md"), "Blocked.\n");
+    await installFailingAt("b-blocked.md", options);
+    expect(read(join(projectDir, ".opencode", "agents", "a-new.md"))).toBe("New.\n");
 
-    rmSync(join(outputDir, "opencode", "agents", "core", "new.md"));
-    rmSync(join(outputDir, "opencode", "agents", "specialized"), { recursive: true });
+    rmSync(join(agents, "a-new.md"));
+    rmSync(join(agents, "b-blocked.md"));
     await runInstall(options);
 
-    expect(existsSync(join(projectDir, ".opencode", "agents", "core", "new.md"))).toBe(false);
-    expect(read(join(projectDir, ".opencode", "agents", "core", "keep.md"))).toBe("Keep.\n");
+    expect(existsSync(join(projectDir, ".opencode", "agents", "a-new.md"))).toBe(false);
+    expect(read(join(projectDir, ".opencode", "agents", "keep.md"))).toBe("Keep.\n");
   });
 
   it("does not claim an unmanaged file at a path a failed install never reached", async () => {
     const { outputDir, projectDir, options } = opencodeInstall(createTempRoot());
-    write(join(outputDir, "opencode", "agents", "core", "keep.md"), "Keep.\n");
+    const agents = join(outputDir, "opencode", "agents");
+    write(join(agents, "keep.md"), "Keep.\n");
     await runInstall(options);
 
-    const userAgent = join(projectDir, ".opencode", "agents", "specialized", "mine.md");
+    const userAgent = join(projectDir, ".opencode", "agents", "b-mine.md");
     write(userAgent, "User's own.\n");
-    write(join(outputDir, "opencode", "agents", "core", "fails.md"), "Fails.\n");
-    write(join(outputDir, "opencode", "agents", "specialized", "mine.md"), "Generated.\n");
-    await installFailingAt("fails.md", options);
+    write(join(agents, "a-fails.md"), "Fails.\n");
+    write(join(agents, "b-mine.md"), "Generated.\n");
+    await installFailingAt("a-fails.md", options);
     expect(read(userAgent)).toBe("User's own.\n");
 
-    rmSync(join(outputDir, "opencode", "agents", "core", "fails.md"));
-    rmSync(join(outputDir, "opencode", "agents", "specialized"), { recursive: true });
+    rmSync(join(agents, "a-fails.md"));
+    rmSync(join(agents, "b-mine.md"));
     await runInstall(options);
 
     expect(read(userAgent)).toBe("User's own.\n");
