@@ -32,4 +32,25 @@ describe("buildCodexConfigToml", () => {
     expect(servers.on).toEqual({ command: "a", enabled: true });
     expect(servers.unset).toEqual({ command: "a" });
   });
+
+  it("uses bearer_token_env_var only for the Authorization header", () => {
+    const servers = configFor({
+      api: {
+        type: "remote",
+        url: "https://x",
+        headers: {
+          "X-Api-Key": "Bearer ${OTHER}",
+          authorization: "Bearer ${TOKEN}",
+          "X-Tenant": "${TENANT}",
+          "X-Static": "fixed",
+        },
+      },
+    });
+    expect(servers.api).toEqual({
+      url: "https://x",
+      bearer_token_env_var: "TOKEN",
+      http_headers: { "X-Api-Key": "Bearer ${OTHER}", "X-Static": "fixed" },
+      env_http_headers: { "X-Tenant": "TENANT" },
+    });
+  });
 });

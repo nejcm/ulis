@@ -101,11 +101,6 @@ describe("translateEnvMap", () => {
     const result = translateEnvMap({ A: "${X}", B: "${Y}", C: "static" }, "opencode_header");
     expect(result).toEqual({ A: "{env:X}", B: "{env:Y}", C: "static" });
   });
-
-  it("extracts only the var name for codex_header", () => {
-    const result = translateEnvMap({ Authorization: "${API_KEY}", Other: "static" }, "codex_header");
-    expect(result).toEqual({ Authorization: "API_KEY", Other: "static" });
-  });
 });
 
 describe("normalizeLocalMcpCommand", () => {

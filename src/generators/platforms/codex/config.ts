@@ -5,11 +5,12 @@ import { toTomlKey, toTomlTableHeader } from "../../shared/keys.js";
 import type { ProjectBundle } from "../../types.js";
 import { toTomlString } from "./format.js";
 
+const EXACT_ENV_PLACEHOLDER = /^\$\{(\w+)\}$/;
+const BEARER_ENV_PLACEHOLDER = /^Bearer \$\{(\w+)\}$/;
+
 /**
- * Codex distinguishes three HTTP header cases:
- * - `bearer_token_env_var`: header value is exactly `Bearer ${VAR}`
- * - `env_http_headers`:     table mapping header-name -> env-var-name (for `${VAR}` values)
- * - `http_headers`:         table of static key-value pairs
+ * `bearer_token_env_var` for `Authorization: Bearer ${VAR}`, `env_http_headers` for an exact `${VAR}`,
+ * `http_headers` for everything else - Codex does not interpolate inside a header value.
  */
 function codexHttpHeaderLines(headers: Record<string, string> | undefined): string[] {
   if (!headers || Object.keys(headers).length === 0) return [];
@@ -20,13 +21,14 @@ function codexHttpHeaderLines(headers: Record<string, string> | undefined): stri
   let bearerVar: string | undefined;
 
   for (const [headerName, headerValue] of Object.entries(headers)) {
-    const bearerMatch = headerValue.match(/^Bearer \$\{(\w+)\}$/);
+    const bearerMatch = headerName.toLowerCase() === "authorization" ? BEARER_ENV_PLACEHOLDER.exec(headerValue) : null;
     if (bearerMatch && !bearerVar) {
       bearerVar = bearerMatch[1];
       continue;
     }
-    if (/\$\{(\w+)\}/.test(headerValue)) {
-      envHeaders.push([headerName, translateEnvVar(headerValue, "codex_header")]);
+    const envMatch = EXACT_ENV_PLACEHOLDER.exec(headerValue);
+    if (envMatch) {
+      envHeaders.push([headerName, envMatch[1]!]);
       continue;
     }
     staticHeaders.push([headerName, headerValue]);
