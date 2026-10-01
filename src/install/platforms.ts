@@ -33,7 +33,11 @@ const PLATFORM_INSTALL_SKIP_NAMES: Readonly<Record<Platform, ReadonlySet<string>
   PLATFORMS.map((platform) => [platform, reservedNames(...nativeConfigFilenames(platform))]),
 ) as Record<Platform, ReadonlySet<string>>;
 
-export async function installOpencode(context: InstallContext, ownership?: PlatformOwnership): Promise<void> {
+export async function installOpencode(
+  context: InstallContext,
+  ownership?: PlatformOwnership,
+  onWritten?: (relativePath: string) => void,
+): Promise<void> {
   const targetDir = platformConfigDir("opencode", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "opencode");
 
@@ -46,6 +50,7 @@ export async function installOpencode(context: InstallContext, ownership?: Platf
 
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
+    onWritten,
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.opencode,
     namedDirectories: managedDirectoryRules("opencode"),
     pruneExtraNames: context.prune,
@@ -55,7 +60,10 @@ export async function installOpencode(context: InstallContext, ownership?: Platf
   logSuccess(context, `OpenCode -> ${targetDir}`);
 }
 
-export async function installClaude(context: InstallContext): Promise<void> {
+export async function installClaude(
+  context: InstallContext,
+  onWritten?: (relativePath: string) => void,
+): Promise<void> {
   const targetDir = platformConfigDir("claude", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "claude");
   const targetRootConfig = isSamePath(context.destBase, context.userHome)
@@ -72,12 +80,13 @@ export async function installClaude(context: InstallContext): Promise<void> {
 
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
+    onWritten,
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.claude,
     namedDirectories: managedDirectoryRules("claude"),
   });
 }
 
-export async function installCodex(context: InstallContext): Promise<void> {
+export async function installCodex(context: InstallContext, onWritten?: (relativePath: string) => void): Promise<void> {
   const targetDir = platformConfigDir("codex", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "codex");
 
@@ -88,12 +97,16 @@ export async function installCodex(context: InstallContext): Promise<void> {
   writePlatformPreservedNativeConfigs("codex", preservedConfigs, context);
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
+    onWritten,
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.codex,
     namedDirectories: managedDirectoryRules("codex"),
   });
 }
 
-export async function installCursor(context: InstallContext): Promise<void> {
+export async function installCursor(
+  context: InstallContext,
+  onWritten?: (relativePath: string) => void,
+): Promise<void> {
   const targetDir = platformConfigDir("cursor", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "cursor");
 
@@ -106,12 +119,16 @@ export async function installCursor(context: InstallContext): Promise<void> {
 
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
+    onWritten,
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.cursor,
     namedDirectories: managedDirectoryRules("cursor"),
   });
 }
 
-export async function installForgecode(context: InstallContext): Promise<void> {
+export async function installForgecode(
+  context: InstallContext,
+  onWritten?: (relativePath: string) => void,
+): Promise<void> {
   const sourceDir = join(context.outputDir, "forgecode");
   const sourceForgeDir = join(sourceDir, resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project));
   const targetForgeDir = platformConfigDir("forgecode", context.destBase, context.userHome);
@@ -127,6 +144,7 @@ export async function installForgecode(context: InstallContext): Promise<void> {
   if (existsSync(sourceForgeDir)) {
     copyPlatformContents(sourceForgeDir, targetForgeDir, {
       logger: context.logger,
+      onWritten,
       skipNames: PLATFORM_INSTALL_SKIP_NAMES.forgecode,
       namedDirectories: managedDirectoryRules("forgecode"),
     });
@@ -134,6 +152,7 @@ export async function installForgecode(context: InstallContext): Promise<void> {
 
   copyPlatformContents(sourceDir, targetForgeDir, {
     logger: context.logger,
+    onWritten,
     skipNames: reservedNames(
       ...PLATFORM_INSTALL_SKIP_NAMES.forgecode,
       resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project),

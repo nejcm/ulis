@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
+import * as fs from "node:fs";
 import { existsSync, mkdirSync, renameSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 
@@ -19,6 +20,44 @@ afterEach(() => {
   __test.resetRuntimeDependencies();
   cleanupInstallTempRoots();
 });
+
+// Fails the copy of one generated file, so the opencode installer stops part-way: `agents/core` is
+// copied before `agents/specialized`, which fixes what the failed run did and did not reach.
+async function installFailingAt(failingSuffix: string, options: Parameters<typeof runInstall>[0]): Promise<void> {
+  const realCopyFileSync = fs.copyFileSync;
+  const copySpy = spyOn(fs, "copyFileSync").mockImplementation((source, target, mode) => {
+    if (String(target).endsWith(failingSuffix)) throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+    realCopyFileSync(source, target, mode);
+  });
+  try {
+    await expect(runInstall(options)).rejects.toThrow();
+  } finally {
+    copySpy.mockRestore();
+  }
+}
+
+function opencodeInstall(root: string) {
+  const sourceDir = join(root, ".ulis");
+  const projectDir = join(root, "project");
+  const userHome = join(root, "home");
+  mkdirSync(sourceDir, { recursive: true });
+  mkdirSync(projectDir, { recursive: true });
+  mkdirSync(userHome, { recursive: true });
+  const outputDir = join(sourceDir, "generated");
+  return {
+    outputDir,
+    projectDir,
+    options: {
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["opencode"] as const,
+      rebuild: false,
+      logger: silentLogger,
+    },
+  };
+}
 
 // runInstall: ownership-manifest lifecycle for managed agents/skills across platforms - adoption,
 // validation, type-conflict aborts, path safety, case-rename handling, and pruning.
@@ -519,5 +558,42 @@ describe("runInstall", () => {
     expect(preflight).toThrow(
       `Unsupported ULIS ownership manifest for claude at ${manifestPath}: expected version 1, 2 or 3, received 4`,
     );
+  });
+
+  it("records the entries a failed install wrote, so a later install prunes them", async () => {
+    const { outputDir, projectDir, options } = opencodeInstall(createTempRoot());
+    write(join(outputDir, "opencode", "agents", "core", "keep.md"), "Keep.\n");
+    await runInstall(options);
+
+    write(join(outputDir, "opencode", "agents", "core", "new.md"), "New.\n");
+    write(join(outputDir, "opencode", "agents", "specialized", "blocked.md"), "Blocked.\n");
+    await installFailingAt("blocked.md", options);
+    expect(read(join(projectDir, ".opencode", "agents", "core", "new.md"))).toBe("New.\n");
+
+    rmSync(join(outputDir, "opencode", "agents", "core", "new.md"));
+    rmSync(join(outputDir, "opencode", "agents", "specialized"), { recursive: true });
+    await runInstall(options);
+
+    expect(existsSync(join(projectDir, ".opencode", "agents", "core", "new.md"))).toBe(false);
+    expect(read(join(projectDir, ".opencode", "agents", "core", "keep.md"))).toBe("Keep.\n");
+  });
+
+  it("does not claim an unmanaged file at a path a failed install never reached", async () => {
+    const { outputDir, projectDir, options } = opencodeInstall(createTempRoot());
+    write(join(outputDir, "opencode", "agents", "core", "keep.md"), "Keep.\n");
+    await runInstall(options);
+
+    const userAgent = join(projectDir, ".opencode", "agents", "specialized", "mine.md");
+    write(userAgent, "User's own.\n");
+    write(join(outputDir, "opencode", "agents", "core", "fails.md"), "Fails.\n");
+    write(join(outputDir, "opencode", "agents", "specialized", "mine.md"), "Generated.\n");
+    await installFailingAt("fails.md", options);
+    expect(read(userAgent)).toBe("User's own.\n");
+
+    rmSync(join(outputDir, "opencode", "agents", "core", "fails.md"));
+    rmSync(join(outputDir, "opencode", "agents", "specialized"), { recursive: true });
+    await runInstall(options);
+
+    expect(read(userAgent)).toBe("User's own.\n");
   });
 });

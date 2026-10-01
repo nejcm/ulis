@@ -85,6 +85,34 @@ export function reconcileOwnership(
   logger?.info(`[ownership] ${platform}: ${summary}`);
 }
 
+/**
+ * Record what a failed install did write, without pruning: the previous entries plus the current
+ * entries the copy actually reached. Never the whole current set - a path the copy never got to may
+ * still hold the user's own file, and recording it would let a later prune delete it.
+ */
+export function recordPartialOwnership(
+  platform: Platform,
+  ownership: PlatformOwnership,
+  written: ReadonlySet<string>,
+  logger?: Logger,
+): void {
+  const { previous, current } = ownership;
+  const reached = (entries: readonly string[] | undefined) => (entries ?? []).filter((entry) => written.has(entry));
+  if (reached(current.agents).length + reached(current.skills).length + reached(current.rootEntries).length === 0) {
+    return;
+  }
+  const union = (before: readonly string[] | undefined, after: readonly string[] | undefined) => [
+    ...new Set([...(before ?? []), ...reached(after)]),
+  ];
+  writeManifestAtomic(ownership.targetDir, {
+    version: MANIFEST_VERSION,
+    agents: union(previous?.agents, current.agents),
+    skills: union(previous?.skills, current.skills),
+    rootEntries: union(previous?.rootEntries, current.rootEntries),
+  });
+  logger?.info(`[ownership] ${platform}: install failed; recorded the entries it wrote, nothing pruned`);
+}
+
 function readManifest(platform: Platform, targetDir: string): OwnershipManifest | undefined {
   const manifestPath = join(targetDir, ULIS_MANIFEST_FILENAME);
   if (!existsSync(manifestPath)) return;
