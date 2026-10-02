@@ -20,6 +20,69 @@ afterEach(() => {
 });
 
 describe("runInstall", () => {
+  it.each(["absent", "fresh", "overlay"])("preserves commented CRLF ForgeCode config (%s)", async (mode) => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const destBase = join(root, "project");
+    const generatedPath = join(outputDir, "forgecode", ".forge.toml");
+    const targetPath = join(destBase, ".forge", ".forge.toml");
+    const original =
+      "# User limits\r\nmax_conversations = 100 # Keep this\r\n\r\n[updates] # User updates\r\nfrequency = 'daily'\r\n";
+    write(join(sourceDir, "config.yaml"), "version: 1\nname: test\n");
+    if (mode !== "absent") write(generatedPath, mode === "fresh" ? original : "max_conversations = 200\n");
+    if (mode !== "fresh") write(targetPath, original);
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase,
+      userHome: join(root, "home"),
+      platforms: ["forgecode"] as const,
+      rebuild: false,
+      installSkills: false,
+      installExtensions: false,
+      logger: silentLogger,
+    };
+    await runInstall(options);
+    const first = read(targetPath);
+    expect(first).toBe(mode === "overlay" ? original.replace("= 100", "= 200") : original);
+    await runInstall(options);
+    expect(read(targetPath)).toBe(first);
+  });
+
+  it.each([...PLATFORMS])("preserves fresh and unchanged native config bytes for %s", async (platform) => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const userHome = join(root, "home");
+    const entries = getPreservedNativeConfigEntries(platform, { outputDir, destBase: userHome, userHome });
+    write(join(sourceDir, "config.yaml"), "version: 1\nname: test\n");
+    const contents = entries.map((entry) => {
+      const value = entry.mcpKey ? { [entry.mcpKey]: { unmanaged: { command: "keep" } } } : { theme: "dark" };
+      const content = serializeMergeableConfig(entry.generatedPath, value).replace(/\n/g, "\r\n") + "\r\n";
+      write(entry.generatedPath, content);
+      return content;
+    });
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase: userHome,
+      userHome,
+      platforms: [platform],
+      rebuild: false,
+      installSkills: false,
+      installExtensions: false,
+      logger: silentLogger,
+    };
+    await runInstall(options);
+    expect(entries.map((entry) => read(entry.targetPath))).toEqual(contents);
+    await runInstall(options);
+    expect(entries.map((entry) => read(entry.targetPath))).toEqual(contents);
+    for (const entry of entries) rmSync(entry.generatedPath);
+    await runInstall({ ...options, prune: false });
+    expect(entries.map((entry) => read(entry.targetPath))).toEqual(contents);
+  });
+
   it.each([
     { global: false, existing: false },
     { global: true, existing: false },

@@ -138,6 +138,7 @@ describe("preserved native config registry", () => {
       },
       {
         label: ".forge.toml",
+        overlay: "toml",
         generatedPath: join("root", ".ulis", "generated", "forgecode", ".forge.toml"),
         targetPath: join("root", "project", ".forge", ".forge.toml"),
         preservedPaths: [[]],

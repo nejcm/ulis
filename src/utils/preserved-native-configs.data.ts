@@ -100,6 +100,7 @@ export const PRESERVED_NATIVE_CONFIGS = [
   {
     platform: "forgecode",
     label: ".forge.toml",
+    overlay: "toml",
     names: [".forge.toml"],
     generatedPath: (context) => join(context.outputDir, "forgecode", ".forge.toml"),
     targetPath: (context) => join(platformConfigDir("forgecode", context.destBase, context.userHome), ".forge.toml"),

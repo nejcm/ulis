@@ -1,10 +1,12 @@
 import { existsSync, lstatSync, readFileSync, rmSync } from "node:fs";
+import { isDeepStrictEqual } from "node:util";
 
 import type { Platform } from "../platforms.js";
 import {
   existingFileMode,
   mergeConfigValues,
   patchTomlOverlay,
+  parseMergeableConfig,
   readMergeableConfig,
   serializeMergeableConfig,
   writeFileExclusively,
@@ -180,7 +182,7 @@ function capturePreservedConfig(
     if (entry.overlay) {
       return {
         preservedConfig: existing,
-        ...(entry.overlay === "toml" ? { originalContent: readFile(entry.targetPath) } : {}),
+        originalContent: readFile(entry.targetPath),
       };
     }
 
@@ -190,6 +192,7 @@ function capturePreservedConfig(
         : pickConfigPaths(existing, entry.preservedPaths);
     return {
       preservedConfig: Object.keys(preserved).length > 0 ? preserved : undefined,
+      originalContent: readFile(entry.targetPath),
     };
   } catch (error) {
     throw new PreservedNativeConfigParseError(entry.targetPath, error);
@@ -249,7 +252,11 @@ function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger
     // branch can be trusted to notice one on its own.
     refuseSymlinkAt(entry.targetPath);
     if (!existsSync(entry.generatedPath)) {
-      if (entry.overlay && !entry.prunedMcp && existsSync(entry.targetPath)) {
+      if (
+        (entry.overlay && !entry.prunedMcp && existsSync(entry.targetPath)) ||
+        (entry.originalContent !== undefined &&
+          isDeepStrictEqual(parseMergeableConfig(entry.targetPath, entry.originalContent), entry.preservedConfig))
+      ) {
         logger?.success(`${entry.label} (preserved)`);
         return;
       }
@@ -268,7 +275,7 @@ function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger
       return;
     }
 
-    if (entry.preservedConfig === undefined && entry.overlay === "toml") {
+    if (entry.preservedConfig === undefined) {
       copyDestinationFile(entry.generatedPath, entry.targetPath);
       logger?.success(`${entry.label} (copied)`);
       return;
@@ -277,15 +284,16 @@ function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger
     const generatedContent = readFile(entry.generatedPath);
     const generated = readMergeableConfig(entry.generatedPath);
     const merged = mergeConfigValues(generated, mergeConfigValues(entry.preservedConfig, generated));
-    if (entry.overlay === "toml") {
+    if (
+      entry.originalContent !== undefined &&
+      isDeepStrictEqual(parseMergeableConfig(entry.targetPath, entry.originalContent), merged)
+    ) {
+      writeDestinationFile(entry.targetPath, entry.originalContent);
+    } else if (entry.overlay === "toml") {
       const existingContent = entry.originalContent ?? readFile(entry.targetPath);
       writeDestinationFile(entry.targetPath, patchTomlOverlay(existingContent, generatedContent, merged));
     } else {
-      writeDestinationFile(
-        entry.targetPath,
-        serializeMergeableConfig(entry.targetPath, merged),
-        entry.preservedConfig === undefined ? existingFileMode(entry.generatedPath) : undefined,
-      );
+      writeDestinationFile(entry.targetPath, serializeMergeableConfig(entry.targetPath, merged));
     }
     logger?.success(`${entry.label} (merged)`);
   } catch (error) {
