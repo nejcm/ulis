@@ -160,6 +160,20 @@ describe("remote trust gate", () => {
     return { commands, logs, questions, projectDir, outputDir, error };
   }
 
+  it("surfaces remote agent parse diagnostics before installing", async () => {
+    const run = await runWithRemote({
+      remoteSources: ["https://github.com/o/r"],
+      agentMarkdown: "---js\n({ name: 'evil' })\n---\nBody\n",
+      captureError: true,
+    });
+    const displayed = [...run.logs, (run.error as Error).message].join("\n");
+    expect(displayed).toContain("agents/evil.md");
+    expect(displayed).toContain("JavaScript frontmatter (---js) is not supported");
+    expect(displayed.match(/JavaScript frontmatter/g)).toHaveLength(1);
+    expect(existsSync(join(run.projectDir, ".codex"))).toBe(false);
+    expect(run.questions).toHaveLength(0);
+  });
+
   it("does not prompt for a purely local source", async () => {
     const run = await runWithRemote();
     expect(run.questions).toHaveLength(0);

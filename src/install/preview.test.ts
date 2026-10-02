@@ -9,6 +9,7 @@ import { writeResult } from "../generators/writer.js";
 import { PLATFORMS } from "../platforms.js";
 import { parseFrontmatter } from "../utils/safe-matter.js";
 import { __test as previewTest, previewInstalledExecution } from "./preview.js";
+import { planRemoteCommands } from "./trust-gate.js";
 
 const silent: Logger = {
   info: () => {},
@@ -63,6 +64,38 @@ function commandsInGeneratedText(sourceDir: string): string[] {
 }
 
 describe("previewInstalledExecution", () => {
+  it.each([
+    ["agents/broken.md", "---js\n({ name: 'broken' })\n---\nBody\n", "JavaScript frontmatter"],
+    ["mcp.yaml", "servers: [\n", "at:"],
+  ])("includes %s diagnostics in source and preset review errors", (file, contents, reason) => {
+    const sourceDir = sourceWith({ [file!]: contents! });
+    for (const presetOnly of [false, true]) {
+      try {
+        planRemoteCommands({
+          sourceDir: presetOnly ? undefined : sourceDir,
+          presets: presetOnly ? [{ name: "remote", dir: sourceDir }] : [],
+          platforms: ["codex"],
+          destBase: join(sourceDir, "destination"),
+        });
+        throw new Error("Expected parsing to fail");
+      } catch (error) {
+        const message = (error as Error).message;
+        expect(message).toContain(file!);
+        expect(message).toContain(reason!);
+      }
+    }
+    const diagnostics: string[] = [];
+    let error: unknown;
+    try {
+      analyzeProject({ sourceDir, logger: { ...silent, error: (message) => diagnostics.push(message) } });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toContain(file!);
+    expect((error as Error).message).toBe("Parsing failed: 1 error(s). No files written.");
+  });
+
   it("discloses an oversized skill whose transformed frontmatter installs a hook", () => {
     const sourceDir = sourceWith({
       "skills/large/SKILL.md":

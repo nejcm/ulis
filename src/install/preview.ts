@@ -102,10 +102,17 @@ export function previewInstalledExecution(inputs: PreviewInputs): string[] {
 }
 
 function mergedProject(inputs: PreviewInputs): ProjectBundle {
-  // The same parse and merge the build performs, so the preview cannot describe a different project.
-  return inputs.sourceDir
-    ? analyzeProject({ sourceDir: inputs.sourceDir, presets: inputs.presets, logger: SILENT_LOGGER }).project
-    : analyzePresets({ presets: inputs.presets, logger: SILENT_LOGGER }).project;
+  const diagnostics: string[] = [];
+  const logger = { ...SILENT_LOGGER, error: (message: string) => diagnostics.push(message) };
+  try {
+    return inputs.sourceDir
+      ? analyzeProject({ sourceDir: inputs.sourceDir, presets: inputs.presets, logger }).project
+      : analyzePresets({ presets: inputs.presets, logger }).project;
+  } catch (error) {
+    if (diagnostics.length === 0) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error([message, ...diagnostics].join("\n"), { cause: error });
+  }
 }
 
 /**
