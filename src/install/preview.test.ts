@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -63,6 +63,70 @@ function commandsInGeneratedText(sourceDir: string): string[] {
 }
 
 describe("previewInstalledExecution", () => {
+  it("discloses an oversized skill whose transformed frontmatter installs a hook", () => {
+    const sourceDir = sourceWith({
+      "skills/large/SKILL.md":
+        "---\nname: large\ndescription: Large\nhooks:\n  Stop:\n    - command: hidden-hook\n---\n" +
+        "x".repeat(512 * 1024),
+    });
+    const result = generate("claude", analyzeProject({ sourceDir, logger: silent }).project)!;
+    const out = join(sourceDir, "generated", "claude");
+    writeResult(result, out, "claude", silent);
+    expect(readFileSync(join(out, "skills/large/SKILL.md"), "utf8")).toContain("hidden-hook");
+    expect(previewInstalledExecution({ sourceDir, presets: [], platforms: ["claude"] })).toContain(
+      "installs claude/skills/large/SKILL.md (contents not readable by the preview)",
+    );
+  });
+
+  it.each(["raw/all/agents/large.md", "docs/large.md"])("discloses oversized copied content from %s", (path) => {
+    const sourceDir = sourceWith({ [path]: "---\ncommand: hidden-hook\n---\n" + "x".repeat(512 * 1024) });
+    const destination = path.replace("raw/all/", "");
+    expect(previewInstalledExecution({ sourceDir, presets: [], platforms: ["opencode"] })).toContain(
+      `installs opencode/${destination} (contents not readable by the preview)`,
+    );
+  });
+
+  it("retains unreadable content disclosure through later raw merges", () => {
+    const sourceDir = sourceWith({
+      "raw/all/custom.json": JSON.stringify({ command: "hidden-hook", padding: "x".repeat(512 * 1024) }),
+      "raw/claude/custom.json": "{}",
+    });
+    const out = join(sourceDir, "generated", "claude");
+    writeResult(generate("claude", analyzeProject({ sourceDir, logger: silent }).project)!, out, "claude", silent);
+    expect(JSON.parse(readFileSync(join(out, "custom.json"), "utf8")).command).toBe("hidden-hook");
+    expect(previewInstalledExecution({ sourceDir, presets: [], platforms: ["claude"] })).toContain(
+      "installs claude/custom.json (contents not readable by the preview)",
+    );
+  });
+
+  it.each(["opencode", "codex", "forgecode"] as const)("retains disclosure when %s appends after raw", (platform) => {
+    const sourceDir = sourceWith({
+      "raw/all/AGENTS.md": "---\ncommand: hidden-hook\n---\n" + "x".repeat(512 * 1024),
+      "rules/style.md": "---\ndescription: Style\n---\nUse plain names.\n",
+    });
+    expect(previewInstalledExecution({ sourceDir, presets: [], platforms: [platform] })).toContain(
+      `installs ${platform}/AGENTS.md (contents not readable by the preview)`,
+    );
+  });
+
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0).each([
+    ["file", "hidden/payload.md", 0, "hidden/payload.md"],
+    ["directory", "hidden", 0, "hidden"],
+    ["metadata", "hidden", 0o400, "hidden/payload.md"],
+    ["root", ".", 0, "."],
+  ] as const)("discloses unreadable raw %s", (kind, relative, mode, destination) => {
+    const sourceDir = sourceWith({ "raw/claude/hidden/payload.md": "---\ncommand: hidden-hook\n---\n" });
+    const path = join(sourceDir, "raw/claude", relative);
+    chmodSync(path, mode);
+    try {
+      expect(previewInstalledExecution({ sourceDir, presets: [], platforms: ["claude"] })).toContain(
+        `installs claude/${destination} (contents not readable by the preview)`,
+      );
+    } finally {
+      chmodSync(path, kind === "file" ? 0o600 : 0o700);
+    }
+  });
+
   // Every payload class found across four review rounds, in one source.
   const payloadSource = () =>
     sourceWith({

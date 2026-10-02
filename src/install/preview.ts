@@ -75,7 +75,7 @@ const EXEC_STRING_KEYS = new Set(["apiKeyHelper"]);
 /** A hostile `raw/` file can nest objects deep enough to blow the stack; the walk stops first. */
 const MAX_WALK_DEPTH = 64;
 
-/** Nothing is copied file-by-file at this size; reading further only risks a preview no one reads. */
+/** Larger files are disclosed as unexamined without reading them into memory. */
 const MAX_SCANNED_BYTES = 512 * 1024;
 
 /**
@@ -242,6 +242,7 @@ function unquote(value: string): string {
 interface OutputFile {
   readonly contents: string | undefined;
   readonly value?: unknown;
+  readonly unscanned?: boolean;
   /** Written by copying a tree (`raw/`, skills, docs) rather than by a generator. */
   readonly copied: boolean;
 }
@@ -282,7 +283,11 @@ function simulatedOutput(result: GenerationResult): Map<string, OutputFile> {
     const destination = join(append.path);
     const existing = output.get(destination);
     const base = existing?.contents === undefined ? "" : `${existing.contents.trimEnd()}\n\n`;
-    output.set(destination, { contents: base + append.content, copied: existing?.copied ?? false });
+    output.set(destination, {
+      contents: base + append.content,
+      copied: existing?.copied ?? false,
+      unscanned: existing !== undefined && (existing.contents === undefined || existing.unscanned === true),
+    });
   }
   return output;
 }
@@ -295,34 +300,26 @@ function mergedFragment(
   if (existing === undefined || fragment === undefined || !isMergeable(destination)) {
     return { contents: fragment, copied: true };
   }
+  const unscanned = existing.contents === undefined || existing.unscanned === true;
   try {
     const base = existing.value ?? parseMergeableConfig(destination, existing.contents ?? "");
     const value = mergeConfigValues(base, parseMergeableConfig(destination, fragment));
-    return { contents: fragment, value, copied: true };
+    return { contents: fragment, value, copied: true, unscanned };
   } catch {
-    // The writer copies the fragment over as-is when the merge fails.
-    return { contents: fragment, copied: true };
+    return { contents: fragment, copied: true, unscanned };
   }
 }
 
-/**
- * A copied file is named when the destination itself makes it run - a platform's own config file
- * (matched case-insensitively, since `Settings.json` is `settings.json` on macOS and Windows), a
- * directory a platform auto-loads, an executable extension - or when its contents declare a command.
- * That is deliberately four overlapping rules rather than one list of filenames: the previous
- * version matched basenames only, and `raw/opencode/plugin/pwn.js` walked straight past it.
- */
+/** Disclose copied files when their destination or contents can execute, or a read was incomplete. */
 function outputPreviews(output: ReadonlyMap<string, OutputFile>, platform: Platform): string[] {
   const previews: string[] = [];
   for (const [destination, file] of output) {
     const scan = file.value === undefined ? commandsIn(file.contents, destination) : commandsInValue(file.value);
     if (file.copied) {
       const runsByWhereItLands = runsByDestination(destination);
-      if (scan.findings.length === 0 && !runsByWhereItLands) continue;
-      // A file that lands somewhere it will be executed, and that this module could not open - too
-      // large, or a format it does not parse - must not print identically to one it read and found
-      // nothing in. Saying so is the difference between "clean" and "unexamined".
-      const caveat = runsByWhereItLands && !scan.readable ? " (contents not readable by the preview)" : "";
+      const unscanned = file.contents === undefined || file.unscanned === true;
+      if (scan.findings.length === 0 && !runsByWhereItLands && !unscanned) continue;
+      const caveat = unscanned || !scan.readable ? " (contents not readable by the preview)" : "";
       previews.push(`installs ${formatCommandPreview([`${platform}/${destination}`])}${caveat}`);
     }
     for (const finding of scan.findings) previews.push(runsLine(platform, destination, finding));
@@ -380,16 +377,20 @@ function walkFiles(dir: string, prefix = ""): string[] {
     // Sorted: this list is compared against one a caller already showed the user, and a directory
     // order that differed between the two scans would abort a legitimate install.
     entries = readdirSync(dir).sort();
-  } catch {
-    return [];
+  } catch (error) {
+    if (prefix === "" && (error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    return [prefix.replace(/\/$/u, "") || "."];
   }
   return entries.flatMap((entry) => {
     const full = join(dir, entry);
     // `statSync`, not `lstat`: `mergeOrCopyDir` and `cpSync` follow a symlinked directory, and a
     // preview that walked only real directories would list fewer files than the install writes.
-    const stats = statSync(full, { throwIfNoEntry: false });
-    if (stats?.isDirectory()) return walkFiles(full, `${prefix}${entry}/`);
-    return stats ? [`${prefix}${entry}`] : [];
+    try {
+      if (statSync(full, { throwIfNoEntry: false })?.isDirectory()) return walkFiles(full, `${prefix}${entry}/`);
+    } catch {
+      return [`${prefix}${entry}`];
+    }
+    return [`${prefix}${entry}`];
   });
 }
 
