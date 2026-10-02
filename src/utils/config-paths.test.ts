@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+import { parse } from "smol-toml";
+
 import { getConfigPath, omitConfigPaths, pickConfigPaths } from "./config-paths.js";
 
 describe("pickConfigPaths", () => {
@@ -72,4 +74,17 @@ it("config paths use own keys and preserve __proto__ as data", () => {
   expect(pickConfigPaths(JSON.parse('{"__proto__":{"keep":true}}'), [[]])).toEqual(
     JSON.parse('{"__proto__":{"keep":true}}'),
   );
+});
+
+it("omits paths without cloning atomic values or mutating the source", () => {
+  const source = parse(
+    "expiry = 2026-10-02\n[mcp_servers.managed]\nexpiry = 00:00:00\n[mcp_servers.unmanaged]\nexpiry = 2026-10-02T00:00:00\n",
+  );
+  const result = omitConfigPaths(source, [["mcp_servers", "managed"]]);
+  expect(result.expiry).toBe(source.expiry);
+  expect(getConfigPath(result, ["mcp_servers", "unmanaged", "expiry"])).toBe(
+    getConfigPath(source, ["mcp_servers", "unmanaged", "expiry"]),
+  );
+  expect(getConfigPath(result, ["mcp_servers", "managed"])).toBeUndefined();
+  expect(getConfigPath(source, ["mcp_servers", "managed"])).toBeDefined();
 });

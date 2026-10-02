@@ -1,8 +1,8 @@
 import { existsSync, lstatSync, readFileSync, rmSync } from "node:fs";
-import { isDeepStrictEqual } from "node:util";
 
 import type { Platform } from "../platforms.js";
 import {
+  configValuesEqual,
   existingFileMode,
   mergeConfigValues,
   patchTomlOverlay,
@@ -255,7 +255,7 @@ function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger
       if (
         (entry.overlay && !entry.prunedMcp && existsSync(entry.targetPath)) ||
         (entry.originalContent !== undefined &&
-          isDeepStrictEqual(parseMergeableConfig(entry.targetPath, entry.originalContent), entry.preservedConfig))
+          configValuesEqual(parseMergeableConfig(entry.targetPath, entry.originalContent), entry.preservedConfig))
       ) {
         logger?.success(`${entry.label} (preserved)`);
         return;
@@ -286,7 +286,7 @@ function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger
     const merged = mergeConfigValues(generated, mergeConfigValues(entry.preservedConfig, generated));
     if (
       entry.originalContent !== undefined &&
-      isDeepStrictEqual(parseMergeableConfig(entry.targetPath, entry.originalContent), merged)
+      configValuesEqual(parseMergeableConfig(entry.targetPath, entry.originalContent), merged)
     ) {
       writeDestinationFile(entry.targetPath, entry.originalContent);
     } else if (entry.overlay === "toml") {

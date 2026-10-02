@@ -1,5 +1,7 @@
 export function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  if (typeof value !== "object" || value === null) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 export type ConfigPath = readonly string[];
@@ -19,16 +21,12 @@ export function pickConfigPaths(source: unknown, paths: readonly ConfigPath[]): 
   return result;
 }
 
-/**
- * Return a deep clone of `source` with the given paths removed. Used by the
- * `ownership: "paths"` preservation mode to capture "everything except the
- * paths ULIS owns" — the inverse of {@link pickConfigPaths}.
- */
+/** Copy `source` with the given paths removed, preserving atomic values. */
 export function omitConfigPaths(source: unknown, paths: readonly ConfigPath[]): Record<string, unknown> {
   if (!isPlainObject(source)) return {};
   // Empty path => caller wants to drop the entire object; honor it.
   if (paths.some((p) => p.length === 0)) return {};
-  const result = structuredClone(source) as Record<string, unknown>;
+  const result = { ...source };
   for (const path of paths) {
     deleteConfigPath(result, path);
   }
@@ -42,7 +40,7 @@ function deleteConfigPath(target: Record<string, unknown>, path: readonly string
     if (!Object.hasOwn(current, path[i]!)) return;
     const next = current[path[i]!];
     if (!isPlainObject(next)) return;
-    current = next;
+    current = current[path[i]!] = { ...next };
   }
   delete current[path[path.length - 1]!];
 }
