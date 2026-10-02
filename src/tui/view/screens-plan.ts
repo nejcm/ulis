@@ -72,7 +72,7 @@ export function planView(state: TuiState, cwd?: string, userHome?: string): Scre
     { kind: "blank" },
     { kind: "heading", text: "Install options" },
     field("Backup", onOff(state.backup)),
-    field("Prune removed agents and skills", onOff(state.prune)),
+    field("Prune agents, skills and MCP servers", onOff(state.prune)),
     field("Use latest build output", onOff(state.rebuild)),
     field("Skip external skills", onOff(state.skipExternalSkills)),
   );

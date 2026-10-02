@@ -71,7 +71,7 @@ Every toggle needs its off-switch documented in the same change:
 
 | Feature                                    | Off-switch                                                                                                                               |
 | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| prune stale managed entries (default on)   | `--no-prune` — stale entries are kept and become unmanaged                                                                               |
+| prune stale managed entries (default on)   | `--no-prune` — stale managed agents, skills and MCP servers are kept and become unmanaged                                               |
 | rebuild before install (default on)        | `--skip-rebuild` — refused, `-y` included, if `<source>/generated/` was built from a remote source; there is no clone left to re-preview |
 | run `extensions.yaml` entries              | `--skip-extensions`                                                                                                                      |
 | install external skills from `skills.yaml` | `--skip-external-skills`                                                                                                                 |

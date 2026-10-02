@@ -22,6 +22,7 @@ export interface PreservedNativeConfigContext {
   readonly destBase: string;
   readonly userHome: string;
   readonly managedMcpServers?: readonly string[];
+  readonly managedMcpProjectServers?: readonly (readonly [string, string])[];
   readonly prune?: boolean;
 }
 
@@ -139,11 +140,18 @@ export function capturePreservedNativeConfigs(
 ): readonly CapturedPreservedNativeConfig[] {
   return getPreservedNativeConfigEntries(platform, context).map((entry) => {
     const captured = capturePreservedConfig(entry);
-    if (!entry.mcpKey || !context.managedMcpServers?.length) return { ...entry, ...captured };
+    if (!entry.mcpKey) return { ...entry, ...captured };
+    const managedPaths = [
+      ...(context.managedMcpServers ?? []).map((name) => [entry.mcpKey!, name]),
+      ...(platform === "claude" && entry.overlay === "json" ? (context.managedMcpProjectServers ?? []) : []).map(
+        ([project, name]) => ["projects", project, "mcpServers", name],
+      ),
+    ];
+    if (managedPaths.length === 0) return { ...entry, ...captured };
     const generated = existsSync(entry.generatedPath) ? readMergeableConfig(entry.generatedPath) : {};
-    const paths = context.managedMcpServers
-      .filter((name) => context.prune !== false || getConfigPath(generated, [entry.mcpKey!, name]) !== undefined)
-      .map((name) => [entry.mcpKey!, name]);
+    const paths = managedPaths.filter(
+      (path) => context.prune !== false || getConfigPath(generated, path) !== undefined,
+    );
     return {
       ...entry,
       ...captured,

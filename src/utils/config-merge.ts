@@ -28,7 +28,12 @@ export function mergeConfigValues(base: unknown, override: unknown): unknown {
 
   const result: Record<string, unknown> = { ...base };
   for (const [key, value] of Object.entries(override)) {
-    result[key] = mergeConfigValues(result[key], value);
+    Object.defineProperty(result, key, {
+      value: mergeConfigValues(Object.hasOwn(result, key) ? result[key] : undefined, value),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
   }
   return result;
 }

@@ -41,6 +41,7 @@ export interface OwnershipManifest {
   readonly skills: readonly string[];
   readonly rootEntries: readonly string[] | undefined;
   readonly mcpServers?: readonly string[];
+  readonly mcpProjectServers?: readonly (readonly [string, string])[];
   readonly mcpConfig?: string;
 }
 
@@ -123,6 +124,20 @@ export function recordPartialOwnership(
         ...(current.mcpConfig && written.has(current.mcpConfig) ? (current.mcpServers ?? []) : []),
       ]),
     ].sort(),
+    ...(current.mcpProjectServers || previous?.mcpProjectServers
+      ? {
+          mcpProjectServers: [
+            ...new Set(
+              [
+                ...(previous?.mcpProjectServers ?? []),
+                ...(current.mcpConfig && written.has(current.mcpConfig) ? (current.mcpProjectServers ?? []) : []),
+              ].map((pair) => JSON.stringify(pair)),
+            ),
+          ]
+            .sort()
+            .map((pair) => JSON.parse(pair) as [string, string]),
+        }
+      : {}),
   });
   logger?.info(`[ownership] ${platform}: install failed; recorded the entries it wrote, nothing pruned`);
 }
@@ -163,7 +178,23 @@ export function readManifest(platform: Platform, targetDir: string): OwnershipMa
   ) {
     throw new InstallError(`Invalid MCP ownership data at ${manifestPath}: expected server names`);
   }
-  return { version: raw.version, agents, skills, rootEntries, mcpServers: raw.mcpServers as string[] | undefined };
+  if (
+    raw.mcpProjectServers !== undefined &&
+    (!Array.isArray(raw.mcpProjectServers) ||
+      raw.mcpProjectServers.some(
+        (pair) => !Array.isArray(pair) || pair.length !== 2 || pair.some((key) => typeof key !== "string"),
+      ))
+  ) {
+    throw new InstallError(`Invalid MCP ownership data at ${manifestPath}: expected project/server pairs`);
+  }
+  return {
+    version: raw.version,
+    agents,
+    skills,
+    rootEntries,
+    mcpServers: raw.mcpServers as string[] | undefined,
+    mcpProjectServers: raw.mcpProjectServers as [string, string][] | undefined,
+  };
 }
 
 function collectGeneratedManifest(
@@ -184,13 +215,26 @@ function collectGeneratedManifest(
   const mcpEntry = getPreservedNativeConfigEntries(platform, { outputDir, destBase, userHome }).find(
     (entry) => entry.mcpKey,
   );
-  const mcpServers =
-    mcpEntry && existsSync(mcpEntry.generatedPath)
-      ? getConfigPath(readMergeableConfig(mcpEntry.generatedPath), [mcpEntry.mcpKey!])
-      : undefined;
+  const mcpConfig =
+    mcpEntry && existsSync(mcpEntry.generatedPath) ? readMergeableConfig(mcpEntry.generatedPath) : undefined;
+  const mcpServers = mcpEntry ? getConfigPath(mcpConfig, [mcpEntry.mcpKey!]) : undefined;
+  const projects = getConfigPath(mcpConfig, ["projects"]);
+  const mcpProjectServers: [string, string][] = isPlainObject(projects)
+    ? Object.keys(projects)
+        .sort()
+        .flatMap((project) => {
+          const servers = getConfigPath(projects, [project, "mcpServers"]);
+          return isPlainObject(servers)
+            ? Object.keys(servers)
+                .sort()
+                .map((name): [string, string] => [project, name])
+            : [];
+        })
+    : [];
   return {
     version: MANIFEST_VERSION,
     mcpServers: isPlainObject(mcpServers) ? Object.keys(mcpServers).sort() : [],
+    ...(platform === "claude" && mcpEntry?.overlay === "json" ? { mcpProjectServers } : {}),
     mcpConfig: mcpEntry ? basename(mcpEntry.generatedPath) : undefined,
     agents: validatePaths(platform, "agents", agents, platformOutput),
     skills: validatePaths(platform, "skills", skills, platformOutput),

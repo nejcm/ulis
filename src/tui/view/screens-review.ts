@@ -138,6 +138,7 @@ export function installReviewView(state: TuiState, cwd?: string, userHome?: stri
     field("Destination", plan.destBase),
     field("Platforms", formatPlatforms(state.platforms)),
     field("Presets", sanitizeConsentText(formatPresets(state))),
+    field("Prune", state.prune ? "Removed agents, skills and MCP servers" : "Off; stale entries become unmanaged"),
     { kind: "blank" },
     { kind: "text", text: formatInstallCommand(state, cwd, userHome), tone: "muted" },
     { kind: "blank" },
@@ -174,6 +175,7 @@ export function presetInstallReviewView(
     field("Destination", plan.destBase),
     field("Platforms", formatPlatforms(state.platforms)),
     field("Presets", sanitizeConsentText(formatPresets(state))),
+    field("Prune", state.prune ? "Removed agents, skills and MCP servers" : "Off; stale entries become unmanaged"),
     { kind: "blank" },
     { kind: "text", text: "Action: install the selected preset directories resolved by the TUI.", tone: "muted" },
     { kind: "blank" },
@@ -181,7 +183,7 @@ export function presetInstallReviewView(
   ];
   const actionRows: ViewRow[] = [
     option(state, 0, "Backup existing configs before install", { checked: state.backup }),
-    option(state, 1, "Prune removed agents and skills", { checked: state.prune }),
+    option(state, 1, "Prune agents, skills and MCP servers", { checked: state.prune }),
     option(state, 2, "Run preset extensions", { checked: state.presetInstallExtensions }),
     ...(state.presetSourceMode === "custom" && state.presetInstallExtensions
       ? [

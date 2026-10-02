@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { omitConfigPaths, pickConfigPaths } from "./config-paths.js";
+import { getConfigPath, omitConfigPaths, pickConfigPaths } from "./config-paths.js";
 
 describe("pickConfigPaths", () => {
   it("copies only selected nested paths", () => {
@@ -59,4 +59,17 @@ describe("omitConfigPaths", () => {
     expect(omitConfigPaths(null, [["a"]])).toEqual({});
     expect(omitConfigPaths(42, [["a"]])).toEqual({});
   });
+});
+
+it("config paths use own keys and preserve __proto__ as data", () => {
+  for (const name of ["constructor", "toString", "__proto__"]) {
+    expect(getConfigPath({}, [name])).toBeUndefined();
+    const source = JSON.parse(JSON.stringify({ [name]: { keep: true } }));
+    const picked = pickConfigPaths(source, [[name, "keep"]]);
+    expect(JSON.stringify(picked)).toBe(JSON.stringify(source));
+    expect(omitConfigPaths(source, [[name, "keep"]])).toEqual({ [name]: {} });
+  }
+  expect(pickConfigPaths(JSON.parse('{"__proto__":{"keep":true}}'), [[]])).toEqual(
+    JSON.parse('{"__proto__":{"keep":true}}'),
+  );
 });

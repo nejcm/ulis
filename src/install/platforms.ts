@@ -57,6 +57,7 @@ export async function installOpencode(
     previouslyManagedRootEntries: ownership?.previous?.rootEntries,
     currentManagedRootEntries: ownership?.current.rootEntries,
   });
+  prunePlatformMcpServers("opencode", context);
   logSuccess(context, `OpenCode -> ${targetDir}`);
 }
 
@@ -84,6 +85,7 @@ export async function installClaude(
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.claude,
     namedDirectories: managedDirectoryRules("claude"),
   });
+  prunePlatformMcpServers("claude", context);
 }
 
 export async function installCodex(context: InstallContext, onWritten?: (relativePath: string) => void): Promise<void> {
@@ -101,6 +103,7 @@ export async function installCodex(context: InstallContext, onWritten?: (relativ
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.codex,
     namedDirectories: managedDirectoryRules("codex"),
   });
+  prunePlatformMcpServers("codex", context);
 }
 
 export async function installCursor(
@@ -123,6 +126,7 @@ export async function installCursor(
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.cursor,
     namedDirectories: managedDirectoryRules("cursor"),
   });
+  prunePlatformMcpServers("cursor", context);
 }
 
 export async function installForgecode(
@@ -158,6 +162,7 @@ export async function installForgecode(
       resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project),
     ),
   });
+  prunePlatformMcpServers("forgecode", context);
 }
 
 export function detectInstallCollisions(
@@ -239,12 +244,16 @@ function isNonEmptyDirectory(path: string): boolean {
 function capturePlatformPreservedNativeConfigs(
   platform: Platform,
   context: InstallContext,
+  prune = false,
 ): readonly CapturedPreservedNativeConfig[] {
   try {
     const targetDir = platformConfigDir(platform, context.destBase, context.userHome);
+    const previous = readManifest(platform, targetDir);
     return capturePreservedNativeConfigs(platform, {
       ...context,
-      managedMcpServers: readManifest(platform, targetDir)?.mcpServers,
+      prune,
+      managedMcpServers: previous?.mcpServers,
+      managedMcpProjectServers: previous?.mcpProjectServers,
     });
   } catch (error) {
     if (error instanceof PreservedNativeConfigParseError) {
@@ -283,6 +292,14 @@ function writePlatformPreservedNativeConfigs(
     if (error instanceof UnsafeNativeConfigPathError) throw new InstallError(error.message, error);
     throw new InstallError(`Failed to write preserved native config for ${platform}`, error);
   }
+}
+
+function prunePlatformMcpServers(platform: Platform, context: InstallContext): void {
+  if (!context.prune) return;
+  const entries = capturePlatformPreservedNativeConfigs(platform, context, true).filter(
+    (entry) => entry.mcpKey && entry.prunedMcp,
+  );
+  writePlatformPreservedNativeConfigs(platform, entries, context);
 }
 
 function backupDirectory(targetDir: string, context: InstallContext): void {

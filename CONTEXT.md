@@ -22,8 +22,8 @@
 - **TUI Preference**: A locally persisted choice that pre-fills future TUI plans without preventing the current plan from being edited.
 - **TUI Preference Scope**: The flow-specific preference bucket used to remember choices separately for project, global, custom-source, and preset-only flows.
 - **Backup**: A TUI and CLI install option that copies existing target config files or directories before replacing or merging them.
-- **Ownership Manifest**: A versioned `.ulis-manifest.json` in a platform config root that records the relative agent files, local skill directories, root files, and MCP server names installed by ULIS.
-- **Managed Entry**: An MCP server whose name appears, or an agent file or local skill directory whose relative path appears in the destination platform's ULIS ownership manifest.
+- **Ownership Manifest**: A versioned `.ulis-manifest.json` in a platform config root that records the relative agent files, local skill directories, root files, top-level MCP server names, and Claude global-config per-project MCP project/name pairs installed by ULIS.
+- **Managed Entry**: An MCP server whose top-level name or Claude project/name pair appears, or an agent file or local skill directory whose relative path appears in the destination platform's ULIS ownership manifest.
 - **Prune**: The default-on install reconciliation that removes previously managed entries, including MCP servers, absent from the current generated set. `--no-prune` retains stale entries and makes them unmanaged.
 - **Raw Fragment**: A user-owned native config file under `raw/` that is merged into generated output after platform generation; raw values win at the same path.
 - **Preserved Native Config**: An allowlisted destination-native config value or file that ULIS preserves during install, such as MCP servers, hooks, Codex trusted projects, selected Codex preferences, or ForgeCode `.forge.toml`.

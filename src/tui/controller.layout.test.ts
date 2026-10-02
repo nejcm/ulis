@@ -50,7 +50,7 @@ describe("TUI layout", () => {
       "Start preset install",
       [
         "Backup existing configs before install",
-        "Prune removed agents and skills",
+        "Prune agents, skills and MCP servers",
         "Run preset extensions",
         "Back to presets",
       ],
@@ -458,7 +458,7 @@ describe("TUI layout", () => {
     const frame = await harness.frame();
     for (const text of [
       "Backup existing configs",
-      "Prune removed agents",
+      "Prune agents",
       "Run preset extensions",
       "Warning: extensions.yaml",
       "REMOTE: 1 entry WILL apply",
