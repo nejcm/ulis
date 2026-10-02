@@ -239,7 +239,6 @@ Keep validation at module boundaries and avoid widening types with `any`.
 ```
 
 For platforms without native rule files, `unsupportedPlatformRules: inject` adds a rules index to the platform's main instruction file.
-Use `unsupportedPlatformRules: exclude` to omit the rule files and index. Codex and ForgeCode project destinations do not automatically load that index; see [instruction discovery and destination scope](../SPEC.md#instruction-discovery-and-destination-scope).
 
 ## Permissions
 
