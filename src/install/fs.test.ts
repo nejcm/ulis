@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
+import * as fs from "node:fs";
 import {
   chmodSync,
   existsSync,
@@ -388,6 +389,31 @@ describe("copyPlatformContents: type-change replace refuses a non-empty director
 });
 
 describe("copyLeaf: exclusive create (via __test seam)", () => {
+  it("copies multiple buffers and short writes through the owned handle, preserving mode", () => {
+    const root = createTempRoot();
+    const source = join(root, "source.txt");
+    const target = join(root, "target.txt");
+    const content = "0123456789".repeat(14000);
+    writeFileSync(source, content);
+    chmodSync(source, 0o750);
+    const written: string[] = [];
+    const realWrite = fs.writeSync;
+    const writeSpy = spyOn(fs, "writeSync").mockImplementation(((
+      fd: number,
+      buffer: Uint8Array,
+      offset: number,
+      length: number,
+    ) => realWrite(fd, buffer, offset, Math.max(1, Math.floor(length / 2)))) as typeof fs.writeSync);
+    try {
+      copyLeaf(source, target, (path) => written.push(path));
+    } finally {
+      writeSpy.mockRestore();
+    }
+    expect(written).toEqual([target]);
+    expect(readFileSync(target, "utf8")).toBe(content);
+    if (process.platform !== "win32") expect(lstatSync(target).mode & 0o777).toBe(0o750);
+  });
+
   it("refuses to write through a target that exists when it runs, rather than overwriting it", () => {
     const root = createTempRoot();
     const source = join(root, "source.txt");

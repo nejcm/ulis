@@ -4,15 +4,16 @@ export const GOLDEN_ARTIFACTS = {
 name: worker
 description: "A minimal test agent, focus: safe changes"
 model: claude-haiku-4-5-20251001
-tools: "Read, Glob, Grep, Edit"
+tools: "Read, Glob, Grep, Edit, NotebookEdit"
 disallowedTools: Bash
 permissionMode: plan
 hooks:
   PreToolUse:
-    - matcher: "Bash(rm -rf*)"
+    - matcher: Bash
       hooks:
         - type: command
-          command: "echo \\"Blocked by ULIS security policy\\" && exit 1"
+          if: "Bash(rm -rf*)"
+          command: "echo \\"Blocked by ULIS security policy\\" >&2; exit 2"
 ---
 
 <!--
@@ -49,11 +50,14 @@ You are a minimal worker agent used for testing.
       "model": "claude-haiku-4-5-20251001",
       "tools": {
         "read": true,
-        "write": false,
+        "glob": true,
+        "grep": true,
+        "list": true,
         "edit": true,
         "bash": false,
-        "search": false,
-        "browser": false
+        "webfetch": false,
+        "websearch": false,
+        "playwright_*": false
       },
       "permission": {
         "edit": "deny",
@@ -72,7 +76,7 @@ You are a minimal worker agent used for testing.
         "./mcp-server.js"
       ],
       "environment": {
-        "API_KEY": "\${TEST_API_KEY}"
+        "API_KEY": "{env:TEST_API_KEY}"
       }
     },
     "test-remote": {
@@ -85,6 +89,14 @@ You are a minimal worker agent used for testing.
     }
   }
 }
+`,
+    "agents/worker.md": `<!--
+  [ULIS contextHints]
+    maxInputTokens: 20000
+    priority: high
+-->
+
+You are a minimal worker agent used for testing.
 `,
   },
   codex: {
@@ -121,6 +133,26 @@ You are a minimal worker agent used for testing.\\
 `,
   },
   cursor: {
+    "mcp.json": `{
+  "mcpServers": {
+    "test-local": {
+      "command": "node",
+      "args": [
+        "./mcp-server.js"
+      ],
+      "env": {
+        "API_KEY": "\${env:TEST_API_KEY}"
+      }
+    },
+    "test-remote": {
+      "url": "https://mcp.example.com/sse",
+      "headers": {
+        "Authorization": "Bearer \${env:TEST_REMOTE_TOKEN}"
+      }
+    }
+  }
+}
+`,
     "agents/worker.mdc": `---
 description: "A minimal test agent, focus: safe changes"
 model: claude-haiku-4-5-20251001

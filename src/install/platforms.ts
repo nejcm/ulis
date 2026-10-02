@@ -1,6 +1,6 @@
-import { existsSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import { ULIS_PROVENANCE_FILENAME } from "../config.js";
 import {
@@ -23,7 +23,7 @@ import {
 import { InstallError } from "./errors.js";
 import { backupPath, copyPlatformContents, copyToNewPath, ensureDir, readDirectoryEntries } from "./fs.js";
 import { MANAGED_PLATFORM_LAYOUTS } from "./layouts.js";
-import { ULIS_MANIFEST_FILENAME, type PlatformOwnership } from "./manifest.js";
+import { ULIS_MANIFEST_FILENAME, readManifest, type PlatformOwnership } from "./manifest.js";
 import type { InstallContext } from "./types.js";
 
 /** Enough to clear a same-second collision; a run needing more has a directory full of backups. */
@@ -33,7 +33,11 @@ const PLATFORM_INSTALL_SKIP_NAMES: Readonly<Record<Platform, ReadonlySet<string>
   PLATFORMS.map((platform) => [platform, reservedNames(...nativeConfigFilenames(platform))]),
 ) as Record<Platform, ReadonlySet<string>>;
 
-export async function installOpencode(context: InstallContext, ownership?: PlatformOwnership): Promise<void> {
+export async function installOpencode(
+  context: InstallContext,
+  ownership?: PlatformOwnership,
+  onWritten?: (relativePath: string) => void,
+): Promise<void> {
   const targetDir = platformConfigDir("opencode", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "opencode");
 
@@ -42,20 +46,25 @@ export async function installOpencode(context: InstallContext, ownership?: Platf
   backupDirectory(targetDir, context);
   const preservedConfigs = capturePlatformPreservedNativeConfigs("opencode", context);
   ensureDir(targetDir);
-  writePlatformPreservedNativeConfigs("opencode", preservedConfigs, context);
+  writePlatformPreservedNativeConfigs("opencode", preservedConfigs, context, onWritten);
 
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
+    onWritten,
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.opencode,
     namedDirectories: managedDirectoryRules("opencode"),
     pruneExtraNames: context.prune,
     previouslyManagedRootEntries: ownership?.previous?.rootEntries,
     currentManagedRootEntries: ownership?.current.rootEntries,
   });
+  prunePlatformMcpServers("opencode", context);
   logSuccess(context, `OpenCode -> ${targetDir}`);
 }
 
-export async function installClaude(context: InstallContext): Promise<void> {
+export async function installClaude(
+  context: InstallContext,
+  onWritten?: (relativePath: string) => void,
+): Promise<void> {
   const targetDir = platformConfigDir("claude", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "claude");
   const targetRootConfig = isSamePath(context.destBase, context.userHome)
@@ -68,16 +77,18 @@ export async function installClaude(context: InstallContext): Promise<void> {
   const preservedConfigs = capturePlatformPreservedNativeConfigs("claude", context);
   ensureDir(targetDir);
 
-  writePlatformPreservedNativeConfigs("claude", preservedConfigs, context);
+  writePlatformPreservedNativeConfigs("claude", preservedConfigs, context, onWritten);
 
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
+    onWritten,
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.claude,
     namedDirectories: managedDirectoryRules("claude"),
   });
+  prunePlatformMcpServers("claude", context);
 }
 
-export async function installCodex(context: InstallContext): Promise<void> {
+export async function installCodex(context: InstallContext, onWritten?: (relativePath: string) => void): Promise<void> {
   const targetDir = platformConfigDir("codex", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "codex");
 
@@ -85,15 +96,20 @@ export async function installCodex(context: InstallContext): Promise<void> {
   backupDirectory(targetDir, context);
   const preservedConfigs = capturePlatformPreservedNativeConfigs("codex", context);
   ensureDir(targetDir);
-  writePlatformPreservedNativeConfigs("codex", preservedConfigs, context);
+  writePlatformPreservedNativeConfigs("codex", preservedConfigs, context, onWritten);
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
+    onWritten,
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.codex,
     namedDirectories: managedDirectoryRules("codex"),
   });
+  prunePlatformMcpServers("codex", context);
 }
 
-export async function installCursor(context: InstallContext): Promise<void> {
+export async function installCursor(
+  context: InstallContext,
+  onWritten?: (relativePath: string) => void,
+): Promise<void> {
   const targetDir = platformConfigDir("cursor", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "cursor");
 
@@ -102,16 +118,21 @@ export async function installCursor(context: InstallContext): Promise<void> {
   const preservedConfigs = capturePlatformPreservedNativeConfigs("cursor", context);
   ensureDir(targetDir);
 
-  writePlatformPreservedNativeConfigs("cursor", preservedConfigs, context);
+  writePlatformPreservedNativeConfigs("cursor", preservedConfigs, context, onWritten);
 
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
+    onWritten,
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.cursor,
     namedDirectories: managedDirectoryRules("cursor"),
   });
+  prunePlatformMcpServers("cursor", context);
 }
 
-export async function installForgecode(context: InstallContext): Promise<void> {
+export async function installForgecode(
+  context: InstallContext,
+  onWritten?: (relativePath: string) => void,
+): Promise<void> {
   const sourceDir = join(context.outputDir, "forgecode");
   const sourceForgeDir = join(sourceDir, resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project));
   const targetForgeDir = platformConfigDir("forgecode", context.destBase, context.userHome);
@@ -122,11 +143,12 @@ export async function installForgecode(context: InstallContext): Promise<void> {
   backupFile(targetMcp, context);
   const preservedConfigs = capturePlatformPreservedNativeConfigs("forgecode", context);
   ensureDir(targetForgeDir);
-  writePlatformPreservedNativeConfigs("forgecode", preservedConfigs, context);
+  writePlatformPreservedNativeConfigs("forgecode", preservedConfigs, context, onWritten);
 
   if (existsSync(sourceForgeDir)) {
     copyPlatformContents(sourceForgeDir, targetForgeDir, {
       logger: context.logger,
+      onWritten,
       skipNames: PLATFORM_INSTALL_SKIP_NAMES.forgecode,
       namedDirectories: managedDirectoryRules("forgecode"),
     });
@@ -134,11 +156,13 @@ export async function installForgecode(context: InstallContext): Promise<void> {
 
   copyPlatformContents(sourceDir, targetForgeDir, {
     logger: context.logger,
+    onWritten,
     skipNames: reservedNames(
       ...PLATFORM_INSTALL_SKIP_NAMES.forgecode,
       resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project),
     ),
   });
+  prunePlatformMcpServers("forgecode", context);
 }
 
 export function detectInstallCollisions(
@@ -220,9 +244,17 @@ function isNonEmptyDirectory(path: string): boolean {
 function capturePlatformPreservedNativeConfigs(
   platform: Platform,
   context: InstallContext,
+  prune = false,
 ): readonly CapturedPreservedNativeConfig[] {
   try {
-    return capturePreservedNativeConfigs(platform, context);
+    const targetDir = platformConfigDir(platform, context.destBase, context.userHome);
+    const previous = readManifest(platform, targetDir);
+    return capturePreservedNativeConfigs(platform, {
+      ...context,
+      prune,
+      managedMcpServers: previous?.mcpServers,
+      managedMcpProjectServers: previous?.mcpProjectServers,
+    });
   } catch (error) {
     if (error instanceof PreservedNativeConfigParseError) {
       throw new InstallError(error.message, error);
@@ -248,14 +280,26 @@ function writePlatformPreservedNativeConfigs(
   platform: Platform,
   entries: readonly CapturedPreservedNativeConfig[],
   context: InstallContext,
+  onWritten?: (relativePath: string) => void,
 ): void {
   try {
-    writePreservedNativeConfigs(entries, context.logger);
+    for (const entry of entries) {
+      writePreservedNativeConfigs([entry], context.logger);
+      if (existsSync(entry.generatedPath)) onWritten?.(basename(entry.generatedPath));
+    }
   } catch (error) {
     // Same treatment the parse error gets above: a diagnosable message reaches the user intact.
     if (error instanceof UnsafeNativeConfigPathError) throw new InstallError(error.message, error);
     throw new InstallError(`Failed to write preserved native config for ${platform}`, error);
   }
+}
+
+function prunePlatformMcpServers(platform: Platform, context: InstallContext): void {
+  if (!context.prune) return;
+  const entries = capturePlatformPreservedNativeConfigs(platform, context, true).filter(
+    (entry) => entry.mcpKey && entry.prunedMcp,
+  );
+  writePlatformPreservedNativeConfigs(platform, entries, context);
 }
 
 function backupDirectory(targetDir: string, context: InstallContext): void {
@@ -301,9 +345,12 @@ interface BackupResult {
  */
 function copyToUnusedBackupPath(sourcePath: string, context: InstallContext): BackupResult {
   const skipped: string[] = [];
+  // A symlinked root (`~/.codex -> dotfiles/codex`) copied as a link would back up the live tree the
+  // install is about to change; nested links are still copied as links.
+  const contentPath = lstatSync(sourcePath).isSymbolicLink() ? realpathSync(sourcePath) : sourcePath;
   for (let attempt = 1; attempt <= MAX_BACKUP_ATTEMPTS; attempt += 1) {
     const candidate = backupPath(sourcePath, context.timestamp, attempt);
-    if (copyToNewPath(sourcePath, candidate, (path) => skipped.push(path))) return { path: candidate, skipped };
+    if (copyToNewPath(contentPath, candidate, (path) => skipped.push(path))) return { path: candidate, skipped };
   }
   throw new InstallError(
     `Found no unused backup path for ${sourcePath} after ${MAX_BACKUP_ATTEMPTS} attempts. Remove some of its .backup copies and retry.`,

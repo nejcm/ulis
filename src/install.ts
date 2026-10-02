@@ -2,13 +2,18 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import { analyzePresets, runBuild } from "./build.js";
+import { analyzePresets, runBuild, type Logger } from "./build.js";
 import { ULIS_GENERATED_DIRNAME, ULIS_PROVENANCE_FILENAME } from "./config.js";
 import { generate, writeResult } from "./generators/index.js";
 import { loadDotEnv } from "./install/dotenv.js";
 import { InstallError } from "./install/errors.js";
 import { logHeader, logInfo, logWarn } from "./install/log.js";
-import { preflightOwnership, reconcileOwnership } from "./install/manifest.js";
+import {
+  preflightOwnership,
+  reconcileOwnership,
+  recordPartialOwnership,
+  type PlatformOwnership,
+} from "./install/manifest.js";
 import { installClaude, installCodex, installCursor, installForgecode, installOpencode } from "./install/platforms.js";
 import { installExtensions, installSkills, runPlatformExtensions } from "./install/post-install.js";
 import type { PreviewInputs } from "./install/preview.js";
@@ -377,27 +382,30 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
       throwIfAborted(options.signal, failures[0]?.error);
       const platformOwnership = ownership.get(platform);
       if (!platformOwnership) throw new InstallError(`Missing ownership preflight data for ${platform}`);
+      const written = new Set<string>();
+      const onWritten = (relativePath: string) => written.add(relativePath);
       try {
         switch (platform) {
           case "opencode":
-            await installOpencode(context, platformOwnership);
+            await installOpencode(context, platformOwnership, onWritten);
             break;
           case "claude":
-            await installClaude(context);
+            await installClaude(context, onWritten);
             break;
           case "codex":
-            await installCodex(context);
+            await installCodex(context, onWritten);
             break;
           case "cursor":
-            await installCursor(context);
+            await installCursor(context, onWritten);
             break;
           case "forgecode":
-            await installForgecode(context);
+            await installForgecode(context, onWritten);
             break;
         }
         reconcileOwnership(platform, platformOwnership, context.prune, context.logger);
         installed.push(platform);
       } catch (error) {
+        recordWrittenOwnership(platform, platformOwnership, written, context.logger);
         throwIfAborted(options.signal, failures[0]?.error ?? error);
         failures.push({ platform, error });
       }
@@ -473,6 +481,20 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
       if (failures.length + failedSkills.length + failedExtensions.length > 0) logWarn(options.logger, summary);
       else logInfo(options.logger, summary);
     }
+  }
+}
+
+/** Best-effort: a failure here must not hide the install error that got us here. */
+function recordWrittenOwnership(
+  platform: Platform,
+  ownership: PlatformOwnership,
+  written: ReadonlySet<string>,
+  logger: Logger | undefined,
+): void {
+  try {
+    recordPartialOwnership(platform, ownership, written, logger);
+  } catch (error) {
+    logWarn(logger, `[ownership] ${platform}: could not record the entries the failed install wrote: ${String(error)}`);
   }
 }
 

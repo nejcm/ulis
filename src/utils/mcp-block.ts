@@ -19,6 +19,12 @@ export function* mcpServersFor(mcp: McpConfig, target: string): Generator<readon
   }
 }
 
+/** Canonical on/off state from `enabled` and `disabled`; `undefined` when the source sets neither. */
+export function mcpServerEnabled(server: Pick<McpServer, "enabled" | "disabled">): boolean | undefined {
+  if (server.enabled === undefined && server.disabled === undefined) return undefined;
+  return server.enabled !== false && server.disabled !== true;
+}
+
 /**
  * Translate every value in a string-to-string map through `translateEnvVar`,
  * returning undefined if the input is undefined. Used by every generator to

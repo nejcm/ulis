@@ -1,9 +1,10 @@
 import { z } from "zod";
 
-import { ALL_MODELS, OPENCODE_MODELS } from "../models.js";
+import { ALL_MODELS, CLAUDE_MODELS, OPENCODE_MODELS } from "../models.js";
 import { knownStringSchema } from "./shared.js";
 
 const ModelSchema = knownStringSchema(ALL_MODELS);
+const ClaudeModelSchema = knownStringSchema(CLAUDE_MODELS);
 const OpenCodeModelSchema = knownStringSchema(OPENCODE_MODELS);
 
 export const CommandFrontmatterSchema = z
@@ -16,8 +17,14 @@ export const CommandFrontmatterSchema = z
     subtask: z.boolean().optional(),
     platforms: z
       .object({
+        claude: z
+          .looseObject({
+            enabled: z.boolean().default(true),
+            model: ClaudeModelSchema.optional(),
+          })
+          .optional(),
         opencode: z
-          .object({
+          .looseObject({
             enabled: z.boolean().default(true),
             model: OpenCodeModelSchema.optional(),
             agent: z.string().optional(),

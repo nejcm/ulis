@@ -19,9 +19,9 @@ export const McpServerSchema = z.object({
     })
     .optional(),
   // Enable or disable this server at the platform level. Defaults to true.
-  // Respected by OpenCode (enabled field) and Codex (enabled field).
+  // Emitted as OpenCode's and Codex's native `enabled`; Cursor has no documented switch, so it omits the server.
   enabled: z.boolean().optional(),
-  // Cursor's native MCP config uses `disabled` instead of `enabled`.
+  // Same switch, inverted; `disabled: true` turns the server off even when `enabled` is unset.
   disabled: z.boolean().optional(),
   // Omit `targets` to apply this server to every target. Use an empty array
   // to disable the server (apply to no targets).

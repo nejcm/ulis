@@ -41,6 +41,7 @@ Only **HTTPS and SSH** are accepted; `http://` and `git://` are refused.
 - **Symlinks in the cloned tree are rejected** — a committed symlink could otherwise point outside the clone.
 - A remote source installs into the **current directory**, or into your **home directory with `--global`**. A temporary directory has no meaningful parent to install alongside.
 - **`build --source <url>` is refused.** Build writes its output into the source tree, and a remote source is discarded after the run. Use `install`, or clone the repo yourself and point `--source` at the checkout.
+- **`build --preset <url>` has no trust gate.** It runs nothing and writes only `<source>/generated/`, never a destination; the gate is shown when that output is installed. Source files are parsed as data only: `---js` frontmatter is refused rather than evaluated.
 
 ## The trust gate
 
@@ -61,7 +62,7 @@ Run these commands? [y/N]
 ULIS answers that question by **generating the configs and reading them back**, rather than by trusting what the source declares. Whatever a payload looked like in the source, if it survives into a file that is about to be installed, it is listed. Four kinds of entry appear:
 
 - **Commands** from `skills.yaml` and `extensions.yaml`, exactly as they will be spawned.
-- **Anything in a generated config that carries a `command`** — an MCP server your agent spawns on its next launch, a hook it runs on a tool call, at stop, or at session start. A remote MCP server appears as `connects to <url>`: nothing runs locally, but your agent talks to that endpoint and every tool it advertises becomes callable. Each line names the file it lands in.
+- **Anything in a generated config that carries a `command`** — an MCP server your agent spawns on its next launch, a hook it runs on a tool call, at stop, or at session start. A remote MCP server appears as `connects to <url>`: nothing runs locally, but your agent talks to that endpoint and every tool it advertises becomes callable. Each line names the file it lands in, and ends `(env: NAME …)` when the entry sets environment variables — names only, since values can be your own credentials. A `raw/` fragment merged over a generated config is previewed merged, so a fragment that rewrites a declared command shows the command that is actually installed.
 - **Files copied through untouched** from `raw/`, from skill directories, and from doc directories. One is listed when the destination itself makes it run — a platform's own config file, a directory a platform auto-loads such as `plugin/` or `hooks/`, an executable extension — or when its contents declare a command. A file too large or too odd to read says `(contents not readable by the preview)` rather than passing as clean.
 - **Approval settings** from `permissions.yaml`, which decide what your agent may do without asking you.
 

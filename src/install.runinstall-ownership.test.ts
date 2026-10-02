@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
+import * as fs from "node:fs";
 import { existsSync, mkdirSync, renameSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 
@@ -20,6 +21,52 @@ afterEach(() => {
   cleanupInstallTempRoots();
 });
 
+// Fails the copy of one generated file. Listings are sorted so the agent copy order, and with it what
+// the failed run did and did not reach, follows the file names.
+async function installFailingAt(failingSuffix: string, options: Parameters<typeof runInstall>[0]): Promise<void> {
+  const realOpenSync = fs.openSync;
+  const realReaddirSync = fs.readdirSync;
+  const copySpy = spyOn(fs, "openSync").mockImplementation((target, flags, mode) => {
+    if (flags === "wx" && String(target).endsWith(failingSuffix))
+      throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+    return realOpenSync(target, flags, mode);
+  });
+  const readdirSpy = spyOn(fs, "readdirSync").mockImplementation(((path: fs.PathLike, readOptions?: unknown) => {
+    const entries = (realReaddirSync as (p: fs.PathLike, o?: unknown) => (string | fs.Dirent)[])(path, readOptions);
+    const name = (entry: string | fs.Dirent) => (typeof entry === "string" ? entry : entry.name);
+    return entries.sort((left, right) => (name(left) < name(right) ? -1 : name(left) > name(right) ? 1 : 0));
+  }) as typeof fs.readdirSync);
+  try {
+    await expect(runInstall(options)).rejects.toThrow();
+  } finally {
+    copySpy.mockRestore();
+    readdirSpy.mockRestore();
+  }
+}
+
+function opencodeInstall(root: string) {
+  const sourceDir = join(root, ".ulis");
+  const projectDir = join(root, "project");
+  const userHome = join(root, "home");
+  mkdirSync(sourceDir, { recursive: true });
+  mkdirSync(projectDir, { recursive: true });
+  mkdirSync(userHome, { recursive: true });
+  const outputDir = join(sourceDir, "generated");
+  return {
+    outputDir,
+    projectDir,
+    options: {
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["opencode"] as const,
+      rebuild: false,
+      logger: silentLogger,
+    },
+  };
+}
+
 // runInstall: ownership-manifest lifecycle for managed agents/skills across platforms - adoption,
 // validation, type-conflict aborts, path safety, case-rename handling, and pruning.
 describe("runInstall", () => {
@@ -39,7 +86,7 @@ describe("runInstall", () => {
     write(join(outputDir, "codex", "skills", "managed", "SKILL.md"), "Generated codex skill.\n");
     write(join(outputDir, "cursor", "agents", "managed.mdc"), "Generated cursor agent.\n");
     write(join(outputDir, "cursor", "skills", "managed", "SKILL.md"), "Generated cursor skill.\n");
-    write(join(outputDir, "opencode", "agents", "specialized", "managed.md"), "Generated opencode agent.\n");
+    write(join(outputDir, "opencode", "agents", "managed.md"), "Generated opencode agent.\n");
     write(join(outputDir, "opencode", "skills", "managed", "SKILL.md"), "Generated opencode skill.\n");
     createForgecodeOutput(outputDir);
     write(join(outputDir, "forgecode", ".forge", "agents", "managed.md"), "Generated forge agent.\n");
@@ -57,7 +104,7 @@ describe("runInstall", () => {
     write(join(projectDir, ".cursor", "agents", "local.mdc"), "Local cursor agent.\n");
     write(join(projectDir, ".cursor", "skills", "managed", "SKILL.md"), "Old cursor skill.\n");
     write(join(projectDir, ".cursor", "skills", "local", "SKILL.md"), "Local cursor skill.\n");
-    write(join(projectDir, ".opencode", "agents", "specialized", "managed.md"), "Old opencode agent.\n");
+    write(join(projectDir, ".opencode", "agents", "managed.md"), "Old opencode agent.\n");
     write(join(projectDir, ".opencode", "agents", "specialized", "local.md"), "Local opencode agent.\n");
     write(join(projectDir, ".opencode", "skills", "managed", "SKILL.md"), "Old opencode skill.\n");
     write(join(projectDir, ".opencode", "skills", "local", "SKILL.md"), "Local opencode skill.\n");
@@ -88,9 +135,7 @@ describe("runInstall", () => {
     expect(read(join(projectDir, ".cursor", "agents", "local.mdc"))).toBe("Local cursor agent.\n");
     expect(read(join(projectDir, ".cursor", "skills", "managed", "SKILL.md"))).toBe("Generated cursor skill.\n");
     expect(read(join(projectDir, ".cursor", "skills", "local", "SKILL.md"))).toBe("Local cursor skill.\n");
-    expect(read(join(projectDir, ".opencode", "agents", "specialized", "managed.md"))).toBe(
-      "Generated opencode agent.\n",
-    );
+    expect(read(join(projectDir, ".opencode", "agents", "managed.md"))).toBe("Generated opencode agent.\n");
     expect(read(join(projectDir, ".opencode", "agents", "specialized", "local.md"))).toBe("Local opencode agent.\n");
     expect(read(join(projectDir, ".opencode", "skills", "managed", "SKILL.md"))).toBe("Generated opencode skill.\n");
     expect(read(join(projectDir, ".opencode", "skills", "local", "SKILL.md"))).toBe("Local opencode skill.\n");
@@ -117,7 +162,7 @@ describe("runInstall", () => {
       ["claude", ".claude", "agents/managed.md", "skills/managed"],
       ["codex", ".codex", "agents/managed.toml", "skills/managed"],
       ["cursor", ".cursor", "agents/managed.mdc", "skills/managed"],
-      ["opencode", ".opencode", "agents/specialized/managed.md", "skills/managed"],
+      ["opencode", ".opencode", "agents/managed.md", "skills/managed"],
       ["forgecode", ".forge", ".forge/agents/managed.md", ".forge/skills/managed"],
     ] as const;
 
@@ -392,6 +437,7 @@ describe("runInstall", () => {
       const manifest = JSON.parse(read(join(projectDir, configDir, ".ulis-manifest.json")));
       expect(manifest).toEqual({
         version: 3,
+        mcpServers: [],
         agents: [],
         skills: [],
         rootEntries: expect.any(Array),
@@ -519,5 +565,147 @@ describe("runInstall", () => {
     expect(preflight).toThrow(
       `Unsupported ULIS ownership manifest for claude at ${manifestPath}: expected version 1, 2 or 3, received 4`,
     );
+  });
+
+  it("records the entries a failed install wrote, so a later install prunes them", async () => {
+    const { outputDir, projectDir, options } = opencodeInstall(createTempRoot());
+    const agents = join(outputDir, "opencode", "agents");
+    write(join(agents, "keep.md"), "Keep.\n");
+    await runInstall(options);
+
+    write(join(agents, "a-new.md"), "New.\n");
+    write(join(agents, "b-blocked.md"), "Blocked.\n");
+    await installFailingAt("b-blocked.md", options);
+    expect(read(join(projectDir, ".opencode", "agents", "a-new.md"))).toBe("New.\n");
+
+    rmSync(join(agents, "a-new.md"));
+    rmSync(join(agents, "b-blocked.md"));
+    await runInstall(options);
+
+    expect(existsSync(join(projectDir, ".opencode", "agents", "a-new.md"))).toBe(false);
+    expect(read(join(projectDir, ".opencode", "agents", "keep.md"))).toBe("Keep.\n");
+  });
+
+  it("does not claim an unmanaged file at a path a failed install never reached", async () => {
+    const { outputDir, projectDir, options } = opencodeInstall(createTempRoot());
+    const agents = join(outputDir, "opencode", "agents");
+    write(join(agents, "keep.md"), "Keep.\n");
+    await runInstall(options);
+
+    const userAgent = join(projectDir, ".opencode", "agents", "b-mine.md");
+    write(userAgent, "User's own.\n");
+    write(join(agents, "a-fails.md"), "Fails.\n");
+    write(join(agents, "b-mine.md"), "Generated.\n");
+    await installFailingAt("a-fails.md", options);
+    expect(read(userAgent)).toBe("User's own.\n");
+
+    rmSync(join(agents, "a-fails.md"));
+    rmSync(join(agents, "b-mine.md"));
+    await runInstall(options);
+
+    expect(read(userAgent)).toBe("User's own.\n");
+  });
+  for (const entry of ["agents/worker.md", "commands/worker.md", "skills/worker"] as const) {
+    it(`does not claim a concurrent writer at ${entry} after exclusive creation fails`, async () => {
+      const { outputDir, projectDir, options } = opencodeInstall(createTempRoot());
+      const source = join(outputDir, "opencode", entry);
+      const target = join(projectDir, ".opencode", entry);
+      const skill = entry.startsWith("skills/");
+      write(skill ? join(source, "SKILL.md") : source, "Generated.\n");
+      write(skill ? join(target, "SKILL.md") : target, "Old.\n");
+      const realCopy = fs.copyFileSync;
+      const realOpen = fs.openSync;
+      const realMkdir = fs.mkdirSync;
+      let raced = false;
+      const plant = (path: fs.PathLike) => {
+        if (raced || String(path) !== target) return;
+        raced = true;
+        write(skill ? join(target, "SKILL.md") : target, "User's own.\n");
+      };
+      const copySpy = spyOn(fs, "copyFileSync").mockImplementation((source, target, mode) => {
+        plant(target);
+        realCopy(source, target, mode);
+      });
+      const openSpy = spyOn(fs, "openSync").mockImplementation((path, flags, mode) => {
+        if (flags === "wx") plant(path);
+        return realOpen(path, flags, mode);
+      });
+      const mkdirSpy = spyOn(fs, "mkdirSync").mockImplementation(((path, mkdirOptions) => {
+        if (skill && String(path) === target && !mkdirOptions) plant(path);
+        return realMkdir(path, mkdirOptions);
+      }) as typeof fs.mkdirSync);
+      try {
+        await expect(runInstall(options)).rejects.toThrow();
+      } finally {
+        copySpy.mockRestore();
+        openSpy.mockRestore();
+        mkdirSpy.mockRestore();
+      }
+      expect(raced).toBe(true);
+      rmSync(source, { recursive: true });
+      await runInstall(options);
+      expect(read(skill ? join(target, "SKILL.md") : target)).toBe("User's own.\n");
+    });
+  }
+
+  for (const entry of ["agents/partial.md", "commands/partial.md", "skills/partial"] as const) {
+    it(`records ULIS's partial write at ${entry} for later prune`, async () => {
+      const { outputDir, projectDir, options } = opencodeInstall(createTempRoot());
+      const source = join(outputDir, "opencode", entry);
+      const target = join(projectDir, ".opencode", entry);
+      const skill = entry.startsWith("skills/");
+      const sourceFile = skill ? join(source, "SKILL.md") : source;
+      const targetFile = skill ? join(target, "SKILL.md") : target;
+      write(sourceFile, "Partial content.\n");
+      const realWrite = fs.writeSync;
+      const realCopy = fs.copyFileSync;
+      const fail = () => {
+        throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+      };
+      const writeSpy = spyOn(fs, "writeSync").mockImplementation(((fd: number, buffer: Uint8Array, offset: number) => {
+        realWrite(fd, buffer, offset, 3);
+        fail();
+      }) as typeof fs.writeSync);
+      const copySpy = spyOn(fs, "copyFileSync").mockImplementation((source, target, mode) => {
+        if (String(target) === targetFile) {
+          fs.writeFileSync(target, "Par", { flag: "wx" });
+          fail();
+        }
+        realCopy(source, target, mode);
+      });
+      try {
+        await expect(runInstall(options)).rejects.toThrow();
+      } finally {
+        writeSpy.mockRestore();
+        copySpy.mockRestore();
+      }
+      expect(read(targetFile)).toBe("Par");
+      const manifest = JSON.parse(read(join(projectDir, ".opencode", ".ulis-manifest.json")));
+      expect(manifest[skill ? "skills" : entry.startsWith("agents/") ? "agents" : "rootEntries"]).toContain(entry);
+      rmSync(source, { recursive: true });
+      await runInstall(options);
+      expect(existsSync(target)).toBe(false);
+    });
+  }
+
+  it("refuses a skill directory created after replacement removal", async () => {
+    const { outputDir, projectDir, options } = opencodeInstall(createTempRoot());
+    const source = join(outputDir, "opencode", "skills", "worker");
+    const target = join(projectDir, ".opencode", "skills", "worker");
+    write(join(source, "SKILL.md"), "Generated.\n");
+    write(join(target, "SKILL.md"), "Old.\n");
+    const realRemove = fs.rmSync;
+    const removeSpy = spyOn(fs, "rmSync").mockImplementation((path, removeOptions) => {
+      realRemove(path, removeOptions);
+      if (String(path) === target) write(join(target, "SKILL.md"), "User's own.\n");
+    });
+    try {
+      await expect(runInstall(options)).rejects.toThrow();
+    } finally {
+      removeSpy.mockRestore();
+    }
+    rmSync(source, { recursive: true });
+    await runInstall(options);
+    expect(read(join(target, "SKILL.md"))).toBe("User's own.\n");
   });
 });

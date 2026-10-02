@@ -87,9 +87,9 @@ describe("translateEnvMap", () => {
     expect(result).toEqual({ TOKEN: "${MY_TOKEN}" });
   });
 
-  it("keeps ${VAR} as shell syntax for opencode_env", () => {
+  it("translates ${VAR} to OpenCode local environment syntax", () => {
     const result = translateEnvMap({ TOKEN: "${MY_TOKEN}" }, "opencode_env");
-    expect(result).toEqual({ TOKEN: "${MY_TOKEN}" });
+    expect(result).toEqual({ TOKEN: "{env:MY_TOKEN}" });
   });
 
   it("translates ${VAR} to {env:VAR} for opencode_header", () => {
@@ -100,11 +100,6 @@ describe("translateEnvMap", () => {
   it("translates multiple values in the same map", () => {
     const result = translateEnvMap({ A: "${X}", B: "${Y}", C: "static" }, "opencode_header");
     expect(result).toEqual({ A: "{env:X}", B: "{env:Y}", C: "static" });
-  });
-
-  it("extracts only the var name for codex_header", () => {
-    const result = translateEnvMap({ Authorization: "${API_KEY}", Other: "static" }, "codex_header");
-    expect(result).toEqual({ Authorization: "API_KEY", Other: "static" });
   });
 });
 

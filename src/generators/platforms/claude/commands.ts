@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-import { parseCommands } from "../../../parsers/command.js";
+import { enabledCommandsFor, parseCommands } from "../../../parsers/command.js";
 import { fileExists } from "../../../utils/fs.js";
 import { serializeYamlFrontmatter } from "../../shared/yaml.js";
 import type { FileArtifact } from "../../types.js";
@@ -10,7 +10,7 @@ export function buildClaudeCommandArtifacts(sourceDir: string): FileArtifact[] {
   const commandsSrc = join(sourceDir, "commands");
   if (!fileExists(commandsSrc)) return artifacts;
 
-  for (const cmd of parseCommands(commandsSrc)) {
+  for (const cmd of enabledCommandsFor(parseCommands(commandsSrc), "claude")) {
     const fm = cmd.frontmatter as Record<string, unknown>;
     const claudePlatform = (fm.platforms as Record<string, unknown> | undefined)?.claude as
       | Record<string, unknown>

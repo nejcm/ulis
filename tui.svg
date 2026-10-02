@@ -61,7 +61,7 @@
 <text x="541.2" y="223.0" fill="#22d3ee" xml:space="preserve" textLength="294.0" lengthAdjust="spacingAndGlyphs">OpenCode, Claude...ursor, ForgeCode</text>
 <text x="835.2" y="223.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
 <text x="20.4" y="241.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
-<text x="37.2" y="241.0" fill="#d4d4d4" xml:space="preserve" textLength="277.2" lengthAdjust="spacingAndGlyphs">  Prune removed agents and skills</text>
+<text x="37.2" y="241.0" fill="#d4d4d4" xml:space="preserve" textLength="319.2" lengthAdjust="spacingAndGlyphs">  Prune agents, skills and MCP servers</text>
 <text x="390.0" y="241.0" fill="#8a8a8a" xml:space="preserve" textLength="16.8" lengthAdjust="spacingAndGlyphs">on</text>
 <text x="423.6" y="241.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
 <text x="440.4" y="241.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
@@ -91,7 +91,7 @@
 <text x="37.2" y="313.0" fill="#d4d4d4" xml:space="preserve" textLength="84.0" lengthAdjust="spacingAndGlyphs">  Validate</text>
 <text x="423.6" y="313.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
 <text x="440.4" y="313.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
-<text x="457.2" y="313.0" fill="#d4d4d4" xml:space="preserve" textLength="260.4" lengthAdjust="spacingAndGlyphs">Prune removed agents and skills</text>
+<text x="457.2" y="313.0" fill="#d4d4d4" xml:space="preserve" textLength="302.4" lengthAdjust="spacingAndGlyphs">Prune agents, skills and MCP servers</text>
 <text x="810.0" y="313.0" fill="#22d3ee" xml:space="preserve" textLength="16.8" lengthAdjust="spacingAndGlyphs">on</text>
 <text x="835.2" y="313.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>
 <text x="20.4" y="331.0" fill="#3f4b52" xml:space="preserve" textLength="8.4" lengthAdjust="spacingAndGlyphs">│</text>

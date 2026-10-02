@@ -1,14 +1,16 @@
+import type { McpServer } from "../../../schema.js";
 import { translateEnvVar } from "../../../utils/env-var.js";
-import { mcpServersFor } from "../../../utils/mcp-block.js";
+import { mcpServerEnabled, mcpServersFor } from "../../../utils/mcp-block.js";
 import { toTomlKey, toTomlTableHeader } from "../../shared/keys.js";
 import type { ProjectBundle } from "../../types.js";
 import { toTomlString } from "./format.js";
 
+const EXACT_ENV_PLACEHOLDER = /^\$\{(\w+)\}$/;
+const BEARER_ENV_PLACEHOLDER = /^Bearer \$\{(\w+)\}$/;
+
 /**
- * Codex distinguishes three HTTP header cases:
- * - `bearer_token_env_var`: header value is exactly `Bearer ${VAR}`
- * - `env_http_headers`:     table mapping header-name -> env-var-name (for `${VAR}` values)
- * - `http_headers`:         table of static key-value pairs
+ * `bearer_token_env_var` for `Authorization: Bearer ${VAR}`, `env_http_headers` for an exact `${VAR}`,
+ * `http_headers` for everything else - Codex does not interpolate inside a header value.
  */
 function codexHttpHeaderLines(headers: Record<string, string> | undefined): string[] {
   if (!headers || Object.keys(headers).length === 0) return [];
@@ -19,13 +21,14 @@ function codexHttpHeaderLines(headers: Record<string, string> | undefined): stri
   let bearerVar: string | undefined;
 
   for (const [headerName, headerValue] of Object.entries(headers)) {
-    const bearerMatch = headerValue.match(/^Bearer \$\{(\w+)\}$/);
+    const bearerMatch = headerName.toLowerCase() === "authorization" ? BEARER_ENV_PLACEHOLDER.exec(headerValue) : null;
     if (bearerMatch && !bearerVar) {
       bearerVar = bearerMatch[1];
       continue;
     }
-    if (/\$\{(\w+)\}/.test(headerValue)) {
-      envHeaders.push([headerName, translateEnvVar(headerValue, "codex_header")]);
+    const envMatch = EXACT_ENV_PLACEHOLDER.exec(headerValue);
+    if (envMatch) {
+      envHeaders.push([headerName, envMatch[1]!]);
       continue;
     }
     staticHeaders.push([headerName, headerValue]);
@@ -42,6 +45,11 @@ function codexHttpHeaderLines(headers: Record<string, string> | undefined): stri
   }
 
   return lines;
+}
+
+function pushEnabledLine(lines: string[], server: McpServer): void {
+  const enabled = mcpServerEnabled(server);
+  if (enabled !== undefined) lines.push(`enabled = ${enabled}`);
 }
 
 export function buildCodexConfigToml(project: ProjectBundle): string {
@@ -74,27 +82,30 @@ export function buildCodexConfigToml(project: ProjectBundle): string {
         const args = server.args.map((a) => toTomlString(translateEnvVar(a, "codex"))).join(", ");
         lines.push(`args = [${args}]`);
       }
-      if (server.disabled !== undefined) lines.push(`disabled = ${JSON.stringify(server.disabled)}`);
-      if (server.env) {
+      pushEnabledLine(lines, server);
+      // Codex `env` values are literal; `env_vars` forwards a variable under its own name and cannot rename it.
+      const envEntries = Object.entries(server.env ?? {});
+      const forwarded = envEntries.filter(([k, v]) => EXACT_ENV_PLACEHOLDER.exec(v)?.[1] === k);
+      const literal = envEntries.filter((entry) => !forwarded.includes(entry));
+      if (forwarded.length > 0) lines.push(`env_vars = [${forwarded.map(([k]) => toTomlString(k)).join(", ")}]`);
+      if (literal.length > 0) {
         lines.push("");
         lines.push(toTomlTableHeader("mcp_servers", name, "env"));
-        for (const [k, v] of Object.entries(server.env)) {
-          lines.push(`${toTomlKey(k)} = ${toTomlString(translateEnvVar(v, "codex"))}`);
-        }
+        for (const [k, v] of literal) lines.push(`${toTomlKey(k)} = ${toTomlString(v)}`);
       }
       lines.push("");
     } else if (server.url) {
       lines.push(toTomlTableHeader("mcp_servers", name));
       lines.push(`url = ${toTomlString(server.url)}`);
       for (const headerLine of codexHttpHeaderLines(server.headers)) lines.push(headerLine);
-      if (server.disabled !== undefined) lines.push(`disabled = ${JSON.stringify(server.disabled)}`);
+      pushEnabledLine(lines, server);
       lines.push("");
     } else if (server.localFallback) {
       lines.push(toTomlTableHeader("mcp_servers", name));
       lines.push(`command = ${toTomlString(server.localFallback.command)}`);
       const args = server.localFallback.args.map((a) => toTomlString(translateEnvVar(a, "codex"))).join(", ");
       lines.push(`args = [${args}]`);
-      if (server.disabled !== undefined) lines.push(`disabled = ${JSON.stringify(server.disabled)}`);
+      pushEnabledLine(lines, server);
       lines.push("");
     }
   }

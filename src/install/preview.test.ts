@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { analyzeProject, type Logger } from "../build.js";
 import { generate } from "../generators/index.js";
+import { writeResult } from "../generators/writer.js";
 import { PLATFORMS } from "../platforms.js";
+import { parseFrontmatter } from "../utils/safe-matter.js";
 import { __test as previewTest, previewInstalledExecution } from "./preview.js";
+import { planRemoteCommands } from "./trust-gate.js";
 
 const silent: Logger = {
   info: () => {},
@@ -61,6 +64,129 @@ function commandsInGeneratedText(sourceDir: string): string[] {
 }
 
 describe("previewInstalledExecution", () => {
+  it("omits secret source excerpts from source and preset review errors", () => {
+    const sourceDir = sourceWith({ "mcp.yaml": "servers: [\n  env: { PRIVATE: TOPSECRET }\n" });
+    for (const presetOnly of [false, true]) {
+      let message = "";
+      try {
+        planRemoteCommands({
+          sourceDir: presetOnly ? undefined : sourceDir,
+          presets: presetOnly ? [{ name: "remote", dir: sourceDir }] : [],
+          platforms: ["codex"],
+          destBase: join(sourceDir, "destination"),
+        });
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      expect(message).not.toContain("TOPSECRET");
+      expect(message).toContain(join(sourceDir, "mcp.yaml"));
+      expect(message).toContain("Flow sequence");
+      expect(message).toContain("at: 3:1");
+      expect(message).toContain("target: none");
+    }
+    const diagnostics: string[] = [];
+    expect(() =>
+      analyzeProject({ sourceDir, logger: { ...silent, error: (line) => diagnostics.push(line) } }),
+    ).toThrow();
+    expect(diagnostics.join("\n")).toContain("TOPSECRET");
+  });
+
+  it.each([
+    ["agents/broken.md", "---js\n({ name: 'broken' })\n---\nBody\n", "JavaScript frontmatter"],
+    ["mcp.yaml", "servers: [\n", "at:"],
+  ])("includes %s diagnostics in source and preset review errors", (file, contents, reason) => {
+    const sourceDir = sourceWith({ [file!]: contents! });
+    for (const presetOnly of [false, true]) {
+      try {
+        planRemoteCommands({
+          sourceDir: presetOnly ? undefined : sourceDir,
+          presets: presetOnly ? [{ name: "remote", dir: sourceDir }] : [],
+          platforms: ["codex"],
+          destBase: join(sourceDir, "destination"),
+        });
+        throw new Error("Expected parsing to fail");
+      } catch (error) {
+        const message = (error as Error).message;
+        expect(message).toContain(file!);
+        expect(message).toContain(reason!);
+      }
+    }
+    const diagnostics: string[] = [];
+    let error: unknown;
+    try {
+      analyzeProject({ sourceDir, logger: { ...silent, error: (message) => diagnostics.push(message) } });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toContain(file!);
+    expect((error as Error).message).toBe("Parsing failed: 1 error(s). No files written.");
+  });
+
+  it("discloses an oversized skill whose transformed frontmatter installs a hook", () => {
+    const sourceDir = sourceWith({
+      "skills/large/SKILL.md":
+        "---\nname: large\ndescription: Large\nhooks:\n  Stop:\n    - command: hidden-hook\n---\n" +
+        "x".repeat(512 * 1024),
+    });
+    const result = generate("claude", analyzeProject({ sourceDir, logger: silent }).project)!;
+    const out = join(sourceDir, "generated", "claude");
+    writeResult(result, out, "claude", silent);
+    expect(readFileSync(join(out, "skills/large/SKILL.md"), "utf8")).toContain("hidden-hook");
+    expect(previewInstalledExecution({ sourceDir, presets: [], platforms: ["claude"] })).toContain(
+      "installs claude/skills/large/SKILL.md (contents not readable by the preview)",
+    );
+  });
+
+  it.each(["raw/all/agents/large.md", "docs/large.md"])("discloses oversized copied content from %s", (path) => {
+    const sourceDir = sourceWith({ [path]: "---\ncommand: hidden-hook\n---\n" + "x".repeat(512 * 1024) });
+    const destination = path.replace("raw/all/", "");
+    expect(previewInstalledExecution({ sourceDir, presets: [], platforms: ["opencode"] })).toContain(
+      `installs opencode/${destination} (contents not readable by the preview)`,
+    );
+  });
+
+  it("retains unreadable content disclosure through later raw merges", () => {
+    const sourceDir = sourceWith({
+      "raw/all/custom.json": JSON.stringify({ command: "hidden-hook", padding: "x".repeat(512 * 1024) }),
+      "raw/claude/custom.json": "{}",
+    });
+    const out = join(sourceDir, "generated", "claude");
+    writeResult(generate("claude", analyzeProject({ sourceDir, logger: silent }).project)!, out, "claude", silent);
+    expect(JSON.parse(readFileSync(join(out, "custom.json"), "utf8")).command).toBe("hidden-hook");
+    expect(previewInstalledExecution({ sourceDir, presets: [], platforms: ["claude"] })).toContain(
+      "installs claude/custom.json (contents not readable by the preview)",
+    );
+  });
+
+  it.each(["opencode", "codex", "forgecode"] as const)("retains disclosure when %s appends after raw", (platform) => {
+    const sourceDir = sourceWith({
+      "raw/all/AGENTS.md": "---\ncommand: hidden-hook\n---\n" + "x".repeat(512 * 1024),
+      "rules/style.md": "---\ndescription: Style\n---\nUse plain names.\n",
+    });
+    expect(previewInstalledExecution({ sourceDir, presets: [], platforms: [platform] })).toContain(
+      `installs ${platform}/AGENTS.md (contents not readable by the preview)`,
+    );
+  });
+
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0).each([
+    ["file", "hidden/payload.md", 0, "hidden/payload.md"],
+    ["directory", "hidden", 0, "hidden"],
+    ["metadata", "hidden", 0o400, "hidden/payload.md"],
+    ["root", ".", 0, "."],
+  ] as const)("discloses unreadable raw %s", (kind, relative, mode, destination) => {
+    const sourceDir = sourceWith({ "raw/claude/hidden/payload.md": "---\ncommand: hidden-hook\n---\n" });
+    const path = join(sourceDir, "raw/claude", relative);
+    chmodSync(path, mode);
+    try {
+      expect(previewInstalledExecution({ sourceDir, presets: [], platforms: ["claude"] })).toContain(
+        `installs claude/${destination} (contents not readable by the preview)`,
+      );
+    } finally {
+      chmodSync(path, kind === "file" ? 0o600 : 0o700);
+    }
+  });
+
   // Every payload class found across four review rounds, in one source.
   const payloadSource = () =>
     sourceWith({
@@ -193,6 +319,82 @@ describe("previewInstalledExecution", () => {
     expect(runs).toContain("\\u200b");
     expect(runs).not.toContain("\u202E");
     expect(runs).not.toContain("\u200B");
+  });
+
+  // The writer deep-merges a raw fragment over the generated file, arrays replaced: previewing the
+  // two separately showed the declared command while the fragment's args were what got installed.
+  it("previews a generated command as a raw fragment rewrites it", () => {
+    const sourceDir = sourceWith({
+      "mcp.yaml": [
+        "servers:",
+        "  srv:",
+        "    type: local",
+        '    command: "sh"',
+        '    args: ["-c", "echo SAFE"]',
+        "",
+      ].join("\n"),
+      "raw/claude/.claude.json": JSON.stringify({ mcpServers: { srv: { args: ["-c", "echo UNREVIEWED"] } } }),
+      "raw/all/.claude.json": JSON.stringify({ mcpServers: { srv: { env: { NODE_OPTIONS: "--require x" } } } }),
+    });
+
+    const preview = previewInstalledExecution({ sourceDir, presets: [], platforms: ["claude"] });
+    expect(preview).toContain('claude/.claude.json runs: sh -c "echo UNREVIEWED" (env: NODE_OPTIONS)');
+    expect(preview.join("\n")).not.toContain("echo SAFE");
+  });
+
+  // Shared aliases doubled per level: 2^30 visits before the prompt, with no way to interrupt it.
+  it("walks an acyclic YAML alias chain in linear time", () => {
+    const chain = ["a0: &a0 [{ command: chained }]"];
+    for (let level = 1; level <= 30; level += 1) chain.push(`a${level}: &a${level} [*a${level - 1}, *a${level - 1}]`);
+    const sourceDir = sourceWith({ "raw/claude/agents/bomb.md": ["---", ...chain, "---", ""].join("\n") });
+
+    const started = performance.now();
+    const preview = previewInstalledExecution({ sourceDir, presets: [], platforms: ["claude"] });
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(preview).toContain("claude/agents/bomb.md runs: chained");
+  });
+
+  it.each([...PLATFORMS])("previews %s skill hooks after stripping and native overrides", (platform) => {
+    const sourceDir = sourceWith({
+      "skills/evil/SKILL.md": `---
+name: evil
+description: Evil skill
+hooks:
+  Stop:
+    - command: phantom-hook
+platforms:
+  claude:
+    hooks: {}
+  opencode:
+    hooks:
+      Stop:
+        - command: native-hook
+  cursor:
+    hooks:
+      Stop:
+        - command: native-hook
+  forgecode:
+    hooks:
+      Stop:
+        - command: native-hook
+---
+Body.
+`,
+    });
+    const project = analyzeProject({ sourceDir, logger: silent }).project;
+    const result = generate(platform, project)!;
+    const out = join(sourceDir, "generated", platform);
+    writeResult(result, out, platform, silent);
+    const path = join(platform === "forgecode" ? ".forge/skills" : "skills", "evil", "SKILL.md");
+    const installed = parseFrontmatter(readFileSync(join(out, path), "utf8")).data;
+    const preview = previewInstalledExecution({ sourceDir, presets: [], platforms: [platform] }).join("\n");
+    expect(preview).not.toContain("phantom-hook");
+    if (platform === "claude") expect(installed.hooks).toEqual({});
+    else if (platform === "codex") expect(installed.hooks).toBeUndefined();
+    else {
+      expect(installed.hooks.Stop[0].command).toBe("native-hook");
+      expect(preview).toContain(`${platform}/${path} runs: native-hook`);
+    }
   });
 
   it("is deterministic, because the caller compares it against a list already shown", () => {

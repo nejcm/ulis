@@ -1,7 +1,9 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, spyOn } from "bun:test";
+import * as fs from "node:fs";
 import {
   chmodSync,
   existsSync,
+  readdirSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -72,6 +74,7 @@ describe("preserved native config registry", () => {
         generatedPath: join("root", ".ulis", "generated", "opencode", "opencode.json"),
         targetPath: join("root", "project", ".opencode", "opencode.json"),
         preservedPaths: [["mcp"]],
+        mcpKey: "mcp",
         ownership: "file",
       },
       {
@@ -103,6 +106,7 @@ describe("preserved native config registry", () => {
         generatedPath: join("root", ".ulis", "generated", "claude", ".claude.json"),
         targetPath: join("root", "project", ".mcp.json"),
         preservedPaths: [["mcpServers"]],
+        mcpKey: "mcpServers",
         // Project install: target is `<cwd>/.mcp.json`; ULIS merges with existing
         // mcpServers (file-owned mode).
         ownership: "file",
@@ -112,6 +116,7 @@ describe("preserved native config registry", () => {
         generatedPath: join("root", ".ulis", "generated", "codex", "config.toml"),
         targetPath: join("root", "project", ".codex", "config.toml"),
         preservedPaths: [["projects"], ["hooks"], ["mcp_servers"], ["tui"], ["notice"], ["features"]],
+        mcpKey: "mcp_servers",
         ownership: "file",
         overlay: "toml",
       },
@@ -120,6 +125,7 @@ describe("preserved native config registry", () => {
         generatedPath: join("root", ".ulis", "generated", "cursor", "mcp.json"),
         targetPath: join("root", "project", ".cursor", "mcp.json"),
         preservedPaths: [["mcpServers"]],
+        mcpKey: "mcpServers",
         ownership: "file",
       },
       {
@@ -127,10 +133,12 @@ describe("preserved native config registry", () => {
         generatedPath: join("root", ".ulis", "generated", "forgecode", ".forge", ".mcp.json"),
         targetPath: join("root", "project", ".forge", ".mcp.json"),
         preservedPaths: [["mcpServers"]],
+        mcpKey: "mcpServers",
         ownership: "file",
       },
       {
         label: ".forge.toml",
+        overlay: "toml",
         generatedPath: join("root", ".ulis", "generated", "forgecode", ".forge.toml"),
         targetPath: join("root", "project", ".forge", ".forge.toml"),
         preservedPaths: [[]],
@@ -155,6 +163,7 @@ describe("preserved native config registry", () => {
       generatedPath: join("root", ".ulis", "generated", "claude", ".claude.json"),
       targetPath: join("root", "home", ".claude.json"),
       preservedPaths: [["mcpServers"]],
+      mcpKey: "mcpServers",
       ownership: "paths",
       overlay: "json",
     });
@@ -177,6 +186,7 @@ describe("capturePreservedNativeConfigs", () => {
         generatedPath: join(root, ".ulis", "generated", "opencode", "opencode.json"),
         targetPath: join(root, "project", ".opencode", "opencode.json"),
         preservedPaths: [["mcp"]],
+        mcpKey: "mcp",
         preservedConfig: undefined,
         ownership: "file",
       },
@@ -349,6 +359,26 @@ describe("writePreservedNativeConfigs", () => {
       expect((statSync(targetPath).mode & 0o777).toString(8)).toBe(expected);
     });
   }
+
+  it("keeps the existing target when the write fails part-way", () => {
+    const root = createTempRoot();
+    const targetPath = join(root, "target", "config.json");
+    const original = '{"keep":{"existing":true},"mcp":{"server":"x"}}';
+    write(join(root, "generated", "config.json"), '{"generated":true}');
+    write(targetPath, original);
+    const writeSpy = spyOn(fs, "writeFileSync").mockImplementation(() => {
+      throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC" });
+    });
+
+    try {
+      expect(() => writePreservedNativeConfigs([entry(root, { keep: { existing: true } })])).toThrow();
+    } finally {
+      writeSpy.mockRestore();
+    }
+
+    expect(readFileSync(targetPath, "utf-8")).toBe(original);
+    expect(readdirSync(dirname(targetPath))).toEqual(["config.json"]);
+  });
 
   it("writes preserved-only config when generated config is absent", () => {
     const root = createTempRoot();

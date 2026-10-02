@@ -58,7 +58,7 @@ export interface InstallOptions {
   /** Install skills globally (`npx skills ... -g`) instead of project-local. */
   readonly globalInstall?: boolean;
   readonly backup?: boolean;
-  /** Remove agents and local skills previously installed by ULIS but no longer generated. */
+  /** Remove managed agents, local skills, and MCP servers no longer generated. */
   readonly prune?: boolean;
   readonly rebuild?: boolean;
   readonly logger?: Logger;
@@ -83,7 +83,7 @@ export interface PresetInstallOptions {
   /** Install skills globally (`npx skills ... -g`) instead of project-local. */
   readonly globalInstall?: boolean;
   readonly backup?: boolean;
-  /** Remove agents and local skills previously installed by ULIS but no longer generated. */
+  /** Remove managed agents, local skills, and MCP servers no longer generated. */
   readonly prune?: boolean;
   readonly logger?: Logger;
   readonly userHome?: string;

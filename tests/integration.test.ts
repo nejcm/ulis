@@ -298,6 +298,29 @@ Run the review workflow.
     expect(command).toContain("Run the review workflow.");
     expect(get(m, "commands/README.md")).toBe("Command docs.\n");
   });
+
+  it("skips commands disabled per platform and applies claude overrides", () => {
+    const sourceDir = createTempSource();
+    write(
+      join(sourceDir, "commands", "oc-only.md"),
+      "---\ndescription: OpenCode only\nplatforms:\n  claude:\n    enabled: false\n---\n\nBody.\n",
+    );
+    write(
+      join(sourceDir, "commands", "claude-only.md"),
+      "---\ndescription: Claude only\nmodel: haiku\nplatforms:\n  opencode:\n    enabled: false\n  claude:\n    model: sonnet\n    argument-hint: '[x]'\n---\n\nBody.\n",
+    );
+
+    const oc = runProject("opencode", { ...buildProject(), sourceDir });
+    expect(oc.has("commands/oc-only.md")).toBe(true);
+    expect(oc.has("commands/claude-only.md")).toBe(false);
+
+    const claude = runProject("claude", { ...buildProject(), sourceDir });
+    expect(claude.has("commands/oc-only.md")).toBe(false);
+    const command = get(claude, "commands/claude-only.md");
+    expect(command).toContain("model: sonnet");
+    expect(command).toContain("argument-hint:");
+    expect(command).not.toContain("enabled");
+  });
 });
 
 // ─── Codex ───────────────────────────────────────────────────────────────────
@@ -309,7 +332,7 @@ describe("Codex generator", () => {
     expect(get(m, "config.toml")).toContain("[mcp_servers.test-local]");
   });
 
-  it("preserves a server's disabled flag in config.toml", () => {
+  it("emits a disabled server as enabled = false in config.toml", () => {
     const config = runProject("codex", {
       ...buildProject(),
       mcp: {
@@ -323,7 +346,7 @@ describe("Codex generator", () => {
       },
     });
 
-    expect(get(config, "config.toml")).toContain('[mcp_servers.disabled]\ncommand = "node"\ndisabled = true');
+    expect(get(config, "config.toml")).toContain('[mcp_servers.disabled]\ncommand = "node"\nenabled = false');
   });
 
   it("does not emit implicit root config defaults", () => {
@@ -435,7 +458,7 @@ describe("Cursor generator", () => {
     expect(mcp.mcpServers).toHaveProperty("test-remote");
   });
 
-  it("preserves a server's disabled flag in mcp.json", () => {
+  it("leaves a disabled server out of mcp.json", () => {
     const m = runProject("cursor", {
       ...buildProject(),
       mcp: {
@@ -449,14 +472,7 @@ describe("Cursor generator", () => {
       },
     });
 
-    expect(JSON.parse(get(m, "mcp.json"))).toEqual({
-      mcpServers: {
-        disabled: {
-          command: "npx",
-          disabled: true,
-        },
-      },
-    });
+    expect(JSON.parse(get(m, "mcp.json"))).toEqual({ mcpServers: {} });
   });
 
   it("emits permissions.json when Cursor allowlists are configured", () => {
