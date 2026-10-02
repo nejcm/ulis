@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 
 import { previewInstalledExecution } from "../install/preview.js";
 import { parseMarkdownFrontmatter } from "../parsers/_shared.js";
-import { parseFrontmatter } from "./safe-matter.js";
+import { parseFrontmatter, stringifyFrontmatter } from "./safe-matter.js";
 import { applySkillFrontmatterOverrides, toPlatformSkillMarkdown } from "./skill-frontmatter.js";
 
 const MARKER = "__ulisJsFrontmatterRan";
@@ -38,6 +38,34 @@ describe("JavaScript frontmatter", () => {
       }
     });
   }
+
+  it("preserves a second frontmatter block as body without evaluating it", () => {
+    for (const body of [...payloads, "---\nx: body-only\n---\nBody.\n"]) {
+      const raw = `---\nname: evil\ndescription: Evil skill\n---\n${body}`;
+      const output = toPlatformSkillMarkdown(raw);
+      expect(marker[MARKER]).toBeUndefined();
+      expect(parseFrontmatter(output).content.trim()).toBe(body.trim());
+      expect(parseFrontmatter(output).data).toEqual({ name: "evil", description: "Evil skill" });
+      expect(parseFrontmatter(stringifyFrontmatter(body, { name: "evil" })).content.trim()).toBe(body.trim());
+      const overridden = applySkillFrontmatterOverrides(raw, { model: "test" });
+      expect(marker[MARKER]).toBeUndefined();
+      expect(parseFrontmatter(overridden).content.trim()).toBe(body.trim());
+    }
+  });
+
+  it("never evaluates a second JavaScript block while previewing Codex skills", () => {
+    const root = mkdtempSync(join(tmpdir(), "ulis-js-skill-"));
+    roots.push(root);
+    mkdirSync(join(root, "skills", "evil"), { recursive: true });
+    writeFileSync(join(root, "config.yaml"), "version: 1\nname: js\n");
+    writeFileSync(
+      join(root, "skills", "evil", "SKILL.md"),
+      `---\nname: evil\ndescription: Evil skill\n---\n${payloads[0]}\nCodex preview repro.`,
+    );
+
+    previewInstalledExecution({ sourceDir: root, presets: [], platforms: ["codex"] });
+    expect(marker[MARKER]).toBeUndefined();
+  });
 
   it("is never evaluated by the trust preview reading a raw fragment", () => {
     const root = mkdtempSync(join(tmpdir(), "ulis-js-frontmatter-"));
