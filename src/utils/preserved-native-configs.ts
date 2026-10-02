@@ -268,7 +268,7 @@ function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger
       return;
     }
 
-    if (entry.preservedConfig === undefined) {
+    if (entry.preservedConfig === undefined && entry.overlay === "toml") {
       copyDestinationFile(entry.generatedPath, entry.targetPath);
       logger?.success(`${entry.label} (copied)`);
       return;
@@ -276,12 +276,16 @@ function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger
 
     const generatedContent = readFile(entry.generatedPath);
     const generated = readMergeableConfig(entry.generatedPath);
-    const merged = mergeConfigValues(entry.preservedConfig, generated);
+    const merged = mergeConfigValues(generated, mergeConfigValues(entry.preservedConfig, generated));
     if (entry.overlay === "toml") {
       const existingContent = entry.originalContent ?? readFile(entry.targetPath);
       writeDestinationFile(entry.targetPath, patchTomlOverlay(existingContent, generatedContent, merged));
     } else {
-      writeDestinationFile(entry.targetPath, serializeMergeableConfig(entry.targetPath, merged));
+      writeDestinationFile(
+        entry.targetPath,
+        serializeMergeableConfig(entry.targetPath, merged),
+        entry.preservedConfig === undefined ? existingFileMode(entry.generatedPath) : undefined,
+      );
     }
     logger?.success(`${entry.label} (merged)`);
   } catch (error) {

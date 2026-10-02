@@ -4,13 +4,15 @@
 // absent" lives here (not with the Codex TOML-merge tests) because it is part of this same
 // generated-config-absent contract, mirroring the neighboring OpenCode absent-config tests.
 import { afterEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { type Logger } from "./build.js";
 import { __test, runInstall } from "./install.js";
+import { PLATFORMS } from "./platforms.js";
 import { cleanupInstallTempRoots, createTempRoot, read, silentLogger, write } from "./test-utils/install.js";
-import { readMergeableConfig } from "./utils/config-merge.js";
+import { readMergeableConfig, serializeMergeableConfig } from "./utils/config-merge.js";
+import { getPreservedNativeConfigEntries } from "./utils/preserved-native-configs.js";
 
 afterEach(() => {
   __test.resetRuntimeDependencies();
@@ -18,6 +20,62 @@ afterEach(() => {
 });
 
 describe("runInstall", () => {
+  it.each([
+    { global: false, existing: false },
+    { global: true, existing: false },
+    { global: false, existing: true },
+    { global: true, existing: true },
+  ])("installs every native config byte-identically twice (%j)", async ({ global, existing }) => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const userHome = join(root, "home");
+    const destBase = global ? userHome : join(root, "project");
+    cpSync(join(import.meta.dir, "../example"), sourceDir, { recursive: true });
+    write(join(sourceDir, "raw", "claude", "settings.local.json"), '{"permissions":{"allow":["Bash(ls:*)"]}}');
+    write(join(sourceDir, "raw", "forgecode", ".forge.toml"), "max_conversations = 200\n");
+    const entries = PLATFORMS.flatMap((platform) =>
+      getPreservedNativeConfigEntries(platform, { outputDir, destBase, userHome }),
+    );
+    if (existing) {
+      for (const entry of entries) {
+        const value = entry.mcpKey
+          ? { [entry.mcpKey]: { unmanaged: { command: "keep" } } }
+          : entry.overlay
+            ? { hooks: { unmanaged: [] } }
+            : { updates: { channel: "stable" } };
+        write(entry.targetPath, serializeMergeableConfig(entry.targetPath, value));
+      }
+    }
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase,
+      userHome,
+      platforms: [...PLATFORMS],
+      rebuild: true,
+      installSkills: false,
+      installExtensions: false,
+      logger: silentLogger,
+    };
+    await runInstall(options);
+    const snapshot = () =>
+      readdirSync(destBase, { recursive: true })
+        .map(String)
+        .sort()
+        .filter((path) => statSync(join(destBase, path)).isFile())
+        .map((path) => [path, read(join(destBase, path))]);
+    const first = snapshot();
+    await runInstall(options);
+    expect(snapshot()).toEqual(first);
+    if (existing) {
+      for (const entry of entries.filter((entry) => entry.mcpKey)) {
+        const config = readMergeableConfig(entry.targetPath) as Record<string, Record<string, unknown>>;
+        expect(config[entry.mcpKey!]?.unmanaged).toEqual({ command: "keep" });
+      }
+    }
+  });
+
   it("preserves native config across platform installs", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");
