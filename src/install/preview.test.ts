@@ -64,6 +64,33 @@ function commandsInGeneratedText(sourceDir: string): string[] {
 }
 
 describe("previewInstalledExecution", () => {
+  it("omits secret source excerpts from source and preset review errors", () => {
+    const sourceDir = sourceWith({ "mcp.yaml": "servers: [\n  env: { PRIVATE: TOPSECRET }\n" });
+    for (const presetOnly of [false, true]) {
+      let message = "";
+      try {
+        planRemoteCommands({
+          sourceDir: presetOnly ? undefined : sourceDir,
+          presets: presetOnly ? [{ name: "remote", dir: sourceDir }] : [],
+          platforms: ["codex"],
+          destBase: join(sourceDir, "destination"),
+        });
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      expect(message).not.toContain("TOPSECRET");
+      expect(message).toContain(join(sourceDir, "mcp.yaml"));
+      expect(message).toContain("Flow sequence");
+      expect(message).toContain("at: 3:1");
+      expect(message).toContain("target: none");
+    }
+    const diagnostics: string[] = [];
+    expect(() =>
+      analyzeProject({ sourceDir, logger: { ...silent, error: (line) => diagnostics.push(line) } }),
+    ).toThrow();
+    expect(diagnostics.join("\n")).toContain("TOPSECRET");
+  });
+
   it.each([
     ["agents/broken.md", "---js\n({ name: 'broken' })\n---\nBody\n", "JavaScript frontmatter"],
     ["mcp.yaml", "servers: [\n", "at:"],

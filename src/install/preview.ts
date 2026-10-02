@@ -106,8 +106,8 @@ function mergedProject(inputs: PreviewInputs): ProjectBundle {
   const logger = { ...SILENT_LOGGER, error: (message: string) => diagnostics.push(message) };
   try {
     return inputs.sourceDir
-      ? analyzeProject({ sourceDir: inputs.sourceDir, presets: inputs.presets, logger }).project
-      : analyzePresets({ presets: inputs.presets, logger }).project;
+      ? analyzeProject({ sourceDir: inputs.sourceDir, presets: inputs.presets, logger, sourceExcerpts: false }).project
+      : analyzePresets({ presets: inputs.presets, logger, sourceExcerpts: false }).project;
   } catch (error) {
     if (diagnostics.length === 0) throw error;
     const message = error instanceof Error ? error.message : String(error);

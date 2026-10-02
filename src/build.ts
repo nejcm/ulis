@@ -47,6 +47,7 @@ export interface TargetOptionInput {
 }
 
 export interface AnalyzeProjectOptions {
+  readonly sourceExcerpts?: boolean;
   /**
    * Path to the ulis source tree (e.g. `./.ulis/` or `~/.ulis/` or a fixture path).
    * Required.
@@ -58,6 +59,7 @@ export interface AnalyzeProjectOptions {
 }
 
 export interface AnalyzePresetsOptions {
+  readonly sourceExcerpts?: boolean;
   readonly logger?: Logger;
   /** Resolved presets to merge without a base source. Applied in order; later presets win conflicts. */
   readonly presets: readonly ResolvedPreset[];
@@ -78,8 +80,8 @@ export interface BuildResult {
 
 type ParsedProject = ReturnType<typeof parseProject>;
 
-function reportParseErrors(err: ParseAggregateError, logger: Logger): never {
-  for (const e of err.errors) logger.error(formatDiagnostic(e.toDiagnostic()));
+function reportParseErrors(err: ParseAggregateError, logger: Logger, sourceExcerpts = true): never {
+  for (const e of err.errors) logger.error(formatDiagnostic(e.toDiagnostic(), sourceExcerpts));
   throw new Error(`Parsing failed: ${err.errors.length} error(s). No files written.`);
 }
 
@@ -159,7 +161,7 @@ export function analyzeProject(options: AnalyzeProjectOptions): ProjectAnalysis 
     }
   } catch (err) {
     if (err instanceof ParseAggregateError) {
-      reportParseErrors(err, logger);
+      reportParseErrors(err, logger, options.sourceExcerpts);
     }
     throw err;
   }
@@ -202,7 +204,7 @@ export function analyzePresets(options: AnalyzePresetsOptions): ProjectAnalysis 
     parsed = mergeProjects(completePresetProjects);
   } catch (err) {
     if (err instanceof ParseAggregateError) {
-      reportParseErrors(err, logger);
+      reportParseErrors(err, logger, options.sourceExcerpts);
     }
     throw err;
   }
