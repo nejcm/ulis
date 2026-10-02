@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { analyzeProject, type Logger } from "../build.js";
 import { generate } from "../generators/index.js";
+import { writeResult } from "../generators/writer.js";
 import { PLATFORMS } from "../platforms.js";
+import { parseFrontmatter } from "../utils/safe-matter.js";
 import { __test as previewTest, previewInstalledExecution } from "./preview.js";
 
 const silent: Logger = {
@@ -226,6 +228,49 @@ describe("previewInstalledExecution", () => {
     const preview = previewInstalledExecution({ sourceDir, presets: [], platforms: ["claude"] });
     expect(performance.now() - started).toBeLessThan(1000);
     expect(preview).toContain("claude/agents/bomb.md runs: chained");
+  });
+
+  it.each([...PLATFORMS])("previews %s skill hooks after stripping and native overrides", (platform) => {
+    const sourceDir = sourceWith({
+      "skills/evil/SKILL.md": `---
+name: evil
+description: Evil skill
+hooks:
+  Stop:
+    - command: phantom-hook
+platforms:
+  claude:
+    hooks: {}
+  opencode:
+    hooks:
+      Stop:
+        - command: native-hook
+  cursor:
+    hooks:
+      Stop:
+        - command: native-hook
+  forgecode:
+    hooks:
+      Stop:
+        - command: native-hook
+---
+Body.
+`,
+    });
+    const project = analyzeProject({ sourceDir, logger: silent }).project;
+    const result = generate(platform, project)!;
+    const out = join(sourceDir, "generated", platform);
+    writeResult(result, out, platform, silent);
+    const path = join(platform === "forgecode" ? ".forge/skills" : "skills", "evil", "SKILL.md");
+    const installed = parseFrontmatter(readFileSync(join(out, path), "utf8")).data;
+    const preview = previewInstalledExecution({ sourceDir, presets: [], platforms: [platform] }).join("\n");
+    expect(preview).not.toContain("phantom-hook");
+    if (platform === "claude") expect(installed.hooks).toEqual({});
+    else if (platform === "codex") expect(installed.hooks).toBeUndefined();
+    else {
+      expect(installed.hooks.Stop[0].command).toBe("native-hook");
+      expect(preview).toContain(`${platform}/${path} runs: native-hook`);
+    }
   });
 
   it("is deterministic, because the caller compares it against a list already shown", () => {

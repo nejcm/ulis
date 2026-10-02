@@ -12,6 +12,7 @@ import { NATIVE_CONFIG_FILENAMES } from "../utils/preserved-native-configs.js";
 import { sanitizeLogText } from "../utils/redact.js";
 import type { ResolvedPreset } from "../utils/resolve-presets.js";
 import { parseFrontmatter } from "../utils/safe-matter.js";
+import { toPlatformSkillMarkdown } from "../utils/skill-frontmatter.js";
 
 /**
  * What a source will make the user's agents run, read off the output rather than off the input.
@@ -254,7 +255,16 @@ function simulatedOutput(result: GenerationResult): Map<string, OutputFile> {
   };
 
   for (const skill of result.post.skillDirs) {
-    copyTree(skill.dir, join(result.post.skillsDestRelative ?? "skills", skill.name));
+    const destination = join(result.post.skillsDestRelative ?? "skills", skill.name);
+    copyTree(skill.dir, destination);
+    const skillPath = join(destination, "SKILL.md");
+    const skillFile = output.get(skillPath);
+    if (skillFile?.contents !== undefined) {
+      output.set(skillPath, {
+        contents: toPlatformSkillMarkdown(skillFile.contents, skill.extraFrontmatter) + "\n",
+        copied: true,
+      });
+    }
   }
   for (const artifact of result.artifacts) {
     const contents = typeof artifact.contents === "string" ? artifact.contents : artifact.contents.toString("utf8");
