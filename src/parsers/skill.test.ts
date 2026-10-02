@@ -31,6 +31,30 @@ describe("parseSkills", () => {
     expect(skill.dir).toContain("my-skill");
   });
 
+  it("accepts shared objects from YAML merge keys and shared arrays", () => {
+    const root = createTempRoot("ulis-skill-merge-");
+    writeTextFile(
+      join(root, "merged", "SKILL.md"),
+      `---
+name: merged
+description: Merged skill
+defaults: &d
+  tools: {read: true}
+  paths: &paths [src/**]
+<<: *d
+platforms:
+  claude:
+    paths: *paths
+---
+Body.
+`,
+    );
+    const [skill] = parseSkills(root);
+    expect(skill.frontmatter?.tools).toMatchObject({ read: true });
+    expect(skill.frontmatter?.paths).toEqual(["src/**"]);
+    expect(skill.frontmatter?.platforms?.claude?.paths).toEqual(["src/**"]);
+  });
+
   it("rejects cyclic YAML aliases in skill frontmatter", () => {
     const root = createTempRoot("ulis-skill-yaml-");
     writeTextFile(
@@ -64,7 +88,7 @@ Body.
     );
 
     const started = performance.now();
-    expect(() => parseSkills(root)).toThrow("Shared YAML aliases of objects or lists are not supported.");
+    expect(() => parseSkills(root)).toThrow("YAML frontmatter cannot exceed 10000 node visits.");
     expect(performance.now() - started).toBeLessThan(1000);
   });
 });

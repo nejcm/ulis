@@ -159,8 +159,11 @@ function assertSafeYamlFrontmatter(
   path: PropertyKey[] = [],
   ancestors: WeakSet<object> = new WeakSet(),
   depth = 0,
-  seen: WeakSet<object> = new WeakSet(),
+  budget = { remaining: 10_000 },
 ): void {
+  if (--budget.remaining < 0) {
+    throw new ZodError([{ code: "custom", path, message: "YAML frontmatter cannot exceed 10000 node visits." }]);
+  }
   if (depth > 100) {
     throw new ZodError([{ code: "custom", path, message: "YAML frontmatter cannot exceed 100 levels." }]);
   }
@@ -172,17 +175,10 @@ function assertSafeYamlFrontmatter(
   if (ancestors.has(value)) {
     throw new ZodError([{ code: "custom", path, message: "Cyclic YAML aliases are not supported." }]);
   }
-  // An acyclic chain of aliases doubles the walk per level; a shared node is rejected before that.
-  if (seen.has(value)) {
-    throw new ZodError([
-      { code: "custom", path, message: "Shared YAML aliases of objects or lists are not supported." },
-    ]);
-  }
-  seen.add(value);
   ancestors.add(value);
   try {
     for (const [key, child] of Object.entries(value)) {
-      assertSafeYamlFrontmatter(child, [...path, key], ancestors, depth + 1, seen);
+      assertSafeYamlFrontmatter(child, [...path, key], ancestors, depth + 1, budget);
     }
   } finally {
     ancestors.delete(value);
