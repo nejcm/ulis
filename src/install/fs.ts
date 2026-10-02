@@ -11,11 +11,13 @@ import {
   openSync,
   readdirSync,
   readlinkSync,
+  readSync,
   realpathSync,
   rmdirSync,
   rmSync,
   symlinkSync,
   unlinkSync,
+  writeSync,
   type Stats,
 } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -378,11 +380,7 @@ function copyIntoTarget(
   }
 
   removeForReplacement(targetPath);
-  try {
-    copyLeaf(sourcePath, targetPath);
-  } finally {
-    if (onLeafWritten && pathExists(targetPath)) onLeafWritten(targetPath);
-  }
+  copyLeaf(sourcePath, targetPath, onLeafWritten);
 }
 
 /**
@@ -511,20 +509,15 @@ function copyFileToNewPath(sourcePath: string, targetPath: string): boolean {
 /** Replace whatever is at `targetPath` with `sourcePath` outright - never merging, never following a link. */
 function replaceWithSource(sourcePath: string, targetPath: string, onWritten?: (path: string) => void): void {
   removePath(targetPath);
-  try {
-    copyIntoTarget(sourcePath, targetPath);
-  } finally {
-    if (onWritten && pathExists(targetPath)) onWritten(targetPath);
+  const sourceStats = statsOf(sourcePath);
+  if (!sourceStats?.isDirectory()) {
+    copyLeaf(sourcePath, targetPath, onWritten);
+    return;
   }
-}
-
-function pathExists(path: string): boolean {
-  try {
-    lstatSync(path);
-    return true;
-  } catch {
-    return false;
-  }
+  createDirectoryExclusively(targetPath);
+  onWritten?.(targetPath);
+  copyIntoTarget(sourcePath, targetPath);
+  applyMode(targetPath, sourceStats.mode);
 }
 
 /**
@@ -540,23 +533,45 @@ function createDirectoryExclusively(dirPath: string): void {
   }
 }
 
-/**
- * Write one non-directory source entry to a path that must not exist.
- *
- * `COPYFILE_EXCL` fails with EEXIST rather than opening whatever is at the destination, which is
- * what stops a symlink created since the removal from being followed out of the platform root -
- * `cpSync` has no such mode. It is kept for the entry types the exclusive primitive does not cover
- * (a symlink, and the FIFOs and sockets it refuses outright, as it always has): copying a symlink
- * writes a symlink, so it cannot write through one either.
- */
-function copyLeaf(sourcePath: string, targetPath: string): void {
-  if (!statsOf(sourcePath)?.isFile()) {
+/** Exclusively create a leaf, reporting ownership as soon as its destination handle is ours. */
+function copyLeaf(sourcePath: string, targetPath: string, onWritten?: (path: string) => void): void {
+  const sourceStats = statsOf(sourcePath);
+  if (sourceStats?.isSymbolicLink()) {
+    if (!copySymlinkToNewPath(sourcePath, targetPath)) {
+      throw new InstallError(`Failed to copy ${sourcePath} -> ${targetPath}: destination exists`);
+    }
+    onWritten?.(targetPath);
+    return;
+  }
+  if (!sourceStats?.isFile()) {
     copyPath(sourcePath, targetPath);
+    onWritten?.(targetPath);
     return;
   }
 
   try {
-    copyFileSync(sourcePath, targetPath, constants.COPYFILE_EXCL);
+    if (!onWritten) {
+      copyFileSync(sourcePath, targetPath, constants.COPYFILE_EXCL);
+      return;
+    }
+    const source = openSync(sourcePath, "r");
+    try {
+      const target = openSync(targetPath, "wx", sourceStats.mode & 0o7777);
+      try {
+        onWritten(targetPath);
+        const buffer = Buffer.allocUnsafe(64 * 1024);
+        let length: number;
+        while ((length = readSync(source, buffer, 0, buffer.length, null)) > 0) {
+          let offset = 0;
+          while (offset < length) offset += writeSync(target, buffer, offset, length - offset);
+        }
+        fchmodSync(target, sourceStats.mode & 0o7777);
+      } finally {
+        closeSync(target);
+      }
+    } finally {
+      closeSync(source);
+    }
   } catch (error) {
     throw new InstallError(`Failed to copy ${sourcePath} -> ${targetPath}`, error);
   }

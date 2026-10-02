@@ -24,11 +24,12 @@ afterEach(() => {
 // Fails the copy of one generated file. Listings are sorted so the agent copy order, and with it what
 // the failed run did and did not reach, follows the file names.
 async function installFailingAt(failingSuffix: string, options: Parameters<typeof runInstall>[0]): Promise<void> {
-  const realCopyFileSync = fs.copyFileSync;
+  const realOpenSync = fs.openSync;
   const realReaddirSync = fs.readdirSync;
-  const copySpy = spyOn(fs, "copyFileSync").mockImplementation((source, target, mode) => {
-    if (String(target).endsWith(failingSuffix)) throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
-    realCopyFileSync(source, target, mode);
+  const copySpy = spyOn(fs, "openSync").mockImplementation((target, flags, mode) => {
+    if (flags === "wx" && String(target).endsWith(failingSuffix))
+      throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+    return realOpenSync(target, flags, mode);
   });
   const readdirSpy = spyOn(fs, "readdirSync").mockImplementation(((path: fs.PathLike, readOptions?: unknown) => {
     const entries = (realReaddirSync as (p: fs.PathLike, o?: unknown) => (string | fs.Dirent)[])(path, readOptions);
@@ -602,5 +603,108 @@ describe("runInstall", () => {
     await runInstall(options);
 
     expect(read(userAgent)).toBe("User's own.\n");
+  });
+  for (const entry of ["agents/worker.md", "commands/worker.md", "skills/worker"] as const) {
+    it(`does not claim a concurrent writer at ${entry} after exclusive creation fails`, async () => {
+      const { outputDir, projectDir, options } = opencodeInstall(createTempRoot());
+      const source = join(outputDir, "opencode", entry);
+      const target = join(projectDir, ".opencode", entry);
+      const skill = entry.startsWith("skills/");
+      write(skill ? join(source, "SKILL.md") : source, "Generated.\n");
+      write(skill ? join(target, "SKILL.md") : target, "Old.\n");
+      const realCopy = fs.copyFileSync;
+      const realOpen = fs.openSync;
+      const realMkdir = fs.mkdirSync;
+      let raced = false;
+      const plant = (path: fs.PathLike) => {
+        if (raced || String(path) !== target) return;
+        raced = true;
+        write(skill ? join(target, "SKILL.md") : target, "User's own.\n");
+      };
+      const copySpy = spyOn(fs, "copyFileSync").mockImplementation((source, target, mode) => {
+        plant(target);
+        realCopy(source, target, mode);
+      });
+      const openSpy = spyOn(fs, "openSync").mockImplementation((path, flags, mode) => {
+        if (flags === "wx") plant(path);
+        return realOpen(path, flags, mode);
+      });
+      const mkdirSpy = spyOn(fs, "mkdirSync").mockImplementation(((path, mkdirOptions) => {
+        if (skill && String(path) === target && !mkdirOptions) plant(path);
+        return realMkdir(path, mkdirOptions);
+      }) as typeof fs.mkdirSync);
+      try {
+        await expect(runInstall(options)).rejects.toThrow();
+      } finally {
+        copySpy.mockRestore();
+        openSpy.mockRestore();
+        mkdirSpy.mockRestore();
+      }
+      expect(raced).toBe(true);
+      rmSync(source, { recursive: true });
+      await runInstall(options);
+      expect(read(skill ? join(target, "SKILL.md") : target)).toBe("User's own.\n");
+    });
+  }
+
+  for (const entry of ["agents/partial.md", "commands/partial.md", "skills/partial"] as const) {
+    it(`records ULIS's partial write at ${entry} for later prune`, async () => {
+      const { outputDir, projectDir, options } = opencodeInstall(createTempRoot());
+      const source = join(outputDir, "opencode", entry);
+      const target = join(projectDir, ".opencode", entry);
+      const skill = entry.startsWith("skills/");
+      const sourceFile = skill ? join(source, "SKILL.md") : source;
+      const targetFile = skill ? join(target, "SKILL.md") : target;
+      write(sourceFile, "Partial content.\n");
+      const realWrite = fs.writeSync;
+      const realCopy = fs.copyFileSync;
+      const fail = () => {
+        throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+      };
+      const writeSpy = spyOn(fs, "writeSync").mockImplementation(((fd: number, buffer: Uint8Array, offset: number) => {
+        realWrite(fd, buffer, offset, 3);
+        fail();
+      }) as typeof fs.writeSync);
+      const copySpy = spyOn(fs, "copyFileSync").mockImplementation((source, target, mode) => {
+        if (String(target) === targetFile) {
+          fs.writeFileSync(target, "Par", { flag: "wx" });
+          fail();
+        }
+        realCopy(source, target, mode);
+      });
+      try {
+        await expect(runInstall(options)).rejects.toThrow();
+      } finally {
+        writeSpy.mockRestore();
+        copySpy.mockRestore();
+      }
+      expect(read(targetFile)).toBe("Par");
+      const manifest = JSON.parse(read(join(projectDir, ".opencode", ".ulis-manifest.json")));
+      expect(manifest[skill ? "skills" : entry.startsWith("agents/") ? "agents" : "rootEntries"]).toContain(entry);
+      rmSync(source, { recursive: true });
+      await runInstall(options);
+      expect(existsSync(target)).toBe(false);
+    });
+  }
+
+  it("refuses a skill directory created after replacement removal", async () => {
+    const { outputDir, projectDir, options } = opencodeInstall(createTempRoot());
+    const source = join(outputDir, "opencode", "skills", "worker");
+    const target = join(projectDir, ".opencode", "skills", "worker");
+    write(join(source, "SKILL.md"), "Generated.\n");
+    write(join(target, "SKILL.md"), "Old.\n");
+    const realRemove = fs.rmSync;
+    const removeSpy = spyOn(fs, "rmSync").mockImplementation((path, removeOptions) => {
+      realRemove(path, removeOptions);
+      if (String(path) === target) write(join(target, "SKILL.md"), "User's own.\n");
+    });
+    try {
+      await expect(runInstall(options)).rejects.toThrow();
+    } finally {
+      removeSpy.mockRestore();
+    }
+    rmSync(source, { recursive: true });
+    await runInstall(options);
+    expect(read(join(target, "SKILL.md"))).toBe("User's own.\n");
   });
 });
