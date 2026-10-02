@@ -58,13 +58,54 @@ function subagentFrontmatter(agent: ParsedAgent): string {
   if (model) data.model = model;
 
   const allowedTools = mapTools(fm.tools, "claude");
-  // Claude reads an omitted `tools` as "inherit everything" and an empty one as a launch error,
-  // so an all-false canonical object becomes a deny-list instead.
+  // Empty allowlists fail to launch; deny the documented tools: https://code.claude.com/docs/en/tools-reference
   const denyAll = typeof fm.tools === "object" && allowedTools.length === 0;
   const disallowedTools = [
     ...(claudePlatform?.disallowedTools ?? []),
     ...(fm.toolPolicy?.avoid ?? []),
-    ...(denyAll ? [...allMappedToolNames("claude"), "Agent", "mcp__*"] : []),
+    ...(denyAll
+      ? [
+          ...allMappedToolNames("claude"),
+          "Agent",
+          "Artifact",
+          "AskUserQuestion",
+          "CronCreate",
+          "CronDelete",
+          "CronList",
+          "EndConversation",
+          "EnterPlanMode",
+          "EnterWorktree",
+          "ExitPlanMode",
+          "ExitWorktree",
+          "ListAgents",
+          "ListMcpResourcesTool",
+          "LSP",
+          "Monitor",
+          "PowerShell",
+          "PushNotification",
+          "ReadMcpResourceTool",
+          "RemoteTrigger",
+          "ReportFindings",
+          "ScheduleWakeup",
+          "SendFeedback",
+          "SendMessage",
+          "SendUserFile",
+          "ShareOnboardingGuide",
+          "Skill",
+          "SubagentHandback",
+          "TaskCreate",
+          "TaskGet",
+          "TaskList",
+          "TaskOutput",
+          "TaskStop",
+          "TaskUpdate",
+          "TodoWrite",
+          "ToolSearch",
+          "WaitForMcpServers",
+          "Workflow",
+          "mcp__*",
+        ]
+      : []),
   ];
 
   if (allowedTools.length > 0) data.tools = allowedTools.join(", ");

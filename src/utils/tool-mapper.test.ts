@@ -87,6 +87,7 @@ describe("mapOpencodeTools", () => {
       bash: false,
       webfetch: true,
       websearch: true,
+      "playwright_*": true,
     });
   });
 
@@ -94,6 +95,7 @@ describe("mapOpencodeTools", () => {
     expect(mapOpencodeTools({ ...empty, agent: ["reviewer"] }).task).toBe(true);
     expect(mapOpencodeTools({ ...empty, agent: false }).task).toBe(false);
     expect(mapOpencodeTools(empty)).not.toHaveProperty("task");
+    expect(mapOpencodeTools({ ...empty, agent: [] }).task).toBe(false);
   });
 
   it("turns the string form into an allowlist", () => {
@@ -103,4 +105,20 @@ describe("mapOpencodeTools", () => {
       ["bash", true],
     ]);
   });
+});
+
+it("denies arbitrary OpenCode tools when all canonical flags are false", () => {
+  const tools = mapOpencodeTools(empty);
+  const allowed = (name: string) =>
+    Object.entries(tools).reduce(
+      (value, [pattern, enabled]) =>
+        new RegExp("^" + pattern.replaceAll("*", ".*") + "$").test(name) ? enabled : value,
+      true,
+    );
+  expect(["custom_mcp_tool", "playwright_navigate", "lsp", "skill", "task"].filter(allowed)).toEqual([]);
+});
+
+it("maps OpenCode browser permissions to Playwright MCP tools", () => {
+  expect(mapOpencodeTools({ ...empty, read: true })["playwright_*"]).toBe(false);
+  expect(mapOpencodeTools({ ...empty, browser: true })["playwright_*"]).toBe(true);
 });

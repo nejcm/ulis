@@ -4,7 +4,7 @@ export const GOLDEN_ARTIFACTS = {
 name: worker
 description: "A minimal test agent, focus: safe changes"
 model: claude-haiku-4-5-20251001
-tools: "Read, Glob, Grep, Edit"
+tools: "Read, Glob, Grep, Edit, NotebookEdit"
 disallowedTools: Bash
 permissionMode: plan
 hooks:
@@ -59,7 +59,8 @@ You are a minimal worker agent used for testing.
         "edit": true,
         "bash": false,
         "webfetch": false,
-        "websearch": false
+        "websearch": false,
+        "playwright_*": false
       },
       "permission": {
         "edit": "deny",
@@ -78,7 +79,7 @@ You are a minimal worker agent used for testing.
         "./mcp-server.js"
       ],
       "environment": {
-        "API_KEY": "\${TEST_API_KEY}"
+        "API_KEY": "{env:TEST_API_KEY}"
       }
     },
     "test-remote": {

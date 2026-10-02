@@ -69,3 +69,17 @@ describe("buildCodexConfigToml", () => {
     });
   });
 });
+
+it("keeps MCP args literal, including variable placeholders", () => {
+  expect(
+    configFor({ local: { type: "local", command: "server", args: ["${TOKEN}", "prefix-${TOKEN}"] } }).local!.args,
+  ).toEqual(["${TOKEN}", "prefix-${TOKEN}"]);
+});
+
+it("uses the native remote URL even when localFallback exists", () => {
+  expect(
+    configFor({
+      remote: { type: "remote", url: "https://mcp.example.com/mcp", localFallback: { command: "fallback", args: [] } },
+    }).remote,
+  ).toEqual({ url: "https://mcp.example.com/mcp" });
+});

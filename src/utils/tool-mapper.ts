@@ -17,7 +17,7 @@ const PLATFORM_TOOL_NAMES: Record<
   claude: {
     read: ["Read", "Glob", "Grep"],
     write: ["Write"],
-    edit: ["Edit"],
+    edit: ["Edit", "NotebookEdit"],
     bash: ["Bash"],
     search: ["WebSearch", "WebFetch"],
     browser: ["mcp__playwright__navigate", "mcp__playwright__screenshot"],
@@ -99,12 +99,23 @@ export function mapOpencodeTools(perms: ToolPermissions): Record<string, boolean
     return Object.fromEntries([["*", false], ...allowed.map((name) => [name, true])]);
   }
 
-  const tools: Record<string, boolean> = {};
+  const grantsTools =
+    perms.read ||
+    perms.write ||
+    perms.edit ||
+    perms.bash ||
+    perms.search ||
+    perms.browser ||
+    perms.agent === true ||
+    (Array.isArray(perms.agent) && perms.agent.length > 0);
+  const tools: Record<string, boolean> = grantsTools ? {} : { "*": false };
   for (const name of ["read", "glob", "grep", "list"]) tools[name] = perms.read;
   tools.edit = perms.edit || perms.write;
   tools.bash = perms.bash;
   tools.webfetch = perms.search;
   tools.websearch = perms.search;
-  if (perms.agent !== undefined) tools.task = perms.agent !== false;
+  tools["playwright_*"] = perms.browser;
+  if (perms.agent !== undefined)
+    tools.task = perms.agent === true || (Array.isArray(perms.agent) && perms.agent.length > 0);
   return tools;
 }

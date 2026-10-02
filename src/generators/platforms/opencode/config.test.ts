@@ -23,3 +23,23 @@ describe("buildOpencodeJson", () => {
     ]);
   });
 });
+
+it("uses OpenCode substitution syntax for local MCP environment", () => {
+  const config = JSON.parse(
+    buildOpencodeJson(
+      {
+        ...project,
+        mcp: {
+          servers: {
+            local: { type: "local", command: "server", env: { TOKEN: "prefix-${TOKEN}" } },
+          },
+        },
+      },
+      [],
+    ),
+  );
+  const substituted = JSON.stringify(config).replace(/\{env:([^}]+)\}/g, (_, name) =>
+    name === "TOKEN" ? "secret" : "",
+  );
+  expect(JSON.parse(substituted).mcp.local.environment.TOKEN).toBe("prefix-secret");
+});

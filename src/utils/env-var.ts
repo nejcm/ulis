@@ -3,7 +3,7 @@
  *
  * Targets:
  * - opencode_header: ${VAR} → {env:VAR}  (OpenCode remote server headers)
- * - opencode_env:    ${VAR} → ${VAR}     (OpenCode local server environment)
+ * - opencode_env:    ${VAR} → {env:VAR}  (OpenCode local server environment)
  * - codex:           ${VAR} → ${VAR}     (Codex stdio args / env values)
  * - cursor:          ${VAR} → ${env:VAR}  (Cursor mcp.json command, args, env, url, headers)
  * - claude:          ${VAR} → ${VAR}
@@ -15,11 +15,11 @@ export function translateEnvVar(
 ): string {
   return value.replace(/\$\{(\w+)\}/g, (_match, varName) => {
     switch (target) {
+      case "opencode_env":
       case "opencode_header":
         return `{env:${varName}}`;
       case "cursor":
         return `\${env:${varName}}`;
-      case "opencode_env":
       case "codex":
       case "claude":
       case "forgecode":

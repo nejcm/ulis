@@ -87,9 +87,9 @@ describe("translateEnvMap", () => {
     expect(result).toEqual({ TOKEN: "${MY_TOKEN}" });
   });
 
-  it("keeps ${VAR} as shell syntax for opencode_env", () => {
+  it("translates ${VAR} to OpenCode local environment syntax", () => {
     const result = translateEnvMap({ TOKEN: "${MY_TOKEN}" }, "opencode_env");
-    expect(result).toEqual({ TOKEN: "${MY_TOKEN}" });
+    expect(result).toEqual({ TOKEN: "{env:MY_TOKEN}" });
   });
 
   it("translates ${VAR} to {env:VAR} for opencode_header", () => {
