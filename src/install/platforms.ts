@@ -1,6 +1,6 @@
 import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import { ULIS_PROVENANCE_FILENAME } from "../config.js";
 import {
@@ -23,7 +23,7 @@ import {
 import { InstallError } from "./errors.js";
 import { backupPath, copyPlatformContents, copyToNewPath, ensureDir, readDirectoryEntries } from "./fs.js";
 import { MANAGED_PLATFORM_LAYOUTS } from "./layouts.js";
-import { ULIS_MANIFEST_FILENAME, type PlatformOwnership } from "./manifest.js";
+import { ULIS_MANIFEST_FILENAME, readManifest, type PlatformOwnership } from "./manifest.js";
 import type { InstallContext } from "./types.js";
 
 /** Enough to clear a same-second collision; a run needing more has a directory full of backups. */
@@ -46,7 +46,7 @@ export async function installOpencode(
   backupDirectory(targetDir, context);
   const preservedConfigs = capturePlatformPreservedNativeConfigs("opencode", context);
   ensureDir(targetDir);
-  writePlatformPreservedNativeConfigs("opencode", preservedConfigs, context);
+  writePlatformPreservedNativeConfigs("opencode", preservedConfigs, context, onWritten);
 
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
@@ -76,7 +76,7 @@ export async function installClaude(
   const preservedConfigs = capturePlatformPreservedNativeConfigs("claude", context);
   ensureDir(targetDir);
 
-  writePlatformPreservedNativeConfigs("claude", preservedConfigs, context);
+  writePlatformPreservedNativeConfigs("claude", preservedConfigs, context, onWritten);
 
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
@@ -94,7 +94,7 @@ export async function installCodex(context: InstallContext, onWritten?: (relativ
   backupDirectory(targetDir, context);
   const preservedConfigs = capturePlatformPreservedNativeConfigs("codex", context);
   ensureDir(targetDir);
-  writePlatformPreservedNativeConfigs("codex", preservedConfigs, context);
+  writePlatformPreservedNativeConfigs("codex", preservedConfigs, context, onWritten);
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
     onWritten,
@@ -115,7 +115,7 @@ export async function installCursor(
   const preservedConfigs = capturePlatformPreservedNativeConfigs("cursor", context);
   ensureDir(targetDir);
 
-  writePlatformPreservedNativeConfigs("cursor", preservedConfigs, context);
+  writePlatformPreservedNativeConfigs("cursor", preservedConfigs, context, onWritten);
 
   copyPlatformContents(sourceDir, targetDir, {
     logger: context.logger,
@@ -139,7 +139,7 @@ export async function installForgecode(
   backupFile(targetMcp, context);
   const preservedConfigs = capturePlatformPreservedNativeConfigs("forgecode", context);
   ensureDir(targetForgeDir);
-  writePlatformPreservedNativeConfigs("forgecode", preservedConfigs, context);
+  writePlatformPreservedNativeConfigs("forgecode", preservedConfigs, context, onWritten);
 
   if (existsSync(sourceForgeDir)) {
     copyPlatformContents(sourceForgeDir, targetForgeDir, {
@@ -241,7 +241,11 @@ function capturePlatformPreservedNativeConfigs(
   context: InstallContext,
 ): readonly CapturedPreservedNativeConfig[] {
   try {
-    return capturePreservedNativeConfigs(platform, context);
+    const targetDir = platformConfigDir(platform, context.destBase, context.userHome);
+    return capturePreservedNativeConfigs(platform, {
+      ...context,
+      managedMcpServers: readManifest(platform, targetDir)?.mcpServers,
+    });
   } catch (error) {
     if (error instanceof PreservedNativeConfigParseError) {
       throw new InstallError(error.message, error);
@@ -267,9 +271,13 @@ function writePlatformPreservedNativeConfigs(
   platform: Platform,
   entries: readonly CapturedPreservedNativeConfig[],
   context: InstallContext,
+  onWritten?: (relativePath: string) => void,
 ): void {
   try {
-    writePreservedNativeConfigs(entries, context.logger);
+    for (const entry of entries) {
+      writePreservedNativeConfigs([entry], context.logger);
+      if (existsSync(entry.generatedPath)) onWritten?.(basename(entry.generatedPath));
+    }
   } catch (error) {
     // Same treatment the parse error gets above: a diagnosable message reaches the user intact.
     if (error instanceof UnsafeNativeConfigPathError) throw new InstallError(error.message, error);

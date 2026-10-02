@@ -8,11 +8,14 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { isAbsolute, join, relative } from "node:path";
+import { basename, isAbsolute, join, relative } from "node:path";
 
 import type { Logger } from "../build.js";
 import { ULIS_PROVENANCE_FILENAME } from "../config.js";
 import { platformConfigDir, type Platform } from "../platforms.js";
+import { readMergeableConfig } from "../utils/config-merge.js";
+import { getConfigPath, isPlainObject } from "../utils/config-paths.js";
+import { getPreservedNativeConfigEntries } from "../utils/preserved-native-configs.js";
 import { InstallError } from "./errors.js";
 import { ensureDir, filesystemIdentity, removePath } from "./fs.js";
 import { MANAGED_PLATFORM_LAYOUTS, type ManagedPlatformLayout } from "./layouts.js";
@@ -37,6 +40,8 @@ export interface OwnershipManifest {
   readonly agents: readonly string[];
   readonly skills: readonly string[];
   readonly rootEntries: readonly string[] | undefined;
+  readonly mcpServers?: readonly string[];
+  readonly mcpConfig?: string;
 }
 
 export interface PlatformOwnership {
@@ -58,7 +63,7 @@ export function preflightOwnership(
     ownership.set(platform, {
       targetDir,
       previous: readManifest(platform, targetDir),
-      current: collectGeneratedManifest(platform, outputDir),
+      current: collectGeneratedManifest(platform, outputDir, destBase, userHome),
     });
   }
   for (const [platform, entry] of ownership) validateManagedDestinations(platform, entry, prune);
@@ -98,7 +103,10 @@ export function recordPartialOwnership(
 ): void {
   const { previous, current } = ownership;
   const reached = (entries: readonly string[] | undefined) => (entries ?? []).filter((entry) => written.has(entry));
-  if (reached(current.agents).length + reached(current.skills).length + reached(current.rootEntries).length === 0) {
+  if (
+    reached(current.agents).length + reached(current.skills).length + reached(current.rootEntries).length === 0 &&
+    !(current.mcpConfig && written.has(current.mcpConfig))
+  ) {
     return;
   }
   const union = (before: readonly string[] | undefined, after: readonly string[] | undefined) => [
@@ -109,11 +117,17 @@ export function recordPartialOwnership(
     agents: union(previous?.agents, current.agents),
     skills: union(previous?.skills, current.skills),
     rootEntries: union(previous?.rootEntries, current.rootEntries),
+    mcpServers: [
+      ...new Set([
+        ...(previous?.mcpServers ?? []),
+        ...(current.mcpConfig && written.has(current.mcpConfig) ? (current.mcpServers ?? []) : []),
+      ]),
+    ].sort(),
   });
   logger?.info(`[ownership] ${platform}: install failed; recorded the entries it wrote, nothing pruned`);
 }
 
-function readManifest(platform: Platform, targetDir: string): OwnershipManifest | undefined {
+export function readManifest(platform: Platform, targetDir: string): OwnershipManifest | undefined {
   const manifestPath = join(targetDir, ULIS_MANIFEST_FILENAME);
   if (!existsSync(manifestPath)) return;
 
@@ -143,10 +157,21 @@ function readManifest(platform: Platform, targetDir: string): OwnershipManifest 
   const skills = validatePaths(platform, "skills", raw.skills, manifestPath);
   const rootEntries =
     raw.version === 1 ? undefined : validateRootEntries(raw.rootEntries as readonly unknown[], manifestPath);
-  return { version: raw.version, agents, skills, rootEntries };
+  if (
+    raw.mcpServers !== undefined &&
+    (!Array.isArray(raw.mcpServers) || raw.mcpServers.some((name) => typeof name !== "string"))
+  ) {
+    throw new InstallError(`Invalid MCP ownership data at ${manifestPath}: expected server names`);
+  }
+  return { version: raw.version, agents, skills, rootEntries, mcpServers: raw.mcpServers as string[] | undefined };
 }
 
-function collectGeneratedManifest(platform: Platform, outputDir: string): OwnershipManifest {
+function collectGeneratedManifest(
+  platform: Platform,
+  outputDir: string,
+  destBase: string,
+  userHome: string,
+): OwnershipManifest {
   const platformOutput = join(outputDir, platform);
   const layout = MANAGED_PLATFORM_LAYOUTS[platform];
   const nativeRoot = join(platformOutput, ...layout.nativeRoot);
@@ -156,8 +181,17 @@ function collectGeneratedManifest(platform: Platform, outputDir: string): Owners
   });
   const skills = listNames(join(nativeRoot, "skills"), "directory").map((name) => `skills/${name}`);
 
+  const mcpEntry = getPreservedNativeConfigEntries(platform, { outputDir, destBase, userHome }).find(
+    (entry) => entry.mcpKey,
+  );
+  const mcpServers =
+    mcpEntry && existsSync(mcpEntry.generatedPath)
+      ? getConfigPath(readMergeableConfig(mcpEntry.generatedPath), [mcpEntry.mcpKey!])
+      : undefined;
   return {
     version: MANIFEST_VERSION,
+    mcpServers: isPlainObject(mcpServers) ? Object.keys(mcpServers).sort() : [],
+    mcpConfig: mcpEntry ? basename(mcpEntry.generatedPath) : undefined,
     agents: validatePaths(platform, "agents", agents, platformOutput),
     skills: validatePaths(platform, "skills", skills, platformOutput),
     rootEntries: validateRootEntries(listManagedRootFiles(platformOutput, layout), platformOutput),
@@ -314,7 +348,10 @@ function writeManifestAtomic(targetDir: string, manifest: OwnershipManifest): vo
     // `wx`: exclusive create, so a symlink planted at the temporary path is refused rather than
     // written through. The name carries a pid and a timestamp, which makes it hard to guess but not
     // impossible to observe.
-    writeFileSync(temporaryPath, `${JSON.stringify(manifest, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
+    writeFileSync(temporaryPath, `${JSON.stringify({ ...manifest, mcpConfig: undefined }, null, 2)}\n`, {
+      encoding: "utf8",
+      flag: "wx",
+    });
     renameSync(temporaryPath, manifestPath);
   } catch (error) {
     rmSync(temporaryPath, { force: true });

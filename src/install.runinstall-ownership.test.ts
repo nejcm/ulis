@@ -437,6 +437,7 @@ describe("runInstall", () => {
       const manifest = JSON.parse(read(join(projectDir, configDir, ".ulis-manifest.json")));
       expect(manifest).toEqual({
         version: 3,
+        mcpServers: [],
         agents: [],
         skills: [],
         rootEntries: expect.any(Array),

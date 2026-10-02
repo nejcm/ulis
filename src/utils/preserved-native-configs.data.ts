@@ -11,6 +11,7 @@ export const PRESERVED_NATIVE_CONFIGS = [
     generatedPath: (context) => join(context.outputDir, "opencode", "opencode.json"),
     targetPath: (context) => join(platformConfigDir("opencode", context.destBase, context.userHome), "opencode.json"),
     preservedPaths: [["mcp"]],
+    mcpKey: "mcp",
   },
   {
     platform: "claude",
@@ -63,6 +64,7 @@ export const PRESERVED_NATIVE_CONFIGS = [
         ? join(context.destBase, ".claude.json")
         : join(context.destBase, ".mcp.json"),
     preservedPaths: [["mcpServers"]],
+    mcpKey: "mcpServers",
     ownership: (context) => (isSamePath(context.destBase, context.userHome) ? "paths" : "file"),
     overlay: (context) => (isSamePath(context.destBase, context.userHome) ? "json" : undefined),
   },
@@ -73,6 +75,7 @@ export const PRESERVED_NATIVE_CONFIGS = [
     generatedPath: (context) => join(context.outputDir, "codex", "config.toml"),
     targetPath: (context) => join(platformConfigDir("codex", context.destBase, context.userHome), "config.toml"),
     preservedPaths: [["projects"], ["hooks"], ["mcp_servers"], ["tui"], ["notice"], ["features"]],
+    mcpKey: "mcp_servers",
     overlay: "toml",
   },
   {
@@ -82,6 +85,7 @@ export const PRESERVED_NATIVE_CONFIGS = [
     generatedPath: (context) => join(context.outputDir, "cursor", "mcp.json"),
     targetPath: (context) => join(platformConfigDir("cursor", context.destBase, context.userHome), "mcp.json"),
     preservedPaths: [["mcpServers"]],
+    mcpKey: "mcpServers",
   },
   {
     platform: "forgecode",
@@ -91,6 +95,7 @@ export const PRESERVED_NATIVE_CONFIGS = [
       join(context.outputDir, "forgecode", resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project), ".mcp.json"),
     targetPath: (context) => join(platformConfigDir("forgecode", context.destBase, context.userHome), ".mcp.json"),
     preservedPaths: [["mcpServers"]],
+    mcpKey: "mcpServers",
   },
   {
     platform: "forgecode",

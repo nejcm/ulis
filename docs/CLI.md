@@ -89,7 +89,7 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 | `-y`, `--yes`            | Skip the "about to overwrite" confirmation prompt — **and the remote-source trust gate**, for a source this run resolves itself. It does **not** override the `--skip-rebuild` refusal below. See [Remote Sources](/guide/remote-sources#the-trust-gate).                |
 | `--skip-rebuild`         | Don't rebuild — install whatever is already under `<source>/generated/`. Refused (`-y` included) if that output was built from a remote source: there is no clone left to preview, so re-run with `--preset <url>` instead. See [Remote Sources](/guide/remote-sources). |
 | `--backup`               | Copy each existing platform dir to `<dir>.backup.YYYYMMDD_HHMMSS` before writing.                                                                                                                                                                                        |
-| `--no-prune`             | Keep agents and local skills from the previous ULIS install; retained stale entries become unmanaged.                                                                                                                                                                    |
+| `--no-prune`             | Keep agents, local skills, and MCP servers from the previous ULIS install; retained stale entries become unmanaged.                                                                                                                                                      |
 | `--preset <names>`       | Same resolution as `ulis build --preset` (user-global directory, then bundled), or a git URL.                                                                                                                                                                            |
 | `--runner <npx\|bunx>`   | Package runner used for `extensions.yaml` entries. `npx` or `bunx`. Overrides `runner` in `config.yaml`. Default: auto-detect (`bunx` if present).                                                                                                                       |
 | `--skip-extensions`      | Skip running entries from `extensions.yaml`. Useful in CI where network installs are not desired.                                                                                                                                                                        |
@@ -107,9 +107,9 @@ ulis install [-g | --global] [--source <path>] [--target <platforms>]
 | Cursor    | generated `agents/` and `skills/` entries by name                           | `mcp.json` `mcpServers`                                                                                        |
 | ForgeCode | generated `.forge/agents` and `.forge/skills` entries by name; `AGENTS.md`  | `.forge/.mcp.json` `mcpServers`, `.forge.toml`                                                                 |
 
-Install records generated agents, local skills, and root entries in `.ulis-manifest.json` at each selected platform config root. Version 1 manifests migrate without sweeping root entries. On the first manifest-aware install, ULIS adopts the current set and removes nothing. Later installs remove previously tracked paths that are no longer generated, including platform-disabled entries, while preserving every untracked entry. Agent and skill ownership is entry-granular; OpenCode root-directory ownership is directory-granular, so pruning a stale managed root directory removes everything inside it. Manifest validation for all selected platforms completes before any destination is modified. Unselected platforms are untouched. `--no-prune` keeps stale paths but refreshes ownership to the current set. External `skills.yaml` installs are not tracked.
+Install records generated agents, local skills, root entries, and MCP server names in `.ulis-manifest.json` at each selected platform config root. Version 1 manifests migrate without sweeping root entries. On the first manifest-aware install, ULIS adopts the current set and removes nothing. Later installs remove previously tracked paths that are no longer generated, including platform-disabled entries, while preserving every untracked entry. Agent and skill ownership is entry-granular; OpenCode root-directory ownership is directory-granular, so pruning a stale managed root directory removes everything inside it. Manifest validation for all selected platforms completes before any destination is modified. Unselected platforms are untouched. `--no-prune` keeps stale paths but refreshes ownership to the current set. External `skills.yaml` installs are not tracked.
 
-For Codex `config.toml`, Claude `settings.json` / `settings.local.json`, and global `.claude.json`, the existing file is the base: generated values overwrite only matching paths, while absent values remain. Other native configs retain their allowlisted preservation rules. Raw fragments win through the generated output because raw is merged during build. If `--backup` is set, backups include the previous manifest and managed entries before pruning.
+For Codex `config.toml`, Claude `settings.json` / `settings.local.json`, and global `.claude.json`, the existing file is the base: generated values overwrite only matching paths, while absent unmanaged values remain. Removed managed MCP servers are pruned; legacy manifests without MCP server names cannot identify old servers, so those remain unmanaged until generated again. Other native configs retain their allowlisted preservation rules. Raw fragments win through the generated output because raw is merged during build. If `--backup` is set, backups include the previous manifest and managed entries before pruning.
 
 ### `.env` loading
 
@@ -196,16 +196,16 @@ ulis preset install <names...> [-g | --global] [--target <platforms>]
 
 `ulis preset install <names...>` installs selected presets **without** merging a project or global source. Names may be comma-separated (`a,b`) or repeated (`a b`) and are merged in the order given. A name may be a user-global or bundled preset directory, or a git repository URL, which is cloned for the run and then discarded — see [Remote Sources](/guide/remote-sources). Generated output is temporary and is removed after install.
 
-| Flag                     | Effect                                                                                       |
-| ------------------------ | -------------------------------------------------------------------------------------------- |
-| `-g`, `--global`         | Install to home-level platform config directories instead of the current project.            |
-| `--target <platforms>`   | Only install the listed platforms.                                                           |
-| `-y`, `--yes`            | Skip overwrite prompts **and the remote-source trust gate**; fail fast for missing presets.  |
-| `--backup`               | Copy existing platform dirs/configs before writing.                                          |
-| `--no-prune`             | Keep stale agents and local skills and relinquish their previous ULIS ownership.             |
-| `--runner <npx\|bunx>`   | Package runner for preset `extensions.yaml` entries. `npx` or `bunx`; default: auto-detect.  |
-| `--skip-extensions`      | Skip preset `extensions.yaml` entries. Preset `skills.yaml` entries still run when declared. |
-| `--skip-external-skills` | Skip installing external skills from preset `skills.yaml` entries.                           |
+| Flag                     | Effect                                                                                         |
+| ------------------------ | ---------------------------------------------------------------------------------------------- |
+| `-g`, `--global`         | Install to home-level platform config directories instead of the current project.              |
+| `--target <platforms>`   | Only install the listed platforms.                                                             |
+| `-y`, `--yes`            | Skip overwrite prompts **and the remote-source trust gate**; fail fast for missing presets.    |
+| `--backup`               | Copy existing platform dirs/configs before writing.                                            |
+| `--no-prune`             | Keep stale agents, local skills, and MCP servers and relinquish their previous ULIS ownership. |
+| `--runner <npx\|bunx>`   | Package runner for preset `extensions.yaml` entries. `npx` or `bunx`; default: auto-detect.    |
+| `--skip-extensions`      | Skip preset `extensions.yaml` entries. Preset `skills.yaml` entries still run when declared.   |
+| `--skip-external-skills` | Skip installing external skills from preset `skills.yaml` entries.                             |
 
 ---
 

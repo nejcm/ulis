@@ -9,7 +9,7 @@ import {
   serializeMergeableConfig,
   writeFileExclusively,
 } from "./config-merge.js";
-import { omitConfigPaths, pickConfigPaths, type ConfigPath } from "./config-paths.js";
+import { getConfigPath, omitConfigPaths, pickConfigPaths, type ConfigPath } from "./config-paths.js";
 import { readFile } from "./fs.js";
 import { PRESERVED_NATIVE_CONFIGS } from "./preserved-native-configs.data.js";
 
@@ -21,6 +21,8 @@ export interface PreservedNativeConfigContext {
   readonly outputDir: string;
   readonly destBase: string;
   readonly userHome: string;
+  readonly managedMcpServers?: readonly string[];
+  readonly prune?: boolean;
 }
 
 export type Ownership = "file" | "paths";
@@ -40,6 +42,7 @@ export interface PreservedNativeConfigSpec {
   readonly generatedPath: (context: PreservedNativeConfigContext) => string;
   readonly targetPath: (context: PreservedNativeConfigContext) => string;
   readonly preservedPaths: readonly ConfigPath[];
+  readonly mcpKey?: string;
   /** Preserve the complete existing object as the base, taking precedence over `ownership`. */
   readonly overlay?: OverlayMode | ((context: PreservedNativeConfigContext) => OverlayMode | undefined);
   /**
@@ -60,6 +63,7 @@ export interface PreservedNativeConfigEntry {
   readonly generatedPath: string;
   readonly targetPath: string;
   readonly preservedPaths: readonly ConfigPath[];
+  readonly mcpKey?: string;
   readonly ownership?: Ownership;
   readonly overlay?: OverlayMode;
 }
@@ -67,6 +71,7 @@ export interface PreservedNativeConfigEntry {
 export interface CapturedPreservedNativeConfig extends PreservedNativeConfigEntry {
   readonly preservedConfig: unknown | undefined;
   readonly originalContent?: string;
+  readonly prunedMcp?: boolean;
 }
 
 /**
@@ -121,6 +126,7 @@ export function getPreservedNativeConfigEntries(
       generatedPath: spec.generatedPath(context),
       targetPath: spec.targetPath(context),
       preservedPaths: spec.preservedPaths,
+      ...("mcpKey" in spec ? { mcpKey: spec.mcpKey } : {}),
       ownership,
       ...(overlay ? { overlay } : {}),
     };
@@ -133,7 +139,17 @@ export function capturePreservedNativeConfigs(
 ): readonly CapturedPreservedNativeConfig[] {
   return getPreservedNativeConfigEntries(platform, context).map((entry) => {
     const captured = capturePreservedConfig(entry);
-    return { ...entry, ...captured };
+    if (!entry.mcpKey || !context.managedMcpServers?.length) return { ...entry, ...captured };
+    const generated = existsSync(entry.generatedPath) ? readMergeableConfig(entry.generatedPath) : {};
+    const paths = context.managedMcpServers
+      .filter((name) => context.prune !== false || getConfigPath(generated, [entry.mcpKey!, name]) !== undefined)
+      .map((name) => [entry.mcpKey!, name]);
+    return {
+      ...entry,
+      ...captured,
+      preservedConfig: omitConfigPaths(captured.preservedConfig, paths),
+      prunedMcp: paths.length > 0,
+    };
   });
 }
 
@@ -225,12 +241,17 @@ function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger
     // branch can be trusted to notice one on its own.
     refuseSymlinkAt(entry.targetPath);
     if (!existsSync(entry.generatedPath)) {
-      if (entry.overlay && existsSync(entry.targetPath)) {
+      if (entry.overlay && !entry.prunedMcp && existsSync(entry.targetPath)) {
         logger?.success(`${entry.label} (preserved)`);
         return;
       }
       if (entry.preservedConfig !== undefined) {
-        writeDestinationFile(entry.targetPath, serializeMergeableConfig(entry.targetPath, entry.preservedConfig));
+        writeDestinationFile(
+          entry.targetPath,
+          entry.overlay === "toml" && entry.originalContent !== undefined
+            ? patchTomlOverlay(entry.originalContent, "", entry.preservedConfig)
+            : serializeMergeableConfig(entry.targetPath, entry.preservedConfig),
+        );
         logger?.success(`${entry.label} (preserved)`);
       } else if (existsSync(entry.targetPath)) {
         removePath(entry.targetPath);
