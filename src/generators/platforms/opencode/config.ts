@@ -101,6 +101,7 @@ export function buildOpencodeJson(project: ProjectBundle, enabledAgents: readonl
     $schema: "https://opencode.ai/config.json",
     model: OPENCODE_DEFAULT_MODEL,
     small_model: OPENCODE_SMALL_MODEL,
+    instructions: [".opencode/AGENTS.md"],
     agent: buildAgentBlock(enabledAgents),
     permission: { ...(project.permissions?.opencode?.permission ?? {}) },
     mcp: buildMcpBlock(project.mcp),

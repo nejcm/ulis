@@ -43,6 +43,9 @@ You are a minimal worker agent used for testing.
   "$schema": "https://opencode.ai/config.json",
   "model": "anthropic/sonnet",
   "small_model": "opencode/kimi-k2.5-free",
+  "instructions": [
+    ".opencode/AGENTS.md"
+  ],
   "agent": {
     "worker": {
       "description": "A minimal test agent, focus: safe changes",

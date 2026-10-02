@@ -48,6 +48,7 @@ export function buildRulesIndex(
     "",
     "The following rules contain guidelines you should apply when relevant.",
     "Read the referenced file when working in the indicated context.",
+    "Resolve relative rule paths from the directory containing this file.",
     "",
   ];
   for (const rule of enabledRules) {

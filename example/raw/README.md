@@ -35,7 +35,7 @@ Files in `raw/all/` are copied to **every** platform's generated directory.
 
 ### `all/AGENTS.md`
 
-Cross-platform agent instructions injected into every tool's config. Contains:
+Cross-platform agent instructions copied into every generated output. OpenCode loads them in project and global destinations; Codex and ForgeCode require global destinations with their default config paths. See [instruction discovery limitations](../../docs/SPEC.md#instruction-discovery-and-destination-scope). Contains:
 
 - **Communication style** — be concise, no filler phrases, no unsolicited summaries
 - **Honesty policy** — never lie, never omit, ask for clarification when unsure

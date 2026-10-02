@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { enabledAgentsFor } from "../../../parsers/agent.js";
 import { enabledRulesFor } from "../../../parsers/rule.js";
 import { enabledSkillsFor } from "../../../parsers/skill.js";
-import { PLATFORM_DIRS, resolvePlatformDirSegment } from "../../../platforms.js";
 import { fileExists } from "../../../utils/fs.js";
 import { buildRulesIndex } from "../../shared/rules-index.js";
 import { rawDirs, sourceDirs } from "../../source-dirs.js";
@@ -36,7 +35,6 @@ export function generateOpencode(project: ProjectBundle): GenerationResult {
     const result = buildRulesIndex(enabledRulesFor(project.rules, "opencode"), {
       artifactPrefix: "rules",
       indexPath: "AGENTS.md",
-      referencePrefix: join("~", resolvePlatformDirSegment(PLATFORM_DIRS.opencode.home), "rules"),
     });
     if (result) {
       artifacts.push(...result.artifacts);

@@ -90,6 +90,16 @@ Platform adapter defaults are internal to ULIS. If you need platform-native outp
 
 Capability mismatches are handled with **best-effort + comments**: if a target lacks native support for a field, the value is emitted as a comment in the generated file so reviewers can see it, and the build continues (no hard failure).
 
+### Instruction discovery and destination scope
+
+Build has no destination scope. `unsupportedPlatformRules: inject` emits rule files and appends a contextual index to generated `AGENTS.md` for OpenCode, Codex, and ForgeCode. `unsupportedPlatformRules: exclude` omits these rule files and indexes; raw instruction files still pass through.
+
+- **OpenCode:** generated `opencode.json` includes `instructions: [".opencode/AGENTS.md"]`. OpenCode searches relative instruction paths upward from the working directory to the worktree root, so this loads the project destination's index. Global `~/.config/opencode/AGENTS.md` is discovered automatically. Index references use `rules/<filename>` and explicitly resolve relative to the instruction file, so the same output works in both destinations. References are instructions for the model to read files when relevant, not automatic rule imports. A raw fragment's `instructions` array replaces the generated array; retain `.opencode/AGENTS.md` if you want the project index loaded. See [OpenCode rules](https://opencode.ai/docs/rules/) and its [instruction loader](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/session/instruction.ts).
+- **Codex:** only global `~/.codex/AGENTS.md` is discovered at the default Codex home. Project discovery checks `AGENTS.md` and `AGENTS.override.md` along the project-root-to-working-directory chain, not project `.codex/AGENTS.md`. ULIS's project index is therefore inactive in ordinary sessions. Its home-anchored references are appropriate for default global installs. Custom `CODEX_HOME` is not reflected in generated references. See [Codex discovery](https://developers.openai.com/codex/guides/agents-md).
+- **ForgeCode:** ULIS installs its generated index into `.forge/AGENTS.md`. Upstream discovers `<base_path>/AGENTS.md`, Git-root `AGENTS.md`, and working-directory `AGENTS.md`, not project `.forge/AGENTS.md`. Project installs therefore leave the index inactive. Current upstream uses `~/.forge` by default, but prefers existing legacy `~/forge` and honors `FORGE_CONFIG`; ULIS does not follow those overrides. The [current resolver](https://github.com/tailcallhq/forgecode/blob/be00c2acda3dde0bab41f7025d9f9bdb70c02bbf/crates/forge_config/src/reader.rs#L56-L83) differs from the [published docs](https://forgecode.dev/docs/forge-config/), which still describe `~/forge` as the default. See the [instruction loader](https://github.com/tailcallhq/forgecode/blob/be00c2acda3dde0bab41f7025d9f9bdb70c02bbf/crates/forge_services/src/instructions.rs#L23-L48).
+
+Codex and ForgeCode need destination-aware handling to install project instructions at a discovered path and reference the corresponding project rules. Generating for a declared scope would make build output scope-specific and require install to reject mismatched `--skip-rebuild` output. Adapting instructions at install time would keep build reusable but require preview to show the adapted content and ownership reconciliation to track root-level writes. Neither option is implemented; ULIS does not overwrite a project-root `AGENTS.md` to work around discovery.
+
 ## 2.2 Presets {#presets}
 
 **Presets** are reusable ULIS source trees. They can be merged into a build before the selected base source (`./.ulis/`, `~/.ulis/`, or `--source`), or installed by themselves with preset-only install. Each preset name resolves to a directory: `~/.ulis/presets/<name>/` is tried first, then bundled presets adjacent to the CLI package. User and bundled trees share the same on-disk layout as a normal source; optional `preset.yaml` carries display metadata only (see [Field Reference — Preset metadata](./REFERENCE.md#preset-metadata)).
@@ -310,23 +320,24 @@ Claude output always nests each entry as `{ matcher?, hooks: [{ type: command, c
 
 ## 4. Capability Matrix
 
-| Feature                              |   Claude Code   |       OpenCode       |     Codex     |   Cursor   | ForgeCode  |
-| ------------------------------------ | :-------------: | :------------------: | :-----------: | :--------: | :--------: |
-| Native agents                        |        ✓        |          ✓           |       ✓       |     ✓      |     ✓      |
-| Native skills/commands               |        ✓        |          ✓           |       ✓       |     ✓      |     ✓      |
-| Hooks (PreToolUse/PostToolUse/Stop)  |        ✓        |          —           |       —       |     —      |     —      |
-| Subagent spawning                    |        ✓        |          ✓           |    comment    |     —      |     —      |
-| Background execution                 |        ✓        |          —           |       —       |     ✓      |     —      |
-| Git worktree isolation               |        ✓        |          —           |       —       |     —      |     —      |
-| Local MCP servers                    |        ✓        |          ✓           |       ✓       |     ✓      |     ✓      |
-| Remote MCP servers                   |        ✓        |          ✓           | localFallback |     ✓      |     ✓      |
-| Fine-grained tool permissions        |        ✓        |          ✓           |       —       | allowlists | tools list |
-| `contextHints` enforcement           |     comment     |       comment        |    comment    |  comment   |  comment   |
-| `toolPolicy.avoid`                   | disallowedTools |       comment        |    comment    |  comment   |  comment   |
-| `toolPolicy.requireConfirmation`     | permissionMode  | permission.edit/bash |    comment    |  comment   |  comment   |
-| `security.permissionLevel: readonly` |    plan mode    |      deny perms      |    comment    |  comment   |  comment   |
-| `security.blockedCommands`           | PreToolUse hook |       comment        |    comment    |  comment   |  comment   |
-| `security.rateLimit`                 |     comment     | rate_limit_per_hour  |    comment    |  comment   |  comment   |
+| Feature                              |   Claude Code   |       OpenCode       |     Codex     |   Cursor   |  ForgeCode   |
+| ------------------------------------ | :-------------: | :------------------: | :-----------: | :--------: | :----------: |
+| Native agents                        |        ✓        |          ✓           |       ✓       |     ✓      |      ✓       |
+| Native skills/commands               |        ✓        |          ✓           |       ✓       |     ✓      |      ✓       |
+| Rule instruction discovery           |     native      | project/global index | global index  |   native   | global index |
+| Hooks (PreToolUse/PostToolUse/Stop)  |        ✓        |          —           |       —       |     —      |      —       |
+| Subagent spawning                    |        ✓        |          ✓           |    comment    |     —      |      —       |
+| Background execution                 |        ✓        |          —           |       —       |     ✓      |      —       |
+| Git worktree isolation               |        ✓        |          —           |       —       |     —      |      —       |
+| Local MCP servers                    |        ✓        |          ✓           |       ✓       |     ✓      |      ✓       |
+| Remote MCP servers                   |        ✓        |          ✓           | localFallback |     ✓      |      ✓       |
+| Fine-grained tool permissions        |        ✓        |          ✓           |       —       | allowlists |  tools list  |
+| `contextHints` enforcement           |     comment     |       comment        |    comment    |  comment   |   comment    |
+| `toolPolicy.avoid`                   | disallowedTools |       comment        |    comment    |  comment   |   comment    |
+| `toolPolicy.requireConfirmation`     | permissionMode  | permission.edit/bash |    comment    |  comment   |   comment    |
+| `security.permissionLevel: readonly` |    plan mode    |      deny perms      |    comment    |  comment   |   comment    |
+| `security.blockedCommands`           | PreToolUse hook |       comment        |    comment    |  comment   |   comment    |
+| `security.rateLimit`                 |     comment     | rate_limit_per_hour  |    comment    |  comment   |   comment    |
 
 **Legend:** ✓ native · comment = emitted as comment in output file · — = not emitted
 
