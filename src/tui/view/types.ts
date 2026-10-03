@@ -22,6 +22,8 @@ export type ViewRow =
       readonly tone?: Tone;
       readonly indent?: number;
       readonly consent?: "warning" | "command";
+      /** Clicking the row selects it and copies this text to the clipboard. */
+      readonly copy?: string;
     }
   | { readonly kind: "field"; readonly label: string; readonly value: string }
   | {

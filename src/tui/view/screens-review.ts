@@ -124,7 +124,7 @@ function formatInstallCommand(state: TuiState, cwd?: string, userHome?: string):
   if (state.backup) args.push("--backup");
   if (!state.prune) args.push("--no-prune");
   if (state.skipExternalSkills) args.push("--skip-external-skills");
-  return `Command: ${args.map(quoteCommandArg).join(" ")}`;
+  return args.map(quoteCommandArg).join(" ");
 }
 
 function quoteCommandArg(value: string): string {
@@ -133,6 +133,7 @@ function quoteCommandArg(value: string): string {
 
 export function installReviewView(state: TuiState, cwd?: string, userHome?: string, columns = MIN_COLUMNS): ScreenView {
   const plan = planSource(state, cwd, userHome);
+  const command = formatInstallCommand(state, cwd, userHome);
   const reviewRows: ViewRow[] = [
     field("Source", sanitizeConsentText(plan.sourceDir)),
     field("Destination", plan.destBase),
@@ -140,7 +141,7 @@ export function installReviewView(state: TuiState, cwd?: string, userHome?: stri
     field("Presets", sanitizeConsentText(formatPresets(state))),
     field("Prune", state.prune ? "Removed agents, skills and MCP servers" : "Off; stale entries become unmanaged"),
     { kind: "blank" },
-    { kind: "text", text: formatInstallCommand(state, cwd, userHome), tone: "muted" },
+    { kind: "text", text: `Command: ${command}`, tone: "muted", copy: command },
     { kind: "blank" },
     ...remoteCommandRows(state),
   ];

@@ -3,9 +3,9 @@
  * `createPane` (builds a scroll region), `fillPane` (populates it row by row) and `rowId`
  * (the id scheme both share, needed by callers to address rows by position); `createRow` and
  * `createOptionRow` are internal helpers `fillPane` uses and stay module-local. No app state -
- * callers own the pane/scroll bookkeeping (`app.ts` keeps its own `paneScrolls` map) and pass an
- * `onActivateRow` callback for the one place a row needs to reach back into app state (a mouse
- * click on an option row).
+ * callers own the pane/scroll bookkeeping (`app.ts` keeps its own `paneScrolls` map) and pass
+ * `onActivateRow` and `onCopyRow` callbacks for the places a row needs to reach back into app
+ * state (a mouse click on an option row or on a copyable text row).
  */
 import {
   BoxRenderable,
@@ -84,13 +84,14 @@ export function fillPane(
   scroll: ScrollBoxRenderable,
   paneView: ViewPane,
   onActivateRow: (index: number) => void,
+  onCopyRow: (row: TextRenderable, text: string) => void,
 ): void {
   for (const child of scroll.getChildren().slice()) {
     scroll.remove(child);
     child.destroyRecursively();
   }
   paneView.rows.forEach((row, position) => {
-    scroll.add(createRow(renderer, paneView.id, position, row, onActivateRow));
+    scroll.add(createRow(renderer, paneView.id, position, row, onActivateRow, onCopyRow));
   });
 }
 
@@ -104,6 +105,7 @@ function createRow(
   position: number,
   row: ViewRow,
   onActivateRow: (index: number) => void,
+  onCopyRow: (row: TextRenderable, text: string) => void,
 ): Renderable {
   const id = rowId(paneId, position);
 
@@ -120,14 +122,26 @@ function createRow(
         wrapMode: "word",
       });
 
-    case "text":
-      return new TextRenderable(renderer, {
+    case "text": {
+      const { copy } = row;
+      const text = new TextRenderable(renderer, {
         id,
         content: row.text,
         fg: toneColor(row.tone),
         marginLeft: row.indent ?? 0,
         wrapMode: "word",
+        selectionBg: copy == null ? undefined : THEME.selectionBg,
+        onMouseDown:
+          copy == null
+            ? undefined
+            : (event: MouseEvent) => {
+                if (event.button !== 0) return;
+                event.stopPropagation();
+                onCopyRow(text, copy);
+              },
       });
+      return text;
+    }
 
     case "field": {
       const box = new BoxRenderable(renderer, {

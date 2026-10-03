@@ -165,6 +165,7 @@ Mouse controls:
 
 - Click a row to select and confirm it.
 - Scroll the wheel over a panel to scroll it.
+- Click the install review's command line to select it and copy it to the clipboard (`wl-copy`, `xclip` or `xsel` on Linux, `pbcopy` on macOS, `clip.exe` on Windows; OSC 52 when none is available).
 
 The layout is responsive: at 96 columns or wider the plan screen shows actions to the left of the summary, below that they stack with actions below the summary, and below 50×16 the TUI shows a resize prompt until the terminal grows.
 

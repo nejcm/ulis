@@ -30,6 +30,31 @@ export function readClipboardText(): string {
   return "";
 }
 
+/** Returns whether a system clipboard tool accepted the text. */
+export function writeClipboardText(text: string): boolean {
+  for (const command of clipboardWriteCommands(runtimeDependencies.platform)) {
+    // stdout/stderr ignored: wl-copy and xclip fork a server that would hold a pipe open.
+    const result = runtimeDependencies.spawnSync(command.command, [...command.args], {
+      input: text,
+      stdio: ["pipe", "ignore", "ignore"],
+      timeout: 1_000,
+      windowsHide: true,
+    });
+    if (result.status === 0) return true;
+  }
+  return false;
+}
+
+function clipboardWriteCommands(platform: NodeJS.Platform): readonly ClipboardCommand[] {
+  if (platform === "win32") return [{ command: "clip.exe", args: [] }];
+  if (platform === "darwin") return [{ command: "pbcopy", args: [] }];
+  return [
+    { command: "wl-copy", args: [] },
+    { command: "xclip", args: ["-selection", "clipboard", "-in"] },
+    { command: "xsel", args: ["--clipboard", "--input"] },
+  ];
+}
+
 function clipboardCommands(platform: NodeJS.Platform): readonly ClipboardCommand[] {
   if (platform === "win32") {
     return [{ command: "powershell.exe", args: ["-NoProfile", "-Command", "Get-Clipboard -Raw"] }];

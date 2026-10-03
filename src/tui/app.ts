@@ -43,6 +43,8 @@ export interface TuiAppOptions {
   readonly onStateChanged?: () => void;
   /** Supplies clipboard text for the explicit Ctrl+V paste path. */
   readonly readClipboard?: () => string;
+  /** Writes text to the system clipboard; returns whether it succeeded. */
+  readonly writeClipboard?: (text: string) => boolean;
   /** Overrides the working directory used in rendered plan paths. */
   readonly cwd?: string;
   /** Overrides the home directory used in rendered plan paths. */
@@ -392,6 +394,24 @@ export class TuiApp {
     this.commit();
   }
 
+  /** Click on a copyable text row: copy its text, then select that text in the row. */
+  private copyRow(row: TextRenderable, text: string): void {
+    const copied = (this.options.writeClipboard?.(text) ?? false) || this.renderer.copyToClipboardOSC52(text);
+    this.options.state.notice = copied ? "Command copied to clipboard." : "Could not copy: no clipboard tool found.";
+    this.update();
+    // update() rebuilds every row, so select the replacement renderable rather than `row`.
+    const target = this.renderer.root.findDescendantById(row.id);
+    if (!(target instanceof TextRenderable)) return;
+    const offset = Math.max(0, target.plainText.indexOf(text));
+    this.renderer.root.calculateLayout();
+    this.renderer.root.updateLayout(0);
+    this.renderer.startSelection(target, target.x + offset, target.y);
+    this.renderer.updateSelection(target, target.x + target.width, target.y + target.height - 1, {
+      finishDragging: true,
+    });
+    this.renderer.requestRender();
+  }
+
   /** Click on a selectable row: move the cursor there, then confirm it. */
   private activateRow(index: number): void {
     const { state } = this.options;
@@ -476,7 +496,13 @@ export class TuiApp {
       if (!scroll) continue;
       const box = scroll.parent;
       if (box instanceof BoxRenderable) box.title = ` ${paneView.title} `;
-      fillPane(this.renderer, scroll, paneView, (index) => this.activateRow(index));
+      fillPane(
+        this.renderer,
+        scroll,
+        paneView,
+        (index) => this.activateRow(index),
+        (row, text) => this.copyRow(row, text),
+      );
       const region = consentScrollRegion(scroll);
       paneView.rows.forEach((row, position) => {
         if (row.kind !== "text" || row.consent == null) return;
