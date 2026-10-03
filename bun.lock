@@ -5,7 +5,7 @@
     "": {
       "name": "@nejcm/ai-config-build",
       "dependencies": {
-        "@decimalturn/toml-patch": "~2.1.0",
+        "@decimalturn/toml-patch": "~3.3.0",
         "@opentui/core": "0.5.1",
         "cac": "~7.0.0",
         "gray-matter": "~4.0.3",
@@ -81,7 +81,7 @@
 
     "@conventional-changelog/template": ["@conventional-changelog/template@1.2.1", "", {}, "sha512-TzlTVpKPjaqW6qOYjQcYUDuGsLCNsvFHVBXkYGTAnf5V37jCWrE5haKNXzz0WZUtVHjrpV76L1buANjwXMfT8w=="],
 
-    "@decimalturn/toml-patch": ["@decimalturn/toml-patch@2.1.0", "", {}, "sha512-IICXlX7hcD9lGN7k+vDXcVnOfcbOEqMpeQHRnrhnmm7tZ8HluFrSgBKLNC72fQpNXynbJTC7pjtfNCaKrKlGyA=="],
+    "@decimalturn/toml-patch": ["@decimalturn/toml-patch@3.3.0", "", {}, "sha512-xyamcHl5Jlm+KfI9Vn7k6Je+kqQ8bAmJtoWleQ7yNqUL9fwwc66+Q3bRO326U/ZLYjrVzB3irvJz8nuG+JwFdA=="],
 
     "@docsearch/css": ["@docsearch/css@3.8.2", "", {}, "sha512-y05ayQFyUmCXze79+56v/4HpycYF3uFqB78pLPrSV5ZKAlDuIAAJNhaRi8tTdRNXh05yxX/TyNnzD6LwSM89vQ=="],
 

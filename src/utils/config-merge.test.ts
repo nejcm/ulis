@@ -74,3 +74,11 @@ it("patches changed TOML dates in inline values and nested arrays of tables", ()
   expect(patched).toContain("# Keep inline");
   expect(patchTomlOverlay(patched, generated, merged)).toBe(patched);
 });
+
+it("patches an array that is both reordered and shortened", () => {
+  const existing = '[tui]\nstatus_line = ["a", "b", "c", "d", "e", "f", "g"]\nkeep = true\n';
+  const generated = '[tui]\nstatus_line = ["a", "b", "g", "e", "f"]\n';
+  const merged = { tui: { status_line: ["a", "b", "g", "e", "f"], keep: true } };
+  const patched = patchTomlOverlay(existing, generated, merged);
+  expect(configValuesEqual(parse(patched), merged)).toBe(true);
+});
