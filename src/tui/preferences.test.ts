@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { PLATFORMS } from "../platforms.js";
-import { handleTuiKey } from "./keys.js";
+import { handleCustomSourceTextInputKey, handleTuiKey } from "./keys.js";
 import {
   applyTuiPreferences,
   getTuiPreferencesPath,
@@ -209,6 +209,33 @@ describe("tui preferences", () => {
       backup: false,
       rebuild: false,
     });
+  });
+
+  it("remembers a changed install destination for every flow across restarts", () => {
+    const filePath = join(createTempRoot(), "prefs.json");
+    const cases = [
+      { flowCursor: 0, flow: "project", destinationMode: "global" },
+      { flowCursor: 1, flow: "global", destinationMode: "project" },
+      { flowCursor: 2, flow: "custom", destinationMode: "global" },
+    ] as const;
+    for (const { flowCursor, flow, destinationMode } of cases) {
+      const state = createInitialState();
+      expect(loadTuiPreferences(state, filePath)).toEqual({ canSave: true });
+      state.cursor = flowCursor;
+      handleTuiKey(state, "enter");
+      state.destinationMode = destinationMode;
+      expect(saveTuiPreferences(state, filePath)).toBeUndefined();
+
+      const restarted = createInitialState();
+      expect(loadTuiPreferences(restarted, filePath)).toEqual({ canSave: true });
+      restarted.cursor = flowCursor;
+      handleTuiKey(restarted, "enter");
+      if (flow === "custom") {
+        restarted.textInput = "/tmp/project/.ulis";
+        handleCustomSourceTextInputKey(restarted, "enter", "/tmp");
+      }
+      expect(restarted).toMatchObject({ flow, destinationMode });
+    }
   });
 
   it("stores preferences outside the .ulis source tree by default", () => {

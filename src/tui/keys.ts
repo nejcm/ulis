@@ -392,7 +392,6 @@ function commitCustomSourceIfValid(state: TuiState): boolean {
   state.customSource = value;
   state.recentCustomSources = rememberCustomSource(state.recentCustomSources, value);
   state.sourceMode = "custom";
-  state.destinationMode = "project";
   state.flow = "custom";
   state.screen = "plan";
   state.cursor = 0;

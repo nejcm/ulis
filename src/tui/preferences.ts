@@ -81,9 +81,7 @@ export function applyFlowPreferences(
   const preferences = state.flowPreferences[flow];
   if (!preferences) return;
 
-  if ((flow === "custom" || flow === "presetsOnly") && preferences.destinationMode) {
-    state.destinationMode = preferences.destinationMode;
-  }
+  if (preferences.destinationMode) state.destinationMode = preferences.destinationMode;
 
   if (preferences.recentCustomSources) {
     state.recentCustomSources = [...preferences.recentCustomSources];
