@@ -1,4 +1,4 @@
-import matter from "gray-matter";
+import { parseFrontmatter, stringifyFrontmatter } from "./safe-matter.js";
 
 export const ULIS_SKILL_FRONTMATTER_KEYS = new Set([
   "key",
@@ -20,24 +20,21 @@ export const ULIS_SKILL_FRONTMATTER_KEYS = new Set([
  */
 export function applySkillFrontmatterOverrides(md: string, extra: Record<string, unknown>): string {
   if (Object.keys(extra).length === 0) return md;
-  const parsed = matter(md);
+  const parsed = parseFrontmatter(md);
   const merged = { ...parsed.data, ...extra };
   const body = parsed.content.trim();
   if (Object.keys(merged).length === 0) return body;
-  return matter.stringify(body, merged).trim();
+  return stringifyFrontmatter(body, merged).trim();
 }
 
-/**
- * Preserve non-ULIS frontmatter and strip ULIS-only control keys.
- */
-export function toPlatformSkillMarkdown(rawSkillMd: string): string {
-  const parsed = matter(rawSkillMd);
+/** Strip ULIS control keys, preserve native frontmatter, then apply platform overrides. */
+export function toPlatformSkillMarkdown(rawSkillMd: string, extra: Record<string, unknown> = {}): string {
+  const parsed = parseFrontmatter(rawSkillMd);
   const filteredFrontmatter = Object.fromEntries(
     Object.entries(parsed.data).filter(([key]) => !ULIS_SKILL_FRONTMATTER_KEYS.has(key)),
   );
   const body = parsed.content.trim();
-  if (Object.keys(filteredFrontmatter).length === 0) {
-    return body;
-  }
-  return matter.stringify(body, filteredFrontmatter).trim();
+  const markdown =
+    Object.keys(filteredFrontmatter).length === 0 ? body : stringifyFrontmatter(body, filteredFrontmatter).trim();
+  return applySkillFrontmatterOverrides(markdown, extra);
 }

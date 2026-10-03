@@ -598,6 +598,32 @@ describe("remote install consent", () => {
     await harness.controller.shutdown(0);
   });
 
+  it("omits secret source excerpts from a remote parse failure notice", async () => {
+    const harness = await createHarness();
+    const state = harness.controller.state;
+    state.sourceMode = "custom";
+    state.customSource = url;
+    state.platforms = ["claude"];
+    installTest.setRuntimeDependencies({
+      runCommand() {
+        return { status: 0 } as never;
+      },
+      async runAsyncCommand(command: string, args: readonly string[]) {
+        if (command !== "git") return { status: 0, stdout: "", stderr: "" };
+        const dir = args.at(-1)!;
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, "config.yaml"), "version: 1\nname: remote\n");
+        writeFileSync(join(dir, "mcp.yaml"), "servers: [\n  env: { PRIVATE: TOPSECRET }\n");
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    } as never);
+    await harness.controller.handleEffect({ type: "prepareRemoteInstall", action: "install" });
+    expect(state.notice).not.toContain("TOPSECRET");
+    expect(state.notice).toContain("mcp.yaml");
+    expect(state.notice).toContain("Flow sequence");
+    expect(state.notice).toContain("at: 3:1");
+  });
+
   it("surfaces a failed clone as a notice instead of crashing", async () => {
     installTest.setRuntimeDependencies({
       runCommand(_lookup: string, args: readonly string[]) {

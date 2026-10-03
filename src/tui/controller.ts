@@ -4,7 +4,7 @@ import type { Logger } from "../build.js";
 import type { InterruptGuard } from "../utils/interrupt.js";
 import { initializeMissingSource, runTuiAction } from "./actions.js";
 import { TuiApp } from "./app.js";
-import { readClipboardText } from "./clipboard.js";
+import { readClipboardText, writeClipboardText } from "./clipboard.js";
 import { applyFlowPreferences, loadTuiPreferences, saveTuiPreferences, snapshotTuiPreferences } from "./preferences.js";
 import { listTuiPresets } from "./presets.js";
 import {
@@ -39,6 +39,8 @@ export interface TuiControllerOptions {
   readonly listPresets?: typeof listTuiPresets;
   /** Overrides clipboard reads for the explicit Ctrl+V paste path. */
   readonly readClipboard?: () => string;
+  /** Overrides clipboard writes for copying the install command. */
+  readonly writeClipboard?: (text: string) => boolean;
   /** Overrides where `.ulis-tui.json` is read from and written to. */
   readonly preferencesPath?: string;
   /** Overrides workflow execution for deterministic controller tests. */
@@ -100,6 +102,7 @@ export class TuiController {
       onEffect: (effect) => void this.handleEffect(effect),
       onStateChanged: () => this.persistPreferences(),
       readClipboard: options.readClipboard ?? readClipboardText,
+      writeClipboard: options.writeClipboard ?? writeClipboardText,
       cwd: options.cwd,
       userHome: options.userHome,
     });

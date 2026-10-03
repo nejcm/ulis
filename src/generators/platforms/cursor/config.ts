@@ -1,4 +1,5 @@
-import { mcpServersFor, translateEnvMap } from "../../../utils/mcp-block.js";
+import { translateEnvVar } from "../../../utils/env-var.js";
+import { mcpServerEnabled, mcpServersFor, translateEnvMap } from "../../../utils/mcp-block.js";
 import type { FileArtifact, ProjectBundle } from "../../types.js";
 
 export function buildCursorConfigArtifacts(project: ProjectBundle): FileArtifact[] {
@@ -6,17 +7,19 @@ export function buildCursorConfigArtifacts(project: ProjectBundle): FileArtifact
 
   const mcpServers: Record<string, unknown> = {};
   for (const [name, server] of mcpServersFor(project.mcp, "cursor")) {
+    // mcp.json documents no on/off field, so a disabled server is left out.
+    if (mcpServerEnabled(server) === false) continue;
     if (server.type === "remote" && server.url) {
-      const entry: Record<string, unknown> = { url: server.url };
+      const entry: Record<string, unknown> = { url: translateEnvVar(server.url, "cursor") };
       const headers = translateEnvMap(server.headers, "cursor");
       if (headers) entry.headers = headers;
-      if (server.disabled !== undefined) entry.disabled = server.disabled;
       mcpServers[name] = entry;
     } else if (server.type === "local") {
       const entry: Record<string, unknown> = {};
-      if (server.command) entry.command = server.command;
-      if (server.args) entry.args = server.args;
-      if (server.disabled !== undefined) entry.disabled = server.disabled;
+      if (server.command) entry.command = translateEnvVar(server.command, "cursor");
+      if (server.args) entry.args = server.args.map((arg) => translateEnvVar(arg, "cursor"));
+      const env = translateEnvMap(server.env, "cursor");
+      if (env) entry.env = env;
       mcpServers[name] = entry;
     }
   }

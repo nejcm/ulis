@@ -17,8 +17,9 @@ export interface DiagnosticContext {
   readonly kind?: string;
 }
 
-export function formatDiagnostic(diagnostic: Diagnostic): string {
-  const lines = [`[${diagnostic.entity}] ${diagnostic.message}`];
+export function formatDiagnostic(diagnostic: Diagnostic, sourceExcerpts = true): string {
+  const message = sourceExcerpts ? diagnostic.message : diagnostic.message.split(/\r?\n/u)[0];
+  const lines = [`[${diagnostic.entity}] ${message}`];
   const details = [
     ["source", diagnostic.source],
     ["file", diagnostic.relativeFile ?? diagnostic.file],

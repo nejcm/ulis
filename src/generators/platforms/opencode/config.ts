@@ -1,5 +1,6 @@
 import type { ParsedAgent } from "../../../parsers/agent.js";
-import { mcpServersFor, translateEnvMap } from "../../../utils/mcp-block.js";
+import { mcpServerEnabled, mcpServersFor, translateEnvMap } from "../../../utils/mcp-block.js";
+import { mapOpencodeTools } from "../../../utils/tool-mapper.js";
 import type { ProjectBundle } from "../../types.js";
 
 const OPENCODE_DEFAULT_MODEL = "anthropic/sonnet";
@@ -29,7 +30,7 @@ function buildAgentBlock(enabledAgents: readonly ParsedAgent[]): Record<string, 
       description: agent.frontmatter.description,
       mode: ocPlatform?.mode ?? "subagent",
       model: ocModel,
-      tools: agent.frontmatter.tools,
+      tools: mapOpencodeTools(agent.frontmatter.tools),
     };
 
     if (agent.frontmatter.temperature !== undefined) entry.temperature = agent.frontmatter.temperature;
@@ -41,7 +42,7 @@ function buildAgentBlock(enabledAgents: readonly ParsedAgent[]): Record<string, 
     const sec = agent.frontmatter.security;
     const toolPolicy = agent.frontmatter.toolPolicy;
     const basePerm = ocPlatform?.permission ?? {};
-    const derivedPerm: Record<string, string> = { ...basePerm };
+    const derivedPerm: Record<string, unknown> = { ...basePerm };
 
     if (sec?.permissionLevel === "readonly") {
       derivedPerm.edit ??= "deny";
@@ -52,6 +53,10 @@ function buildAgentBlock(enabledAgents: readonly ParsedAgent[]): Record<string, 
     }
     if (sec?.requireApproval?.includes("bash") || toolPolicy?.requireConfirmation?.includes("bash")) {
       derivedPerm.bash ??= "ask";
+    }
+    const tools = agent.frontmatter.tools;
+    if (typeof tools !== "string" && Array.isArray(tools.agent)) {
+      derivedPerm.task ??= Object.fromEntries([["*", "deny"], ...tools.agent.map((name) => [name, "allow"])]);
     }
     if (Object.keys(derivedPerm).length > 0) entry.permission = derivedPerm;
 
@@ -71,7 +76,7 @@ function buildMcpBlock(mcp: ProjectBundle["mcp"]): Record<string, unknown> {
     if (server.type === "local") {
       const entry: Record<string, unknown> = {
         type: "local",
-        enabled: server.enabled ?? true,
+        enabled: mcpServerEnabled(server) ?? true,
         command: server.command ? [server.command, ...(server.args ?? [])] : undefined,
       };
       const environment = translateEnvMap(server.env, "opencode_env");
@@ -80,7 +85,7 @@ function buildMcpBlock(mcp: ProjectBundle["mcp"]): Record<string, unknown> {
     } else {
       const entry: Record<string, unknown> = {
         type: "remote",
-        enabled: server.enabled ?? true,
+        enabled: mcpServerEnabled(server) ?? true,
         url: server.url,
       };
       const headers = translateEnvMap(server.headers, "opencode_header");

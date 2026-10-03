@@ -2,14 +2,16 @@ import { existsSync, lstatSync, readFileSync, rmSync } from "node:fs";
 
 import type { Platform } from "../platforms.js";
 import {
+  configValuesEqual,
   existingFileMode,
   mergeConfigValues,
   patchTomlOverlay,
+  parseMergeableConfig,
   readMergeableConfig,
   serializeMergeableConfig,
   writeFileExclusively,
 } from "./config-merge.js";
-import { omitConfigPaths, pickConfigPaths, type ConfigPath } from "./config-paths.js";
+import { getConfigPath, omitConfigPaths, pickConfigPaths, type ConfigPath } from "./config-paths.js";
 import { readFile } from "./fs.js";
 import { PRESERVED_NATIVE_CONFIGS } from "./preserved-native-configs.data.js";
 
@@ -21,6 +23,9 @@ export interface PreservedNativeConfigContext {
   readonly outputDir: string;
   readonly destBase: string;
   readonly userHome: string;
+  readonly managedMcpServers?: readonly string[];
+  readonly managedMcpProjectServers?: readonly (readonly [string, string])[];
+  readonly prune?: boolean;
 }
 
 export type Ownership = "file" | "paths";
@@ -40,6 +45,7 @@ export interface PreservedNativeConfigSpec {
   readonly generatedPath: (context: PreservedNativeConfigContext) => string;
   readonly targetPath: (context: PreservedNativeConfigContext) => string;
   readonly preservedPaths: readonly ConfigPath[];
+  readonly mcpKey?: string;
   /** Preserve the complete existing object as the base, taking precedence over `ownership`. */
   readonly overlay?: OverlayMode | ((context: PreservedNativeConfigContext) => OverlayMode | undefined);
   /**
@@ -60,6 +66,7 @@ export interface PreservedNativeConfigEntry {
   readonly generatedPath: string;
   readonly targetPath: string;
   readonly preservedPaths: readonly ConfigPath[];
+  readonly mcpKey?: string;
   readonly ownership?: Ownership;
   readonly overlay?: OverlayMode;
 }
@@ -67,6 +74,7 @@ export interface PreservedNativeConfigEntry {
 export interface CapturedPreservedNativeConfig extends PreservedNativeConfigEntry {
   readonly preservedConfig: unknown | undefined;
   readonly originalContent?: string;
+  readonly prunedMcp?: boolean;
 }
 
 /**
@@ -121,6 +129,7 @@ export function getPreservedNativeConfigEntries(
       generatedPath: spec.generatedPath(context),
       targetPath: spec.targetPath(context),
       preservedPaths: spec.preservedPaths,
+      ...("mcpKey" in spec ? { mcpKey: spec.mcpKey } : {}),
       ownership,
       ...(overlay ? { overlay } : {}),
     };
@@ -133,7 +142,24 @@ export function capturePreservedNativeConfigs(
 ): readonly CapturedPreservedNativeConfig[] {
   return getPreservedNativeConfigEntries(platform, context).map((entry) => {
     const captured = capturePreservedConfig(entry);
-    return { ...entry, ...captured };
+    if (!entry.mcpKey) return { ...entry, ...captured };
+    const managedPaths = [
+      ...(context.managedMcpServers ?? []).map((name) => [entry.mcpKey!, name]),
+      ...(platform === "claude" && entry.overlay === "json" ? (context.managedMcpProjectServers ?? []) : []).map(
+        ([project, name]) => ["projects", project, "mcpServers", name],
+      ),
+    ];
+    if (managedPaths.length === 0) return { ...entry, ...captured };
+    const generated = existsSync(entry.generatedPath) ? readMergeableConfig(entry.generatedPath) : {};
+    const paths = managedPaths.filter(
+      (path) => context.prune !== false || getConfigPath(generated, path) !== undefined,
+    );
+    return {
+      ...entry,
+      ...captured,
+      preservedConfig: omitConfigPaths(captured.preservedConfig, paths),
+      prunedMcp: paths.length > 0,
+    };
   });
 }
 
@@ -156,7 +182,7 @@ function capturePreservedConfig(
     if (entry.overlay) {
       return {
         preservedConfig: existing,
-        ...(entry.overlay === "toml" ? { originalContent: readFile(entry.targetPath) } : {}),
+        originalContent: readFile(entry.targetPath),
       };
     }
 
@@ -166,6 +192,7 @@ function capturePreservedConfig(
         : pickConfigPaths(existing, entry.preservedPaths);
     return {
       preservedConfig: Object.keys(preserved).length > 0 ? preserved : undefined,
+      originalContent: readFile(entry.targetPath),
     };
   } catch (error) {
     throw new PreservedNativeConfigParseError(entry.targetPath, error);
@@ -178,9 +205,9 @@ function capturePreservedConfig(
  * These are the platform's real config files - the MCP servers and hooks a host agent acts on - and
  * `writeFile` follows a link at the destination, so one planted at `opencode.json` or `.claude.json`
  * made the install write wherever it pointed, with content the planter already influences since the
- * existing file is what gets preserved and merged into the result. Remove-then-exclusive-create is
- * the same pair `src/install/fs.ts` uses: the link is unlinked as a link, and the create fails
- * rather than adopting anything that appears in between.
+ * existing file is what gets preserved and merged into the result. The write goes to an exclusively
+ * created sibling that is then renamed over the target: the rename replaces a link as a link, and a
+ * failed write leaves the existing file in place.
  */
 function writeDestinationFile(filePath: string, content: string | Buffer, sourceMode?: number): void {
   refuseSymlinkAt(filePath);
@@ -200,8 +227,8 @@ function copyDestinationFile(sourcePath: string, filePath: string): void {
 /**
  * Refuse a symbolic link where a native config file belongs.
  *
- * Safety does not rest on this check: both writers above unlink and create exclusively, so neither
- * can follow a link whatever this reports. It exists to fail loudly and name the path, because a
+ * Safety does not rest on this check: both writers above create a sibling exclusively and rename it
+ * into place, so neither can follow a link whatever this reports. It exists to fail loudly and name the path, because a
  * link here is about as likely to be a dotfile manager's as an attacker's, and quietly replacing a
  * deliberate one is its own kind of data loss. That is also why an `lstat` which cannot answer is
  * simply left alone - the write below fails on the same error, so nothing is decided by the silence.
@@ -225,12 +252,21 @@ function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger
     // branch can be trusted to notice one on its own.
     refuseSymlinkAt(entry.targetPath);
     if (!existsSync(entry.generatedPath)) {
-      if (entry.overlay && existsSync(entry.targetPath)) {
+      if (
+        (entry.overlay && !entry.prunedMcp && existsSync(entry.targetPath)) ||
+        (entry.originalContent !== undefined &&
+          configValuesEqual(parseMergeableConfig(entry.targetPath, entry.originalContent), entry.preservedConfig))
+      ) {
         logger?.success(`${entry.label} (preserved)`);
         return;
       }
       if (entry.preservedConfig !== undefined) {
-        writeDestinationFile(entry.targetPath, serializeMergeableConfig(entry.targetPath, entry.preservedConfig));
+        writeDestinationFile(
+          entry.targetPath,
+          entry.overlay === "toml" && entry.originalContent !== undefined
+            ? patchTomlOverlay(entry.originalContent, "", entry.preservedConfig)
+            : serializeMergeableConfig(entry.targetPath, entry.preservedConfig),
+        );
         logger?.success(`${entry.label} (preserved)`);
       } else if (existsSync(entry.targetPath)) {
         removePath(entry.targetPath);
@@ -247,8 +283,13 @@ function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger
 
     const generatedContent = readFile(entry.generatedPath);
     const generated = readMergeableConfig(entry.generatedPath);
-    const merged = mergeConfigValues(entry.preservedConfig, generated);
-    if (entry.overlay === "toml") {
+    const merged = mergeConfigValues(generated, mergeConfigValues(entry.preservedConfig, generated));
+    if (
+      entry.originalContent !== undefined &&
+      configValuesEqual(parseMergeableConfig(entry.targetPath, entry.originalContent), merged)
+    ) {
+      writeDestinationFile(entry.targetPath, entry.originalContent);
+    } else if (entry.overlay === "toml") {
       const existingContent = entry.originalContent ?? readFile(entry.targetPath);
       writeDestinationFile(entry.targetPath, patchTomlOverlay(existingContent, generatedContent, merged));
     } else {

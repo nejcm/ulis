@@ -4,13 +4,15 @@
 // absent" lives here (not with the Codex TOML-merge tests) because it is part of this same
 // generated-config-absent contract, mirroring the neighboring OpenCode absent-config tests.
 import { afterEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { type Logger } from "./build.js";
 import { __test, runInstall } from "./install.js";
+import { PLATFORMS } from "./platforms.js";
 import { cleanupInstallTempRoots, createTempRoot, read, silentLogger, write } from "./test-utils/install.js";
-import { readMergeableConfig } from "./utils/config-merge.js";
+import { readMergeableConfig, serializeMergeableConfig } from "./utils/config-merge.js";
+import { getPreservedNativeConfigEntries } from "./utils/preserved-native-configs.js";
 
 afterEach(() => {
   __test.resetRuntimeDependencies();
@@ -18,6 +20,212 @@ afterEach(() => {
 });
 
 describe("runInstall", () => {
+  it.each(["codex", "forgecode"] as const)(
+    "preserves TOML dates across fresh, overlay and repeated installs for %s",
+    async (platform) => {
+      const root = createTempRoot();
+      const sourceDir = join(root, ".ulis");
+      const outputDir = join(sourceDir, "generated");
+      const destBase = join(root, "project");
+      const userHome = join(root, "home");
+      const entry = getPreservedNativeConfigEntries(platform, { outputDir, destBase, userHome }).find(
+        (entry) => entry.overlay === "toml",
+      )!;
+      const dates =
+        "expiry = 2026-10-02T00:00:00Z\r\noffset = 2026-10-02T08:00:00+08:00\r\nlocal_datetime = 2026-10-02T00:00:00\r\nlocal_date = 2026-10-02\r\nlocal_time = 00:00:00\r\narray = [2026-10-02, 00:00:00]\r\ninline = { expiry = 2026-10-02T00:00:00 }\r\n";
+      const original = `# Keep dates and formatting\r\nmodel = 'old'\r\n${dates}`;
+      write(join(sourceDir, "config.yaml"), "version: 1\nname: test\n");
+      write(entry.generatedPath, original);
+      const options = {
+        sourceDir,
+        outputDir,
+        destBase,
+        userHome,
+        platforms: [platform],
+        rebuild: false,
+        installSkills: false,
+        installExtensions: false,
+        logger: silentLogger,
+      };
+      await runInstall(options);
+      expect(read(entry.targetPath)).toBe(original);
+      await runInstall(options);
+      expect(read(entry.targetPath)).toBe(original);
+      const unmanaged =
+        platform === "codex" ? "\r\n[mcp_servers.unmanaged]\r\ncommand = 'keep'\r\nexpiry = 2026-10-02\r\n" : "";
+      write(entry.targetPath, original + unmanaged);
+      const managed = platform === "codex" ? "\r\n[mcp_servers.managed]\r\ncommand = 'generated'\r\n" : "";
+      write(entry.generatedPath, original.replace("'old'", "'new'") + managed);
+      await runInstall(options);
+      const overlay = read(entry.targetPath);
+      expect(overlay.startsWith(original.replace("'old'", "'new'"))).toBe(true);
+      expect(overlay).toContain(unmanaged);
+      await runInstall(options);
+      expect(read(entry.targetPath)).toBe(overlay);
+      write(entry.generatedPath, original.replace("'old'", "'new'"));
+      await runInstall(options);
+      expect(read(entry.targetPath)).toBe(original.replace("'old'", "'new'") + unmanaged);
+      await runInstall(options);
+      expect(read(entry.targetPath)).toBe(original.replace("'old'", "'new'") + unmanaged);
+    },
+  );
+
+  it.each(["codex", "forgecode"] as const)(
+    "overlays distinct TOML date types at the same instant for %s",
+    async (platform) => {
+      const root = createTempRoot();
+      const sourceDir = join(root, ".ulis");
+      const outputDir = join(sourceDir, "generated");
+      const destBase = join(root, "project");
+      const userHome = join(root, "home");
+      const entry = getPreservedNativeConfigEntries(platform, { outputDir, destBase, userHome }).find(
+        (entry) => entry.overlay === "toml",
+      )!;
+      write(join(sourceDir, "config.yaml"), "version: 1\nname: test\n");
+      const options = {
+        sourceDir,
+        outputDir,
+        destBase,
+        userHome,
+        platforms: [platform],
+        rebuild: false,
+        installSkills: false,
+        installExtensions: false,
+        logger: silentLogger,
+      };
+      write(entry.targetPath, "expiry = 2026-10-02T00:00:00Z\n");
+      for (const value of ["2026-10-02T00:00:00", "2026-10-02", "2026-10-02T08:00:00+08:00"]) {
+        write(entry.generatedPath, `expiry = ${value}\n`);
+        await runInstall(options);
+        const first = read(entry.targetPath);
+        expect(serializeMergeableConfig(entry.targetPath, readMergeableConfig(entry.targetPath))).toBe(
+          serializeMergeableConfig(entry.generatedPath, readMergeableConfig(entry.generatedPath)),
+        );
+        await runInstall(options);
+        expect(read(entry.targetPath)).toBe(first);
+      }
+    },
+  );
+
+  it.each(["absent", "fresh", "overlay"])("preserves commented CRLF ForgeCode config (%s)", async (mode) => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const destBase = join(root, "project");
+    const generatedPath = join(outputDir, "forgecode", ".forge.toml");
+    const targetPath = join(destBase, ".forge", ".forge.toml");
+    const original =
+      "# User limits\r\nmax_conversations = 100 # Keep this\r\n\r\n[updates] # User updates\r\nfrequency = 'daily'\r\n";
+    write(join(sourceDir, "config.yaml"), "version: 1\nname: test\n");
+    if (mode !== "absent") write(generatedPath, mode === "fresh" ? original : "max_conversations = 200\n");
+    if (mode !== "fresh") write(targetPath, original);
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase,
+      userHome: join(root, "home"),
+      platforms: ["forgecode"] as const,
+      rebuild: false,
+      installSkills: false,
+      installExtensions: false,
+      logger: silentLogger,
+    };
+    await runInstall(options);
+    const first = read(targetPath);
+    expect(first).toBe(mode === "overlay" ? original.replace("= 100", "= 200") : original);
+    await runInstall(options);
+    expect(read(targetPath)).toBe(first);
+  });
+
+  it.each([...PLATFORMS])("preserves fresh and unchanged native config bytes for %s", async (platform) => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const userHome = join(root, "home");
+    const entries = getPreservedNativeConfigEntries(platform, { outputDir, destBase: userHome, userHome });
+    write(join(sourceDir, "config.yaml"), "version: 1\nname: test\n");
+    const contents = entries.map((entry) => {
+      const value = entry.mcpKey ? { [entry.mcpKey]: { unmanaged: { command: "keep" } } } : { theme: "dark" };
+      const content = serializeMergeableConfig(entry.generatedPath, value).replace(/\n/g, "\r\n") + "\r\n";
+      write(entry.generatedPath, content);
+      return content;
+    });
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase: userHome,
+      userHome,
+      platforms: [platform],
+      rebuild: false,
+      installSkills: false,
+      installExtensions: false,
+      logger: silentLogger,
+    };
+    await runInstall(options);
+    expect(entries.map((entry) => read(entry.targetPath))).toEqual(contents);
+    await runInstall(options);
+    expect(entries.map((entry) => read(entry.targetPath))).toEqual(contents);
+    for (const entry of entries) rmSync(entry.generatedPath);
+    await runInstall({ ...options, prune: false });
+    expect(entries.map((entry) => read(entry.targetPath))).toEqual(contents);
+  });
+
+  it.each([
+    { global: false, existing: false },
+    { global: true, existing: false },
+    { global: false, existing: true },
+    { global: true, existing: true },
+  ])("installs every native config byte-identically twice (%j)", async ({ global, existing }) => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const userHome = join(root, "home");
+    const destBase = global ? userHome : join(root, "project");
+    cpSync(join(import.meta.dir, "../example"), sourceDir, { recursive: true });
+    write(join(sourceDir, "raw", "claude", "settings.local.json"), '{"permissions":{"allow":["Bash(ls:*)"]}}');
+    write(join(sourceDir, "raw", "forgecode", ".forge.toml"), "max_conversations = 200\n");
+    const entries = PLATFORMS.flatMap((platform) =>
+      getPreservedNativeConfigEntries(platform, { outputDir, destBase, userHome }),
+    );
+    if (existing) {
+      for (const entry of entries) {
+        const value = entry.mcpKey
+          ? { [entry.mcpKey]: { unmanaged: { command: "keep" } } }
+          : entry.overlay
+            ? { hooks: { unmanaged: [] } }
+            : { updates: { channel: "stable" } };
+        write(entry.targetPath, serializeMergeableConfig(entry.targetPath, value));
+      }
+    }
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase,
+      userHome,
+      platforms: [...PLATFORMS],
+      rebuild: true,
+      installSkills: false,
+      installExtensions: false,
+      logger: silentLogger,
+    };
+    await runInstall(options);
+    const snapshot = () =>
+      readdirSync(destBase, { recursive: true })
+        .map(String)
+        .sort()
+        .filter((path) => statSync(join(destBase, path)).isFile())
+        .map((path) => [path, read(join(destBase, path))]);
+    const first = snapshot();
+    await runInstall(options);
+    expect(snapshot()).toEqual(first);
+    if (existing) {
+      for (const entry of entries.filter((entry) => entry.mcpKey)) {
+        const config = readMergeableConfig(entry.targetPath) as Record<string, Record<string, unknown>>;
+        expect(config[entry.mcpKey!]?.unmanaged).toEqual({ command: "keep" });
+      }
+    }
+  });
+
   it("preserves native config across platform installs", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");

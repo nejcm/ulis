@@ -16,15 +16,18 @@ export function buildCodexAgentArtifact(agent: ParsedAgent): FileArtifact {
     sandbox_mode: _sandbox,
     nickname_candidates: _nicks,
     mcp_servers: _mcp,
+    name: nameOverride,
+    description: descriptionOverride,
+    developer_instructions: instructionsOverride,
     ...codexExtra
   } = (codexPlatform ?? {}) as Record<string, unknown>;
 
   const agentLines: string[] = [];
 
-  agentLines.push(`name = ${toTomlString(agent.name)}`);
-  agentLines.push(`description = ${toTomlString(agent.frontmatter.description)}`);
+  agentLines.push(`name = ${toTomlString(stringOr(nameOverride, agent.name))}`);
+  agentLines.push(`description = ${toTomlString(stringOr(descriptionOverride, agent.frontmatter.description))}`);
   agentLines.push("");
-  agentLines.push(`developer_instructions = ${toTomlMultilineString(agent.body)}`);
+  agentLines.push(`developer_instructions = ${toTomlMultilineString(stringOr(instructionsOverride, agent.body))}`);
   agentLines.push("");
 
   if (codexPlatform?.model) agentLines.push(`model = ${toTomlString(codexPlatform.model)}`);
@@ -46,4 +49,8 @@ export function buildCodexAgentArtifact(agent: ParsedAgent): FileArtifact {
   const policyBlock = buildPolicyCommentBlock(agent.frontmatter, "toml");
   const contents = policyBlock ? `${policyBlock}\n${agentLines.join("\n")}` : agentLines.join("\n");
   return { path: join("agents", `${agent.name}.toml`), contents };
+}
+
+function stringOr(override: unknown, generated: string): string {
+  return typeof override === "string" ? override : generated;
 }

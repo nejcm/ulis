@@ -2,7 +2,7 @@ import { join } from "node:path";
 
 import type { ParsedAgent } from "../../../parsers/agent.js";
 import { buildPolicyCommentBlock } from "../../../utils/policy-comments.js";
-import { mapTools } from "../../../utils/tool-mapper.js";
+import { allMappedToolNames, mapTools } from "../../../utils/tool-mapper.js";
 import { blockedCommandHooks } from "../../shared/security-hooks.js";
 import { partitionReservedExtras, serializeYamlFrontmatter } from "../../shared/yaml.js";
 import type { FileArtifact } from "../../types.js";
@@ -58,7 +58,55 @@ function subagentFrontmatter(agent: ParsedAgent): string {
   if (model) data.model = model;
 
   const allowedTools = mapTools(fm.tools, "claude");
-  const disallowedTools = [...(claudePlatform?.disallowedTools ?? []), ...(fm.toolPolicy?.avoid ?? [])];
+  // Empty allowlists fail to launch; deny the documented tools: https://code.claude.com/docs/en/tools-reference
+  const denyAll = typeof fm.tools === "object" && allowedTools.length === 0;
+  const disallowedTools = [
+    ...(claudePlatform?.disallowedTools ?? []),
+    ...(fm.toolPolicy?.avoid ?? []),
+    ...(denyAll
+      ? [
+          ...allMappedToolNames("claude"),
+          "Agent",
+          "Artifact",
+          "AskUserQuestion",
+          "CronCreate",
+          "CronDelete",
+          "CronList",
+          "EndConversation",
+          "EnterPlanMode",
+          "EnterWorktree",
+          "ExitPlanMode",
+          "ExitWorktree",
+          "ListAgents",
+          "ListMcpResourcesTool",
+          "LSP",
+          "Monitor",
+          "PowerShell",
+          "PushNotification",
+          "ReadMcpResourceTool",
+          "RemoteTrigger",
+          "ReportFindings",
+          "ScheduleWakeup",
+          "SendFeedback",
+          "SendMessage",
+          "SendUserFile",
+          "ShareOnboardingGuide",
+          "Skill",
+          "SubagentHandback",
+          "TaskCreate",
+          "TaskGet",
+          "TaskList",
+          "TaskOutput",
+          "TaskStop",
+          "TaskUpdate",
+          "TodoWrite",
+          "ToolSearch",
+          "WaitForMcpServers",
+          "Workflow",
+          "mcp__*",
+        ]
+      : []),
+  ];
 
   if (allowedTools.length > 0) data.tools = allowedTools.join(", ");
   if (disallowedTools.length > 0) {
@@ -95,11 +143,10 @@ function subagentFrontmatter(agent: ParsedAgent): string {
     const hooks: Record<string, unknown> = {};
     for (const [event, entries] of Object.entries(mergedHooks)) {
       if (!entries || (entries as unknown[]).length === 0) continue;
-      hooks[event] = (entries as Array<{ matcher?: string; command: string }>).map((entry) =>
-        entry.matcher
-          ? { matcher: entry.matcher, hooks: [{ type: "command", command: entry.command }] }
-          : { type: "command", command: entry.command },
-      );
+      hooks[event] = (entries as Array<{ matcher?: string; if?: string; command: string }>).map((entry) => ({
+        ...(entry.matcher ? { matcher: entry.matcher } : {}),
+        hooks: [{ type: "command", ...(entry.if ? { if: entry.if } : {}), command: entry.command }],
+      }));
     }
     data.hooks = hooks;
   }

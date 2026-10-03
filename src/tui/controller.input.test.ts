@@ -78,6 +78,25 @@ describe("TUI mouse control", () => {
     expect(harness.controller.state.sourceMode).toBe("global");
   });
 
+  it("copies and selects the install command when it is clicked", async () => {
+    const copied: string[] = [];
+    const harness = await createHarness(50, 30, {
+      cwd: "/work",
+      writeClipboard: (text) => copied.push(text) > 0,
+    });
+    Object.assign(harness.controller.state, { screen: "installReview", cursor: 0 });
+    const frame = await harness.frame();
+    const row = frame.split("\n").findIndex((line) => line.includes("Command: ulis install"));
+    expect(row).toBeGreaterThan(0);
+
+    await harness.mockMouse.click(10, row);
+    await harness.renderOnce();
+    expect(copied).toEqual([expect.stringMatching(/^ulis install --source \S+ --target \S+ --yes/)]);
+    expect(harness.renderer.getSelection()?.getSelectedText()).toBe(copied[0]);
+    expect(harness.controller.state.screen).toBe("installReview");
+    expect(await harness.frame()).toContain("Command copied to clipboard.");
+  });
+
   it("scrolls a pane with the wheel without changing the cursor", async () => {
     const harness = await createHarness(80, 20);
     await harness.press("RETURN");

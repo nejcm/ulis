@@ -1,12 +1,12 @@
 import { existsSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 
-import matter from "gray-matter";
 import { ZodError, type ZodSchema } from "zod";
 
 import { deriveDiagnosticOrigin, formatCause, suggestFix } from "../diagnostics.js";
 import type { Diagnostic, DiagnosticOrigin } from "../types.js";
 import { readFile } from "../utils/fs.js";
+import { parseFrontmatter } from "../utils/safe-matter.js";
 
 export interface ParseErrorOptions {
   readonly source?: string;
@@ -149,7 +149,7 @@ export function readMarkdownDir<TFrontmatter, TItem>(
 }
 
 export function parseMarkdownFrontmatter(raw: string) {
-  const parsed = matter(raw);
+  const parsed = parseFrontmatter(raw);
   assertSafeYamlFrontmatter(parsed.data);
   return parsed;
 }
@@ -159,7 +159,11 @@ function assertSafeYamlFrontmatter(
   path: PropertyKey[] = [],
   ancestors: WeakSet<object> = new WeakSet(),
   depth = 0,
+  budget = { remaining: 10_000 },
 ): void {
+  if (--budget.remaining < 0) {
+    throw new ZodError([{ code: "custom", path, message: "YAML frontmatter cannot exceed 10000 node visits." }]);
+  }
   if (depth > 100) {
     throw new ZodError([{ code: "custom", path, message: "YAML frontmatter cannot exceed 100 levels." }]);
   }
@@ -174,7 +178,7 @@ function assertSafeYamlFrontmatter(
   ancestors.add(value);
   try {
     for (const [key, child] of Object.entries(value)) {
-      assertSafeYamlFrontmatter(child, [...path, key], ancestors, depth + 1);
+      assertSafeYamlFrontmatter(child, [...path, key], ancestors, depth + 1, budget);
     }
   } finally {
     ancestors.delete(value);

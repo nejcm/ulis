@@ -46,55 +46,53 @@ describe("runInstall", () => {
     expect(existsSync(join(projectDir, backupName!, "agents", "managed.md"))).toBe(true);
   });
 
-  it("removes OpenCode same-name agents from the old category when the generated category changes", async () => {
-    const root = createTempRoot();
-    const sourceDir = join(root, ".ulis");
-    const outputDir = join(sourceDir, "generated");
-    const projectDir = join(root, "project");
-    const userHome = join(root, "home");
-    mkdirSync(sourceDir, { recursive: true });
-    mkdirSync(projectDir, { recursive: true });
-    mkdirSync(userHome, { recursive: true });
+  for (const prune of [true, false]) {
+    it(`${prune ? "prunes" : "keeps"} agents a previous install managed under the legacy OpenCode category dirs`, async () => {
+      const root = createTempRoot();
+      const sourceDir = join(root, ".ulis");
+      const outputDir = join(sourceDir, "generated");
+      const projectDir = join(root, "project");
+      const userHome = join(root, "home");
+      const agentsDir = join(projectDir, ".opencode", "agents");
+      mkdirSync(sourceDir, { recursive: true });
+      mkdirSync(userHome, { recursive: true });
 
-    write(join(outputDir, "opencode", "agents", "core", "worker.md"), "Generated core worker.\n");
-    write(join(outputDir, "opencode", "agents", "specialized", "reviewer.md"), "Generated specialized reviewer.\n");
-    write(join(projectDir, ".opencode", "agents", "core", "worker.md"), "Old core worker.\n");
-    write(join(projectDir, ".opencode", "agents", "core", "local.md"), "Local core agent.\n");
-    write(join(projectDir, ".opencode", "agents", "specialized", "reviewer.md"), "Old specialized reviewer.\n");
-    write(join(projectDir, ".opencode", "agents", "specialized", "local.md"), "Local specialized agent.\n");
+      write(join(outputDir, "opencode", "agents", "worker.md"), "Generated worker.\n");
+      write(join(agentsDir, "core", "worker.md"), "Old core worker.\n");
+      write(join(agentsDir, "core", "local.md"), "Local core agent.\n");
+      write(join(agentsDir, "specialized", "reviewer.md"), "Old specialized reviewer.\n");
+      write(join(agentsDir, "specialized", "local.md"), "Local specialized agent.\n");
+      write(
+        join(projectDir, ".opencode", ".ulis-manifest.json"),
+        JSON.stringify({
+          version: 3,
+          agents: ["agents/core/worker.md", "agents/specialized/reviewer.md"],
+          skills: [],
+          rootEntries: [],
+        }),
+      );
 
-    await runInstall({
-      sourceDir,
-      outputDir,
-      destBase: projectDir,
-      userHome,
-      platforms: ["opencode"],
-      rebuild: false,
-      logger: silentLogger,
+      await runInstall({
+        sourceDir,
+        outputDir,
+        destBase: projectDir,
+        userHome,
+        platforms: ["opencode"],
+        rebuild: false,
+        prune,
+        logger: silentLogger,
+      });
+
+      expect(read(join(agentsDir, "worker.md"))).toBe("Generated worker.\n");
+      expect(existsSync(join(agentsDir, "core", "worker.md"))).toBe(!prune);
+      expect(existsSync(join(agentsDir, "specialized", "reviewer.md"))).toBe(!prune);
+      expect(read(join(agentsDir, "core", "local.md"))).toBe("Local core agent.\n");
+      expect(read(join(agentsDir, "specialized", "local.md"))).toBe("Local specialized agent.\n");
+      expect(JSON.parse(read(join(projectDir, ".opencode", ".ulis-manifest.json"))).agents).toEqual([
+        "agents/worker.md",
+      ]);
     });
-
-    rmSync(join(outputDir, "opencode", "agents", "core", "worker.md"));
-    rmSync(join(outputDir, "opencode", "agents", "specialized", "reviewer.md"));
-    write(join(outputDir, "opencode", "agents", "specialized", "worker.md"), "Generated worker.\n");
-    write(join(outputDir, "opencode", "agents", "core", "reviewer.md"), "Generated reviewer.\n");
-
-    await runInstall({
-      sourceDir,
-      outputDir,
-      destBase: projectDir,
-      userHome,
-      platforms: ["opencode"],
-      rebuild: false,
-      logger: silentLogger,
-    });
-
-    expect(existsSync(join(projectDir, ".opencode", "agents", "core", "worker.md"))).toBe(false);
-    expect(read(join(projectDir, ".opencode", "agents", "core", "reviewer.md"))).toBe("Generated reviewer.\n");
-    expect(read(join(projectDir, ".opencode", "agents", "core", "local.md"))).toBe("Local core agent.\n");
-    expect(read(join(projectDir, ".opencode", "agents", "specialized", "worker.md"))).toBe("Generated worker.\n");
-    expect(existsSync(join(projectDir, ".opencode", "agents", "specialized", "reviewer.md"))).toBe(false);
-    expect(read(join(projectDir, ".opencode", "agents", "specialized", "local.md"))).toBe("Local specialized agent.\n");
-  });
+  }
 
   it("preserves unmanaged OpenCode root entries when no prior manifest exists", async () => {
     const root = createTempRoot();

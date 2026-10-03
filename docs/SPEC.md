@@ -37,7 +37,7 @@ or any recorded remote source makes install refuse before writing a destination.
 `ulis install --preset <url>` to rebuild and review the source. A root-level `generated/.ulis-provenance.json` from
 the pre-release format also refuses; only a full `ulis build` without `--target` removes that opaque legacy flag.
 
-`ulis install` deploys the generated tree to the per-platform destination (`./.claude/`, `./.forge/`, etc.). Existing unmanaged destination agents and skills are left in place unless a generated entry has the same native name. Codex `config.toml`, Claude `settings.json`, and global `.claude.json` use base-first overlays: generated values overwrite matching paths and absent native values remain. Codex TOML comments and ordering outside generated paths are preserved. Other native configs preserve their allowlisted values or files, such as MCP server maps and ForgeCode `.forge.toml`.
+`ulis install` deploys the generated tree to the per-platform destination (`./.claude/`, `./.forge/`, etc.). Existing unmanaged destination agents and skills are left in place unless a generated entry has the same native name. Codex `config.toml`, Claude `settings.json`, and global `.claude.json` use base-first overlays: generated values overwrite matching paths and absent native values remain. Codex and ForgeCode TOML comments and ordering outside generated paths are preserved. Fresh native configs are copied byte-for-byte; installs that leave the native values unchanged retain the existing bytes. Other native configs preserve their allowlisted values or files, such as MCP server maps and ForgeCode `.forge.toml`. The ownership manifest records generated top-level MCP server names across all platforms, including raw fragments, and per-project MCP servers in Claude global `~/.claude.json` raw fragments. Removed managed servers are pruned; unmanaged servers survive. `--no-prune` retains stale MCP servers and makes them unmanaged. Older manifests have no MCP ownership data, so pre-existing servers remain unmanaged until ULIS generates them again.
 
 **Why it exists:** Claude Code, OpenCode, Codex, Cursor, and ForgeCode all have incompatible config formats. Without ULIS you maintain separate, drift-prone config trees. ULIS keeps one source of truth and compiles it.
 
@@ -71,6 +71,8 @@ Each `generate*` function:
 
 Provider adapters own their own parsing-to-native behavior, generated file layout, and install semantics. Prefer keeping agent, skill, MCP, permission, and install handling inside the relevant platform implementation even when this duplicates some code across adapters. Platform config formats and install locations change independently, so localized duplication is acceptable when it keeps future platform updates isolated. Extract shared helpers only for stable, cross-platform mechanics that are clearly reusable, such as path utilities, environment placeholder rewriting, config merging, or policy comment formatting.
 
+Markdown YAML frontmatter accepts merge keys and shared aliases, but rejects cycles, non-plain values, nesting beyond 100 levels, and walks exceeding 10,000 node visits. Repeated alias references count toward that budget.
+
 Between parsing and generation the orchestrator runs **validators** (`src/validators/`):
 
 - `validateCrossRefs(agents, skills, mcp)` — agent → skill (warn), agent → mcp (**error**), agent → subagent allowlist (warn)
@@ -98,11 +100,11 @@ Preset-only install (`ulis preset install <names...>` and the TUI Presets screen
 
 ### 2.3 Install ownership
 
-Each selected platform config root stores `.ulis-manifest.json` version 3. It contains validated relative paths for agents and local skill directories installed by ULIS, plus the individual root-relative files the install writes into the config root, used by OpenCode pruning. Older manifests remain readable and migrate: version 1 carries no root record and prunes no root entries. Version 2 recorded root names rather than files, so a recorded name that is a file is pruned like any other stale entry, while a recorded name that is a directory is pruned only when it is already empty — anything inside it was never recorded as ULIS's own. The manifest excludes external `skills.yaml` installs, extension output, and preserved native config.
+Each selected platform config root stores `.ulis-manifest.json` version 3. It contains validated relative paths for agents and local skill directories installed by ULIS, plus the individual root-relative files the install writes into the config root, used by OpenCode pruning. Optional `mcpServers` records top-level server names; optional `mcpProjectServers` records `[projectPath, serverName]` pairs for global Claude installs, matching `projects[projectPath].mcpServers` in `~/.claude.json`. Project paths are exact native object keys, not filesystem removal targets. Older manifests remain readable and migrate: version 1 carries no root record and prunes no root entries. Version 2 recorded root names rather than files, so a recorded name that is a file is pruned like any other stale entry, while a recorded name that is a directory is pruned only when it is already empty — anything inside it was never recorded as ULIS's own. The manifest excludes external `skills.yaml` installs, extension output, and unmanaged preserved native config. MCP scopes absent from a legacy manifest remain unmanaged until generated again.
 
-Before any selected destination is modified, ULIS reads and validates every selected platform manifest and derives the current managed set from generated output. Missing manifests trigger first-run adoption without pruning. After platform files are installed, ULIS removes `previous managed − current managed`, then atomically writes the current manifest. Ownership is path-based, so user edits to a tracked file do not prevent its removal. OpenCode records `agents/core/...` and `agents/specialized/...` separately.
+Before any selected destination is modified, ULIS reads and validates every selected platform manifest and derives the current managed set from generated output. Missing manifests trigger first-run adoption without pruning. MCP configs first merge without removing stale servers; MCP removal waits until all platform writes succeed. After platform files are installed, ULIS removes `previous managed − current managed`, then atomically writes the current manifest. If a platform install fails part-way, nothing is pruned and the manifest becomes the previous entries plus the current entries the copy actually wrote; current entries it never reached stay unrecorded, so an unmanaged file at one of those paths is not claimed. Ownership is path-based, so user edits to a tracked file do not prevent its removal. OpenCode agents are flat `agents/<name>.md`, so OpenCode merges each prompt with the `agent.<name>` entry in `opencode.json` by name. Manifests from older installs that recorded `agents/core/...` or `agents/specialized/...` are still read, and those entries are pruned like any other stale managed path; unmanaged files in those directories are left alone.
 
-Pruning is enabled by default. `--no-prune` retains stale paths but replaces the manifest with the current set, making retained paths unmanaged. Empty or platform-disabled output is authoritative for selected platforms; unselected platform destinations and manifests remain untouched. Backups are taken before installation and therefore contain the prior manifest and any entries later pruned.
+Pruning is enabled by default. `--no-prune` retains stale paths and MCP servers but replaces the manifest with the current set, making retained paths unmanaged. Empty or platform-disabled output is authoritative for selected platforms; unselected platform destinations and manifests remain untouched. Backups are taken before installation and therefore contain the prior manifest and any entries later pruned. A platform root that is itself a symlink is backed up as a real copy of the directory it points to, not as another link to the live tree.
 
 ---
 
@@ -144,14 +146,14 @@ You are a focused implementation agent. Read specs carefully before writing code
 
 **Key fields:**
 
-| Field          | Purpose                                                                                                                                                            |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `model`        | Canonical alias: `opus`, `sonnet`, `haiku`, `inherit`. Mapped per-platform.                                                                                        |
-| `tools`        | Permission groups: `read`, `write`, `edit`, `bash`, `search`, `browser`, `agent`.                                                                                  |
-| `contextHints` | Advisory window hints. Emitted as comments (no native equivalent on any current target).                                                                           |
-| `toolPolicy`   | `prefer`/`avoid` → comments. `requireConfirmation` → native permission controls where supported.                                                                   |
-| `security`     | `permissionLevel: readonly` → Claude `plan` mode + OpenCode deny perms. `blockedCommands` → Claude PreToolUse hooks. `rateLimit` → OpenCode `rate_limit_per_hour`. |
-| `platforms`    | Per-target overrides. Applied last; they win over derived values from canonical fields.                                                                            |
+| Field          | Purpose                                                                                                                                                                                                                                                                                                          |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `model`        | Canonical alias: `opus`, `sonnet`, `haiku`, `inherit`. Mapped per-platform.                                                                                                                                                                                                                                      |
+| `tools`        | Permission groups: `read`, `write`, `edit`, `bash`, `search`, `browser`, `agent`. Claude: an object that grants nothing becomes `disallowedTools` covering documented built-in tools and `mcp__*`. OpenCode: all-false denies `"*"`; `browser` controls `playwright_*` MCP tools, not arbitrary browser servers. |
+| `contextHints` | Advisory window hints. Emitted as comments (no native equivalent on any current target).                                                                                                                                                                                                                         |
+| `toolPolicy`   | `prefer`/`avoid` → comments. `requireConfirmation` → native permission controls where supported.                                                                                                                                                                                                                 |
+| `security`     | `permissionLevel: readonly` → Claude `plan` mode + OpenCode deny perms. `blockedCommands` → Claude PreToolUse hooks. `rateLimit` → OpenCode `rate_limit_per_hour`.                                                                                                                                               |
+| `platforms`    | Per-target overrides. Applied last; they win over derived values from canonical fields.                                                                                                                                                                                                                          |
 
 ### 3.2 Skill
 
@@ -174,11 +176,13 @@ Run the following checks...
 
 Skills become:
 
-- **Claude**: skill directories in `generated/claude/skills/`
+- **Claude**: skill directories in `generated/claude/skills/`. Canonical fields become native frontmatter: `argumentHint` → `argument-hint`, `allowModelInvocation: false` → `disable-model-invocation: true`, `userInvocable: false` → `user-invocable: false`, `isolation: fork` → `context: fork`, `tools` → `allowed-tools` (skipped when the source already sets `allowed-tools`), `hooks` → nested Claude hook groups; `effort` and `paths` pass as-is. `platforms.claude` extras win.
 - **OpenCode**: skill directories in `generated/opencode/skills/`
 - **Codex**: skill directories in `generated/codex/skills/`
 - **Cursor**: skill directories in `generated/cursor/skills/`
 - **ForgeCode**: skill directories in `generated/forgecode/.forge/skills/`
+
+Commands (`.ulis/commands/*.md`) are emitted for Claude and OpenCode only. `platforms.claude` / `platforms.opencode` take `enabled` (default `true`; `false` skips the command on that platform) and `model`; other keys pass through to that platform's frontmatter.
 
 ### 3.3 MCP Server
 
@@ -216,9 +220,9 @@ Defined once in `.ulis/mcp.yaml` (JSON is also accepted for backwards compatibil
 }
 ```
 
-`localFallback` is used for Codex, which only supports local command-based MCP servers.
+Codex emits native remote MCP `url` configuration, including supported HTTP headers. A remote URL takes precedence over `localFallback`; the fallback branch applies only when no URL is present. See the [Codex config reference](https://developers.openai.com/codex/config-reference/).
 
-Environment variables use `${VAR}` syntax everywhere. The build translates to platform-specific syntax (OpenCode headers use `{env:VAR}`).
+Environment variables use `${VAR}` syntax everywhere. The build translates to platform-specific syntax (OpenCode local environment and remote headers use `{env:VAR}`; Cursor uses `${env:VAR}` in `command`, `args`, `env`, `url` and `headers`). Codex interpolates nothing: a local server's `KEY: ${KEY}` becomes `env_vars = ["KEY"]`, a remote header that is exactly `${VAR}` becomes `env_http_headers`, and `Authorization: Bearer ${VAR}` becomes `bearer_token_env_var`; any other placeholder is written literally because Codex has no way to rename or embed a variable. MCP `args` also stay literal, including `${VAR}` and fallback arguments. Pass secrets through same-name `env_vars`, or use a user-owned wrapper that reads its environment. Generators have no diagnostic channel, so ULIS does not warn for these literals. [Codex launches stdio arguments unchanged](https://github.com/openai/codex/blob/main/codex-rs/rmcp-client/src/stdio_server_launcher.rs).
 
 ### 3.4 Skill / Extension registry entries
 
@@ -298,31 +302,40 @@ Part of the `AgentFrontmatterSchema` (`hooks` field). Three event types:
 
 Hooks are native to Claude Code only. On other targets they are silently dropped (the agent still works; hooks just don't fire).
 
-`security.blockedCommands` synthesizes `PreToolUse` hook entries automatically for Claude.
+Claude output always nests each entry as `{ matcher?, hooks: [{ type: command, command }] }`, the native shape; an entry without `matcher` is emitted without one, not flattened.
+
+`security.blockedCommands` synthesizes `PreToolUse` hook entries automatically for Claude: matcher `Bash`, a per-handler `if: "Bash(<command>*)"` permission rule (a `PreToolUse` matcher matches the tool name only), and a fixed command that prints to stderr and exits `2` — the only exit code that blocks the call. The blocked command is never interpolated into the shell command. Claude evaluates `if` best-effort; use `permissions.yaml` `claude.deny` for a hard block.
 
 ---
 
 ## 4. Capability Matrix
 
-| Feature                              |   Claude Code   |       OpenCode       |     Codex     |   Cursor   | ForgeCode  |
-| ------------------------------------ | :-------------: | :------------------: | :-----------: | :--------: | :--------: |
-| Native agents                        |        ✓        |          ✓           |       ✓       |     ✓      |     ✓      |
-| Native skills/commands               |        ✓        |          ✓           |       ✓       |     ✓      |     ✓      |
-| Hooks (PreToolUse/PostToolUse/Stop)  |        ✓        |          —           |       —       |     —      |     —      |
-| Subagent spawning                    |        ✓        |          ✓           |    comment    |     —      |     —      |
-| Background execution                 |        ✓        |          —           |       —       |     ✓      |     —      |
-| Git worktree isolation               |        ✓        |          —           |       —       |     —      |     —      |
-| Local MCP servers                    |        ✓        |          ✓           |       ✓       |     ✓      |     ✓      |
-| Remote MCP servers                   |        ✓        |          ✓           | localFallback |     ✓      |     ✓      |
-| Fine-grained tool permissions        |        ✓        |          ✓           |       —       | allowlists | tools list |
-| `contextHints` enforcement           |     comment     |       comment        |    comment    |  comment   |  comment   |
-| `toolPolicy.avoid`                   | disallowedTools |       comment        |    comment    |  comment   |  comment   |
-| `toolPolicy.requireConfirmation`     | permissionMode  | permission.edit/bash |    comment    |  comment   |  comment   |
-| `security.permissionLevel: readonly` |    plan mode    |      deny perms      |    comment    |  comment   |  comment   |
-| `security.blockedCommands`           | PreToolUse hook |       comment        |    comment    |  comment   |  comment   |
-| `security.rateLimit`                 |     comment     | rate_limit_per_hour  |    comment    |  comment   |  comment   |
+| Feature                              |   Claude Code   |       OpenCode       |    Codex     | Cursor  |  ForgeCode   |
+| ------------------------------------ | :-------------: | :------------------: | :----------: | :-----: | :----------: |
+| Native agents                        |        ✓        |          ✓           |      ✓       |    ✓    |      ✓       |
+| Native skills/commands               |        ✓        |          ✓           |      ✓       |    ✓    |      ✓       |
+| Rule instruction discovery           |     native      |     global index     | global index | native  | global index |
+| Hooks (PreToolUse/PostToolUse/Stop)  |        ✓        |          —           |      —       |    —    |      —       |
+| Subagent spawning                    |        ✓        |          ✓           |   comment    |    —    |      —       |
+| Background execution                 |        ✓        |          —           |      —       |    ✓    |      —       |
+| Git worktree isolation               |        ✓        |          —           |      —       |    —    |      —       |
+| Local MCP servers                    |        ✓        |          ✓           |      ✓       |    ✓    |      ✓       |
+| Remote MCP servers                   |        ✓        |          ✓           |      ✓       |    ✓    |      ✓       |
+| Fine-grained tool permissions        |        ✓        |          ✓           |      —       |    —    |  tools list  |
+| `contextHints` enforcement           |     comment     |       comment        |   comment    | comment |   comment    |
+| `toolPolicy.avoid`                   | disallowedTools |       comment        |   comment    | comment |   comment    |
+| `toolPolicy.requireConfirmation`     | permissionMode  | permission.edit/bash |   comment    | comment |   comment    |
+| `security.permissionLevel: readonly` |    plan mode    |      deny perms      |   comment    | comment |   comment    |
+| `security.blockedCommands`           | PreToolUse hook |       comment        |   comment    | comment |   comment    |
+| `security.rateLimit`                 |     comment     | rate_limit_per_hour  |   comment    | comment |   comment    |
 
 **Legend:** ✓ native · comment = emitted as comment in output file · — = not emitted
+
+"global index" means the injected rules index references `~/<home>/rules/` and loads only from a global install. OpenCode, Codex and ForgeCode do not discover `AGENTS.md` inside a project-scope config directory (`./.opencode/`, `./.codex/`, `./.forge/`), so a project install's rules index is not loaded; making it load needs scope-aware generation.
+
+Cursor documents no per-subagent `tools` field or deny-all form. Its subagents inherit parent tools, including MCP; ULIS tool lists do not provide an enforced restriction. `readonly` restricts writes, not tool access. See [Cursor subagents](https://cursor.com/docs/subagents).
+
+ForgeCode agents with omitted tools default to no tools, so an all-false canonical object is already restrictive. See [ForgeCode agent tools](https://forgecode.dev/docs/creating-agents/).
 
 ---
 

@@ -17,7 +17,7 @@ const PLATFORM_TOOL_NAMES: Record<
   claude: {
     read: ["Read", "Glob", "Grep"],
     write: ["Write"],
-    edit: ["Edit"],
+    edit: ["Edit", "NotebookEdit"],
     bash: ["Bash"],
     search: ["WebSearch", "WebFetch"],
     browser: ["mcp__playwright__navigate", "mcp__playwright__screenshot"],
@@ -40,11 +40,15 @@ const PLATFORM_TOOL_NAMES: Record<
   },
 };
 
+/** Every tool name `mapTools` can emit for a list-based platform, in declaration order. */
+export function allMappedToolNames(platform: keyof typeof PLATFORM_TOOL_NAMES): string[] {
+  return Object.values(PLATFORM_TOOL_NAMES[platform]).flat();
+}
+
 /**
  * Map canonical `ToolPermissions` to a flat list of platform-specific tool
- * names. Returns an empty array for platforms that do not consume a tool list
- * (currently `opencode` and `codex` — they read the structured `tools` object
- * directly from the agent block / TOML).
+ * names. Returns an empty array for `opencode` (see `mapOpencodeTools`) and
+ * `codex`, which has no per-agent tool list.
  *
  * Subagent allowlist (`tools.agent`) is appended for `claude` only — it is
  * the only platform that supports `Agent(name1, name2)` in `allowed-tools`.
@@ -79,5 +83,39 @@ export function mapTools(perms: ToolPermissions, platform: ToolPlatform): string
     }
   }
 
+  return tools;
+}
+
+/**
+ * OpenCode's deprecated agent `tools` map. OpenCode folds `write`, `edit` and `patch` into one `edit`
+ * permission, so either canonical flag enables it. A string is an allowlist of native tool ids.
+ */
+export function mapOpencodeTools(perms: ToolPermissions): Record<string, boolean> {
+  if (typeof perms === "string") {
+    const allowed = perms
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    return Object.fromEntries([["*", false], ...allowed.map((name) => [name, true])]);
+  }
+
+  const grantsTools =
+    perms.read ||
+    perms.write ||
+    perms.edit ||
+    perms.bash ||
+    perms.search ||
+    perms.browser ||
+    perms.agent === true ||
+    (Array.isArray(perms.agent) && perms.agent.length > 0);
+  const tools: Record<string, boolean> = grantsTools ? {} : { "*": false };
+  for (const name of ["read", "glob", "grep", "list"]) tools[name] = perms.read;
+  tools.edit = perms.edit || perms.write;
+  tools.bash = perms.bash;
+  tools.webfetch = perms.search;
+  tools.websearch = perms.search;
+  tools["playwright_*"] = perms.browser;
+  if (perms.agent !== undefined)
+    tools.task = perms.agent === true || (Array.isArray(perms.agent) && perms.agent.length > 0);
   return tools;
 }

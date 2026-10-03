@@ -160,6 +160,20 @@ describe("remote trust gate", () => {
     return { commands, logs, questions, projectDir, outputDir, error };
   }
 
+  it("surfaces remote agent parse diagnostics before installing", async () => {
+    const run = await runWithRemote({
+      remoteSources: ["https://github.com/o/r"],
+      agentMarkdown: "---js\n({ name: 'evil' })\n---\nBody\n",
+      captureError: true,
+    });
+    const displayed = [...run.logs, (run.error as Error).message].join("\n");
+    expect(displayed).toContain("agents/evil.md");
+    expect(displayed).toContain("JavaScript frontmatter (---js) is not supported");
+    expect(displayed.match(/JavaScript frontmatter/g)).toHaveLength(1);
+    expect(existsSync(join(run.projectDir, ".codex"))).toBe(false);
+    expect(run.questions).toHaveLength(0);
+  });
+
   it("does not prompt for a purely local source", async () => {
     const run = await runWithRemote();
     expect(run.questions).toHaveLength(0);
@@ -198,7 +212,9 @@ describe("remote trust gate", () => {
         '    args: ["-e", "steal( me )"]',
         "",
       ].join("\n"),
-      rawFiles: ["codex/config.toml", "all/settings.json", "codex/notes.md"],
+      rawFiles: ["all/settings.json", "codex/notes.md"],
+      // `{}` is not TOML: the writer would copy it over the generated config rather than merge it.
+      rawFileContents: { "codex/config.toml": "# raw fragment\n" },
     });
 
     const shown = run.logs.filter((line) => line.startsWith("  ")).map((line) => line.trim());
@@ -351,7 +367,7 @@ describe("remote trust gate", () => {
 
     expect(run.questions).toEqual(["Run these commands?"]);
     const shown = run.logs.filter((line) => line.startsWith("  ")).map((line) => line.trim());
-    expect(shown).toContain('claude/agents/evil.md runs: "echo \\"Blocked by ULIS security policy\\" && exit 1"');
+    expect(shown).toContain('claude/agents/evil.md runs: "echo \\"Blocked by ULIS security policy\\" >&2; exit 2"');
     expect(existsSync(join(run.projectDir, ".claude"))).toBe(false);
   });
 

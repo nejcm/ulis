@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import {
   closeSync,
   cpSync,
@@ -5,14 +6,15 @@ import {
   lstatSync,
   openSync,
   readdirSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, extname, join } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
-import { patch as patchToml, TomlDocument, TomlFormat } from "@decimalturn/toml-patch";
+import { parse as parseToml, patch as patchToml, TomlDocument, TomlFormat } from "@decimalturn/toml-patch";
 import * as smolToml from "smol-toml";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
@@ -26,33 +28,122 @@ export function mergeConfigValues(base: unknown, override: unknown): unknown {
 
   const result: Record<string, unknown> = { ...base };
   for (const [key, value] of Object.entries(override)) {
-    result[key] = mergeConfigValues(result[key], value);
+    Object.defineProperty(result, key, {
+      value: mergeConfigValues(Object.hasOwn(result, key) ? result[key] : undefined, value),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
   }
   return result;
 }
 
+export function configValuesEqual(left: unknown, right: unknown): boolean {
+  if (left instanceof smolToml.TomlDate && right instanceof smolToml.TomlDate) {
+    return left.toISOString() === right.toISOString();
+  }
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((value, index) => configValuesEqual(value, right[index]));
+  }
+  if (isPlainObject(left) && isPlainObject(right)) {
+    const keys = Object.keys(left);
+    return (
+      keys.length === Object.keys(right).length &&
+      keys.every((key) => Object.hasOwn(right, key) && configValuesEqual(left[key], right[key]))
+    );
+  }
+  return isDeepStrictEqual(left, right);
+}
+
 export function patchTomlOverlay(existingContent: string, generatedContent: string, merged: unknown): string {
   const format = TomlFormat.autoDetectFormat(existingContent);
+  existingContent = patchTomlDateValues(existingContent, merged);
+  const patchValues = tomlPatchValues(merged, parseToml(existingContent));
   const compatibleContent = removeConflictingTomlRepresentations(existingContent, generatedContent);
   const arraySeededContent = seedMissingTomlTables(compatibleContent, generatedContent, "array");
   let retryContent = arraySeededContent;
   let retryFilter: ((header: TomlTableHeader) => boolean) | undefined;
   try {
-    const patched = patchToml(arraySeededContent, merged, format);
+    const patched = patchToml(arraySeededContent, patchValues, format);
     const patchedConfig = smolToml.parse(patched);
-    if (isDeepStrictEqual(patchedConfig, merged)) return patched;
+    if (configValuesEqual(patchedConfig, merged)) return patched;
     retryContent = patched;
-    retryFilter = ({ path }) => !isDeepStrictEqual(getConfigPath(patchedConfig, path), getConfigPath(merged, path));
+    retryFilter = ({ path }) => !configValuesEqual(getConfigPath(patchedConfig, path), getConfigPath(merged, path));
   } catch {
     // Missing nested tables are seeded below before retrying.
   }
 
   const seededContent = seedMissingTomlTables(retryContent, generatedContent, "table", retryFilter);
-  const patched = patchToml(seededContent, merged, format);
-  if (!isDeepStrictEqual(smolToml.parse(patched), merged)) {
+  const patched = patchToml(seededContent, patchValues, format);
+  if (!configValuesEqual(smolToml.parse(patched), merged)) {
     throw new Error("TOML patch did not produce the requested merged config");
   }
   return patched;
+}
+
+function tomlPatchValues(value: unknown, existing: unknown): unknown {
+  if (value instanceof smolToml.TomlDate) {
+    return existing instanceof Date &&
+      new smolToml.TomlDate(existing.toISOString()).toISOString() === value.toISOString()
+      ? existing
+      : parseToml(`value = ${value.toISOString()}`).value;
+  }
+  if (Array.isArray(value))
+    return value.map((item, index) => tomlPatchValues(item, Array.isArray(existing) ? existing[index] : undefined));
+  if (!isPlainObject(value)) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      tomlPatchValues(item, isPlainObject(existing) && Object.hasOwn(existing, key) ? existing[key] : undefined),
+    ]),
+  );
+}
+
+function patchTomlDateValues(content: string, merged: unknown): string {
+  const offsets = tomlLineOffsets(content);
+  const arrays = new Map<string, number>();
+  const changes: Array<{ start: number; end: number; value: string }> = [];
+  for (const block of new TomlDocument(content).cst) {
+    const tablePath = block.type === "Table" || block.type === "TableArray" ? block.key.item.value : [];
+    if (block.type === "TableArray") {
+      const key = JSON.stringify(tablePath);
+      for (const nested of arrays.keys()) {
+        if (nested.startsWith(key.slice(0, -1) + ",")) arrays.delete(nested);
+      }
+      arrays.set(key, (arrays.get(key) ?? -1) + 1);
+    }
+    const path = tablePath.flatMap((key, index) => {
+      const arrayIndex = arrays.get(JSON.stringify(tablePath.slice(0, index + 1)));
+      return arrayIndex === undefined ? [key] : [key, String(arrayIndex)];
+    });
+    const items = block.type === "Table" || block.type === "TableArray" ? block.items : [block];
+    for (const item of items) {
+      if (item.type !== "KeyValue") continue;
+      const desired = [...path, ...item.key.value].reduce<unknown>(
+        (value, key) =>
+          value !== null && typeof value === "object" && Object.hasOwn(value, key)
+            ? (value as Record<string, unknown>)[key]
+            : undefined,
+        merged,
+      );
+      const start = offsets[item.value.loc.start.line - 1]! + item.value.loc.start.column;
+      const end = offsets[item.value.loc.end.line - 1]! + item.value.loc.end.column;
+      const current = smolToml.parse(`value = ${content.slice(start, end)}`).value;
+      if (desired === undefined || !containsTomlDate(current) || configValuesEqual(current, desired)) continue;
+      // A mixed array forces tables to serialize inline.
+      const encoded = smolToml.stringify({ value: [desired as smolToml.TomlPrimitive, 0] });
+      changes.push({ start, end, value: encoded.slice("value = [".length, encoded.lastIndexOf(", 0 ]")).trim() });
+    }
+  }
+  return changes
+    .sort((left, right) => right.start - left.start)
+    .reduce((result, { start, end, value }) => result.slice(0, start) + value + result.slice(end), content);
+}
+
+function containsTomlDate(value: unknown): boolean {
+  if (value instanceof smolToml.TomlDate) return true;
+  if (Array.isArray(value)) return value.some(containsTomlDate);
+  return isPlainObject(value) && Object.values(value).some(containsTomlDate);
 }
 
 function removeConflictingTomlRepresentations(existingContent: string, generatedContent: string): string {
@@ -146,14 +237,18 @@ function tomlTableHeaders(content: string): TomlTableHeader[] {
 
 const MERGE_EXTS = new Set([".json", ".toml", ".yaml", ".yml"]);
 
-function isMergeable(filePath: string): boolean {
+export function isMergeable(filePath: string): boolean {
   return MERGE_EXTS.has(extname(filePath).toLowerCase());
 }
 
 export function readMergeableConfig(filePath: string): unknown {
+  return parseMergeableConfig(filePath, () => readFile(filePath));
+}
+
+export function parseMergeableConfig(filePath: string, contents: string | (() => string)): unknown {
   const ext = extname(filePath).toLowerCase();
   if (!MERGE_EXTS.has(ext)) throw new Error(`Unsupported config extension: ${ext}`);
-  const content = readFile(filePath);
+  const content = typeof contents === "string" ? contents : contents();
   if (ext === ".json") return JSON.parse(content) as unknown;
   if (ext === ".toml") return smolToml.parse(content);
   return parseYaml(content) as unknown;
@@ -182,30 +277,38 @@ function writeGeneratedFile(filePath: string, content: string | Buffer): void {
 }
 
 /**
- * Does not refuse a symlink at `filePath` — it unlinks whatever is there and creates fresh in its
- * place. A caller writing into a destination where a symlink could point somewhere else must refuse
+ * Does not refuse a symlink at `filePath` — the rename replaces whatever is there without following
+ * it. A caller writing into a destination where a symlink could point somewhere else must refuse
  * first: `writeDestinationFile` in `preserved-native-configs.ts` does that before calling this.
  */
 export function writeFileExclusively(filePath: string, content: string | Buffer, sourceMode?: number): void {
   ensureDir(dirname(filePath));
   // The mode to land on: the one the file being replaced already had, or - when there is nothing to
-  // replace - the mode of the file being copied in. `rmSync` takes the old mode away with the inode
-  // and a fresh create lands at the process umask, so a `0600` config holding MCP environment values
-  // came back `0644` and readable by every local user. A verbatim copy of a `0600` generated file
-  // onto a path that does not exist yet has the same problem from the other side.
+  // replace - the mode of the file being copied in. A fresh create lands at the process umask, so a
+  // `0600` config holding MCP environment values came back `0644` and readable by every local user.
+  // A verbatim copy of a `0600` generated file onto a path that does not exist yet has the same
+  // problem from the other side.
   const mode = existingFileMode(filePath) ?? sourceMode;
-  rmSync(filePath, { force: true });
+  // Written to a sibling and renamed over the target, so a failed write leaves the old file intact;
+  // removing first lost the MCP servers and hooks it held whenever the write then failed.
+  const tempPath = join(dirname(filePath), `.${basename(filePath)}.ulis-${randomBytes(6).toString("hex")}.tmp`);
   // Created, written and chmodded through one descriptor. `wx` is the exclusive create; `fchmodSync`
   // needs no path, and resolving the path a second time to `chmod` it would leave a window for a
   // concurrent writer to swap in a symlink and have us change permissions on a file outside the
   // destination. `applyMode` in `src/install/fs.ts` avoids the same window the same way.
-  const handle = openSync(filePath, "wx", mode ?? 0o666);
+  const handle = openSync(tempPath, "wx", mode ?? 0o666);
   try {
-    writeFileSync(handle, content);
-    // The mode passed to `open` is masked by the umask; this restores it exactly.
-    if (mode !== undefined) fchmodSync(handle, mode);
-  } finally {
-    closeSync(handle);
+    try {
+      writeFileSync(handle, content);
+      // The mode passed to `open` is masked by the umask; this restores it exactly.
+      if (mode !== undefined) fchmodSync(handle, mode);
+    } finally {
+      closeSync(handle);
+    }
+    renameSync(tempPath, filePath);
+  } catch (error) {
+    rmSync(tempPath, { force: true });
+    throw error;
   }
 }
 

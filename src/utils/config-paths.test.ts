@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
-import { omitConfigPaths, pickConfigPaths } from "./config-paths.js";
+import { parse } from "smol-toml";
+
+import { getConfigPath, omitConfigPaths, pickConfigPaths } from "./config-paths.js";
 
 describe("pickConfigPaths", () => {
   it("copies only selected nested paths", () => {
@@ -59,4 +61,30 @@ describe("omitConfigPaths", () => {
     expect(omitConfigPaths(null, [["a"]])).toEqual({});
     expect(omitConfigPaths(42, [["a"]])).toEqual({});
   });
+});
+
+it("config paths use own keys and preserve __proto__ as data", () => {
+  for (const name of ["constructor", "toString", "__proto__"]) {
+    expect(getConfigPath({}, [name])).toBeUndefined();
+    const source = JSON.parse(JSON.stringify({ [name]: { keep: true } }));
+    const picked = pickConfigPaths(source, [[name, "keep"]]);
+    expect(JSON.stringify(picked)).toBe(JSON.stringify(source));
+    expect(omitConfigPaths(source, [[name, "keep"]])).toEqual({ [name]: {} });
+  }
+  expect(pickConfigPaths(JSON.parse('{"__proto__":{"keep":true}}'), [[]])).toEqual(
+    JSON.parse('{"__proto__":{"keep":true}}'),
+  );
+});
+
+it("omits paths without cloning atomic values or mutating the source", () => {
+  const source = parse(
+    "expiry = 2026-10-02\n[mcp_servers.managed]\nexpiry = 00:00:00\n[mcp_servers.unmanaged]\nexpiry = 2026-10-02T00:00:00\n",
+  );
+  const result = omitConfigPaths(source, [["mcp_servers", "managed"]]);
+  expect(result.expiry).toBe(source.expiry);
+  expect(getConfigPath(result, ["mcp_servers", "unmanaged", "expiry"])).toBe(
+    getConfigPath(source, ["mcp_servers", "unmanaged", "expiry"]),
+  );
+  expect(getConfigPath(result, ["mcp_servers", "managed"])).toBeUndefined();
+  expect(getConfigPath(source, ["mcp_servers", "managed"])).toBeDefined();
 });

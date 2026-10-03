@@ -124,7 +124,7 @@ function formatInstallCommand(state: TuiState, cwd?: string, userHome?: string):
   if (state.backup) args.push("--backup");
   if (!state.prune) args.push("--no-prune");
   if (state.skipExternalSkills) args.push("--skip-external-skills");
-  return `Command: ${args.map(quoteCommandArg).join(" ")}`;
+  return args.map(quoteCommandArg).join(" ");
 }
 
 function quoteCommandArg(value: string): string {
@@ -133,13 +133,15 @@ function quoteCommandArg(value: string): string {
 
 export function installReviewView(state: TuiState, cwd?: string, userHome?: string, columns = MIN_COLUMNS): ScreenView {
   const plan = planSource(state, cwd, userHome);
+  const command = formatInstallCommand(state, cwd, userHome);
   const reviewRows: ViewRow[] = [
     field("Source", sanitizeConsentText(plan.sourceDir)),
     field("Destination", plan.destBase),
     field("Platforms", formatPlatforms(state.platforms)),
     field("Presets", sanitizeConsentText(formatPresets(state))),
+    field("Prune", state.prune ? "Removed agents, skills and MCP servers" : "Off; stale entries become unmanaged"),
     { kind: "blank" },
-    { kind: "text", text: formatInstallCommand(state, cwd, userHome), tone: "muted" },
+    { kind: "text", text: `Command: ${command}`, tone: "muted", copy: command },
     { kind: "blank" },
     ...remoteCommandRows(state),
   ];
@@ -174,6 +176,7 @@ export function presetInstallReviewView(
     field("Destination", plan.destBase),
     field("Platforms", formatPlatforms(state.platforms)),
     field("Presets", sanitizeConsentText(formatPresets(state))),
+    field("Prune", state.prune ? "Removed agents, skills and MCP servers" : "Off; stale entries become unmanaged"),
     { kind: "blank" },
     { kind: "text", text: "Action: install the selected preset directories resolved by the TUI.", tone: "muted" },
     { kind: "blank" },
@@ -181,7 +184,7 @@ export function presetInstallReviewView(
   ];
   const actionRows: ViewRow[] = [
     option(state, 0, "Backup existing configs before install", { checked: state.backup }),
-    option(state, 1, "Prune removed agents and skills", { checked: state.prune }),
+    option(state, 1, "Prune agents, skills and MCP servers", { checked: state.prune }),
     option(state, 2, "Run preset extensions", { checked: state.presetInstallExtensions }),
     ...(state.presetSourceMode === "custom" && state.presetInstallExtensions
       ? [

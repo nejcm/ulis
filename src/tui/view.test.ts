@@ -282,3 +282,16 @@ describe("remote command consent", () => {
     expect(rowText(state)).not.toContain("s3cret");
   });
 });
+
+it("discloses MCP pruning in install and preset review and its off-switch", () => {
+  const state = createInitialState();
+  const text = () => JSON.stringify(buildScreenView(state));
+  state.screen = "installReview";
+  expect(text()).toContain("Removed agents, skills and MCP servers");
+  state.prune = false;
+  expect(text()).toContain("stale entries become unmanaged");
+  state.screen = "presetInstallReview";
+  expect(text()).toContain("Prune agents, skills and MCP servers");
+  state.screen = "plan";
+  expect(text()).toContain("Prune agents, skills and MCP servers");
+});

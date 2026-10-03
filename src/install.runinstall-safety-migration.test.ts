@@ -50,8 +50,7 @@ describe("runInstall", () => {
     const outside = join(root, "outside");
     mkdirSync(userHome, { recursive: true });
     mkdirSync(outside, { recursive: true });
-    mkdirSync(join(outputDir, "opencode", "agents", "core"), { recursive: true });
-    mkdirSync(join(outputDir, "opencode", "agents", "specialized"), { recursive: true });
+    mkdirSync(join(outputDir, "opencode", "agents"), { recursive: true });
     write(join(outputDir, "opencode", "AGENTS.md"), "Generated instructions.\n");
     mkdirSync(join(projectDir, ".opencode"), { recursive: true });
     symlinkSync(outside, join(projectDir, ".opencode", "agents"), "dir");
@@ -172,6 +171,40 @@ describe("runInstall", () => {
     expect(backupDir).toBeDefined();
     expect(read(join(projectDir, backupDir!, "config.toml"))).toBe("keep = true\n");
     expect(existsSync(join(projectDir, backupDir!, "ipc", "ipc.sock"))).toBe(false);
+  });
+
+  it("backs up the contents behind a symlinked platform root, keeping nested links as links", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    const dotfiles = join(root, "dotfiles", "codex");
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "codex", "AGENTS.md"), "Generated instructions.\n");
+    write(join(dotfiles, "AGENTS.md"), "Old instructions.\n");
+    symlinkSync("../shared", join(dotfiles, "linked"));
+    mkdirSync(projectDir, { recursive: true });
+    symlinkSync(dotfiles, join(projectDir, ".codex"), "dir");
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["codex"],
+      rebuild: false,
+      backup: true,
+      logger: silentLogger,
+    });
+
+    expect(read(join(dotfiles, "AGENTS.md"))).toBe("Generated instructions.\n");
+    const backupDir = readdirSync(projectDir).find((entry) => entry.startsWith(".codex.") && entry.endsWith(".backup"));
+    expect(backupDir).toBeDefined();
+    const backupPath = join(projectDir, backupDir!);
+    expect(lstatSync(backupPath).isDirectory()).toBe(true);
+    expect(read(join(backupPath, "AGENTS.md"))).toBe("Old instructions.\n");
+    expect(lstatSync(join(backupPath, "linked")).isSymbolicLink()).toBe(true);
   });
 
   // The generated set changing a name from a directory to a file must not take the directory's

@@ -11,14 +11,16 @@ import {
   openSync,
   readdirSync,
   readlinkSync,
+  readSync,
   realpathSync,
   rmdirSync,
   rmSync,
   symlinkSync,
   unlinkSync,
+  writeSync,
   type Stats,
 } from "node:fs";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 
 import type { Logger } from "../build.js";
 import { InstallError } from "./errors.js";
@@ -36,6 +38,8 @@ export interface CopyPlatformContentsOptions {
   readonly previouslyManagedRootEntries?: readonly string[];
   /** Root entries this install records, in the same shape. The sweep needs both to see a change. */
   readonly currentManagedRootEntries?: readonly string[];
+  /** Called with each `targetDir`-relative path this copy left content at, even when it then fails. */
+  readonly onWritten?: (relativePath: string) => void;
 }
 
 /**
@@ -90,7 +94,9 @@ export function copyPlatformContents(
     pruneExtraNames = false,
     previouslyManagedRootEntries,
     currentManagedRootEntries,
+    onWritten,
   } = options;
+  const recordWritten = onWritten && ((path: string) => onWritten(relative(targetDir, path).split(sep).join("/")));
   ensureDir(targetDir);
   if (!existsSync(sourceDir)) {
     throw new InstallError(`Generated platform directory does not exist: ${sourceDir}`);
@@ -118,7 +124,7 @@ export function copyPlatformContents(
     const targetPath = join(targetDir, entry);
     const namedDirectory = findNamedDirectory(namedDirectories, entry);
     if (namedDirectory) {
-      copyNamedDirectory(sourcePath, targetPath, namedDirectory, logger);
+      copyNamedDirectory(sourcePath, targetPath, namedDirectory, logger, recordWritten);
       logger?.success(entry);
       continue;
     }
@@ -126,7 +132,7 @@ export function copyPlatformContents(
     // Merge into an existing destination directory instead of replacing it: the user may have put
     // their own files next to ours inside one, and those were never recorded as ULIS's to remove.
     // The sweep above is what takes out the files a previous install actually wrote.
-    copyIntoTarget(sourcePath, targetPath);
+    copyIntoTarget(sourcePath, targetPath, undefined, recordWritten);
     logger?.success(entry);
   }
 }
@@ -343,7 +349,12 @@ export function filesystemIdentity(path: string): string | undefined {
  * it is deliberately left open - see CHANGELOG. The native config files that `preserved-native-configs.ts`
  * writes into the destination follow the same rule, and carry the same residual.
  */
-function copyIntoTarget(sourcePath: string, targetPath: string, onUnsupportedEntry?: (path: string) => void): void {
+function copyIntoTarget(
+  sourcePath: string,
+  targetPath: string,
+  onUnsupportedEntry?: (path: string) => void,
+  onLeafWritten?: (path: string) => void,
+): void {
   const sourceStats = statsOf(sourcePath);
   if (sourceStats?.isDirectory()) {
     const created = !isRealDirectory(targetPath);
@@ -352,7 +363,7 @@ function copyIntoTarget(sourcePath: string, targetPath: string, onUnsupportedEnt
       createDirectoryExclusively(targetPath);
     }
     for (const entry of readDirectoryEntries(sourcePath)) {
-      copyIntoTarget(join(sourcePath, entry), join(targetPath, entry), onUnsupportedEntry);
+      copyIntoTarget(join(sourcePath, entry), join(targetPath, entry), onUnsupportedEntry, onLeafWritten);
     }
     // Mode after contents, the order `cpSync` uses: a read-only source directory must not lock us
     // out of filling the copy of it first.
@@ -369,7 +380,7 @@ function copyIntoTarget(sourcePath: string, targetPath: string, onUnsupportedEnt
   }
 
   removeForReplacement(targetPath);
-  copyLeaf(sourcePath, targetPath);
+  copyLeaf(sourcePath, targetPath, onLeafWritten);
 }
 
 /**
@@ -496,9 +507,17 @@ function copyFileToNewPath(sourcePath: string, targetPath: string): boolean {
 }
 
 /** Replace whatever is at `targetPath` with `sourcePath` outright - never merging, never following a link. */
-function replaceWithSource(sourcePath: string, targetPath: string): void {
+function replaceWithSource(sourcePath: string, targetPath: string, onWritten?: (path: string) => void): void {
   removePath(targetPath);
+  const sourceStats = statsOf(sourcePath);
+  if (!sourceStats?.isDirectory()) {
+    copyLeaf(sourcePath, targetPath, onWritten);
+    return;
+  }
+  createDirectoryExclusively(targetPath);
+  onWritten?.(targetPath);
   copyIntoTarget(sourcePath, targetPath);
+  applyMode(targetPath, sourceStats.mode);
 }
 
 /**
@@ -514,23 +533,45 @@ function createDirectoryExclusively(dirPath: string): void {
   }
 }
 
-/**
- * Write one non-directory source entry to a path that must not exist.
- *
- * `COPYFILE_EXCL` fails with EEXIST rather than opening whatever is at the destination, which is
- * what stops a symlink created since the removal from being followed out of the platform root -
- * `cpSync` has no such mode. It is kept for the entry types the exclusive primitive does not cover
- * (a symlink, and the FIFOs and sockets it refuses outright, as it always has): copying a symlink
- * writes a symlink, so it cannot write through one either.
- */
-function copyLeaf(sourcePath: string, targetPath: string): void {
-  if (!statsOf(sourcePath)?.isFile()) {
+/** Exclusively create a leaf, reporting ownership as soon as its destination handle is ours. */
+function copyLeaf(sourcePath: string, targetPath: string, onWritten?: (path: string) => void): void {
+  const sourceStats = statsOf(sourcePath);
+  if (sourceStats?.isSymbolicLink()) {
+    if (!copySymlinkToNewPath(sourcePath, targetPath)) {
+      throw new InstallError(`Failed to copy ${sourcePath} -> ${targetPath}: destination exists`);
+    }
+    onWritten?.(targetPath);
+    return;
+  }
+  if (!sourceStats?.isFile()) {
     copyPath(sourcePath, targetPath);
+    onWritten?.(targetPath);
     return;
   }
 
   try {
-    copyFileSync(sourcePath, targetPath, constants.COPYFILE_EXCL);
+    if (!onWritten) {
+      copyFileSync(sourcePath, targetPath, constants.COPYFILE_EXCL);
+      return;
+    }
+    const source = openSync(sourcePath, "r");
+    try {
+      const target = openSync(targetPath, "wx", sourceStats.mode & 0o7777);
+      try {
+        onWritten(targetPath);
+        const buffer = Buffer.allocUnsafe(64 * 1024);
+        let length: number;
+        while ((length = readSync(source, buffer, 0, buffer.length, null)) > 0) {
+          let offset = 0;
+          while (offset < length) offset += writeSync(target, buffer, offset, length - offset);
+        }
+        fchmodSync(target, sourceStats.mode & 0o7777);
+      } finally {
+        closeSync(target);
+      }
+    } finally {
+      closeSync(source);
+    }
   } catch (error) {
     throw new InstallError(`Failed to copy ${sourcePath} -> ${targetPath}`, error);
   }
@@ -608,10 +649,16 @@ function findNamedDirectory(
   return key ? directories[key] : undefined;
 }
 
-function copyNamedDirectory(sourceDir: string, targetDir: string, rule: NamedDirectoryCopyRule, logger?: Logger): void {
+function copyNamedDirectory(
+  sourceDir: string,
+  targetDir: string,
+  rule: NamedDirectoryCopyRule,
+  logger?: Logger,
+  onWritten?: (path: string) => void,
+): void {
   ensureManagedDirectory(targetDir);
   if (rule.alternateRelativeDirs && rule.alternateRelativeDirs.length > 0) {
-    copyNestedNamedDirectory(sourceDir, targetDir, rule, logger);
+    copyNestedNamedDirectory(sourceDir, targetDir, rule, logger, onWritten);
     return;
   }
 
@@ -619,7 +666,7 @@ function copyNamedDirectory(sourceDir: string, targetDir: string, rule: NamedDir
   for (const entry of entries) {
     const sourcePath = join(sourceDir, entry);
     const targetPath = join(targetDir, entry);
-    replaceWithSource(sourcePath, targetPath);
+    replaceWithSource(sourcePath, targetPath, onWritten);
     logger?.dim(`  ${entry}`);
   }
 }
@@ -629,6 +676,7 @@ function copyNestedNamedDirectory(
   targetDir: string,
   rule: NamedDirectoryCopyRule,
   logger?: Logger,
+  onWritten?: (path: string) => void,
 ): void {
   for (const relativeDir of rule.alternateRelativeDirs ?? []) {
     const sourceNestedDir = join(sourceDir, relativeDir);
@@ -641,7 +689,7 @@ function copyNestedNamedDirectory(
     for (const entry of readDirectoryEntries(sourceNestedDir)) {
       const sourcePath = join(sourceNestedDir, entry);
       const targetPath = join(targetNestedDir, entry);
-      replaceWithSource(sourcePath, targetPath);
+      replaceWithSource(sourcePath, targetPath, onWritten);
       logger?.dim(`  ${relativeDir}/${entry}`);
     }
   }

@@ -8,6 +8,8 @@
  */
 export interface DerivedHook {
   readonly matcher: string;
+  /** Per-handler permission rule; a PreToolUse `matcher` matches the tool name only. */
+  readonly if: string;
   readonly command: string;
 }
 
@@ -15,18 +17,22 @@ export interface DerivedHook {
  * The command is a fixed string. It used to interpolate the blocked command into a double-quoted
  * shell word, which a `"` in the pattern closed - so `blockedCommands: ['x" && curl … | sh && echo "']`
  * shipped a second command inside the hook, and it arrived through the security-policy feature of
- * all things. There is nothing to escape now, and the matcher (properly quoted where it is emitted)
- * already says which command tripped the block, so the message loses nothing worth having.
+ * all things. There is nothing to escape now, and the `if` rule (properly quoted where it is
+ * emitted) already says which command tripped the block, so the message loses nothing worth having.
  *
  * The pattern itself stays an unconstrained string on purpose. It is a Claude Code permission
  * pattern, not a shell fragment, and a metacharacter denylist would refuse exactly the shapes a
  * security-conscious user writes: `curl … | sh`, `foo && rm -rf`, `> /etc/`, `echo $SECRET`.
+ *
+ * Only exit code 2 blocks a PreToolUse call (https://code.claude.com/docs/en/hooks); 1 is a
+ * non-blocking error the tool call proceeds past.
  */
 export function blockedCommandHooks(
   security: { readonly blockedCommands?: readonly string[] } | undefined,
 ): DerivedHook[] {
   return (security?.blockedCommands ?? []).map((blockedCommand) => ({
-    matcher: `Bash(${blockedCommand}*)`,
-    command: `echo "Blocked by ULIS security policy" && exit 1`,
+    matcher: "Bash",
+    if: `Bash(${blockedCommand}*)`,
+    command: `echo "Blocked by ULIS security policy" >&2; exit 2`,
   }));
 }
