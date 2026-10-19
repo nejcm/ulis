@@ -138,6 +138,19 @@ describe("buildScreenView", () => {
     expect(rows).toContainEqual(expect.objectContaining({ kind: "text", text: expect.stringContaining("npx") }));
   });
 
+  it("counts selected presets in the presets-only plan", () => {
+    const state = createInitialState();
+    state.screen = "plan";
+    state.flow = "presetsOnly";
+    state.presetSourceMode = "global";
+    state.availablePresets = [{ name: "team", displayName: "team", description: "", source: "global", dir: "/g/team" }];
+    state.selectedPresetNames = ["global:team"];
+
+    const rows = buildScreenView(state).panes.flatMap((pane) => pane.rows);
+
+    expect(rows).toContainEqual(expect.objectContaining({ label: "Preset sources", value: "1 selected" }));
+  });
+
   it("renders running logs with their status tags", () => {
     const state = createInitialState();
     state.screen = "running";

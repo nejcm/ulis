@@ -17,8 +17,8 @@ import {
   isEditedPlan,
   planItems,
   planSource,
+  selectedPresets,
   showsPresetSourcePicker,
-  visiblePresetChoices,
 } from "../selectors.js";
 import { assertNeverPlanItemId, FLOW_ITEMS, type PlanItem, type TuiState } from "../state-model.js";
 import { field, formatPlatforms, notice, onOff, option, pane } from "./primitives.js";
@@ -102,7 +102,7 @@ function planItemValue(state: TuiState, item: PlanItem): string | undefined {
     case "destination":
       return formatDestinationMode(state.destinationMode);
     case "presets":
-      return `${selectedPresetCount(state)} selected`;
+      return `${selectedPresets(state).length} selected`;
     case "platforms":
       return `${state.platforms.length} selected`;
     case "backup":
@@ -123,11 +123,6 @@ function planItemValue(state: TuiState, item: PlanItem): string | undefined {
     default:
       return assertNeverPlanItemId(item.id);
   }
-}
-
-function selectedPresetCount(state: TuiState): number {
-  const visible = visiblePresetChoices(state);
-  return state.selectedPresetNames.filter((name) => visible.some((preset) => preset.name === name)).length;
 }
 
 export function sourceView(state: TuiState): ScreenView {
