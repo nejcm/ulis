@@ -48,6 +48,7 @@ export function presetsView(state: TuiState): ScreenView {
     presets.forEach((preset, index) => {
       if (preset.source !== previousSource) {
         previousSource = preset.source;
+        if (rows.length > 0) rows.push({ kind: "blank" });
         rows.push({ kind: "heading", text: presetSourceHeading(preset.source) });
       }
       rows.push(

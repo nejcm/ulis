@@ -1,5 +1,5 @@
 // handleTuiKey: preset selection, resolution and ordering, the presets-only flow (no source
-// required), the preset source-location picker (project/global/bundled/auto/custom), and the
+// required), the preset source-location picker (project/global/auto/custom; bundled always listed last), and the
 // custom preset directory loader.
 import { afterEach, describe, expect, it } from "bun:test";
 import { mkdirSync } from "node:fs";
@@ -179,10 +179,6 @@ describe("tui keys", () => {
 
       now += 45;
       handleTuiKey(state, "space");
-      expect(state.presetSourceMode).toBe("bundled");
-
-      now += 45;
-      handleTuiKey(state, "space");
       expect(state.presetSourceMode).toBe("auto");
     } finally {
       Date.now = originalNow;
@@ -195,11 +191,11 @@ describe("tui keys", () => {
     const state = createInitialState();
     state.screen = "presets";
     state.flow = "presetsOnly";
-    state.presetSourceMode = "bundled";
+    state.presetSourceMode = "project";
 
     handleTuiKey(state, "enter");
     expect(state.screen as string).toBe("customPresetSource");
-    expect(state.presetSourceMode as string).toBe("bundled");
+    expect(state.presetSourceMode as string).toBe("project");
 
     state.textInput = "./team-presets";
     const { effect } = handleCustomSourceTextInputKey(state, "enter", cwd);
@@ -241,7 +237,7 @@ describe("tui keys", () => {
     expect(state.presetSourceMode).toBe("project");
   });
 
-  it("preset-only auto source checks project and global before bundled", () => {
+  it("preset-only picker always lists bundled presets last", () => {
     const state = createInitialState([
       { name: "bundled", displayName: "Bundled", description: "", source: "bundled", dir: "/bundled/preset" },
       { name: "project", displayName: "Project", description: "", source: "project", dir: "/project/preset" },
@@ -249,6 +245,23 @@ describe("tui keys", () => {
     ]);
     state.flow = "presetsOnly";
 
-    expect(visiblePresetChoices(state).map((preset) => preset.source)).toEqual(["project", "global"]);
+    expect(visiblePresetChoices(state).map((preset) => preset.source)).toEqual(["project", "global", "bundled"]);
+  });
+
+  it("preset-only custom presets list before bundled ones and shadow same-named bundled", () => {
+    const state = createInitialState([
+      { name: "react-web", displayName: "React", description: "", source: "bundled", dir: "/bundled/react-web" },
+      { name: "backend", displayName: "Backend", description: "", source: "bundled", dir: "/bundled/backend" },
+      { name: "react-web", displayName: "React", description: "", source: "custom", dir: "/custom/react-web" },
+      { name: "ui", displayName: "UI", description: "", source: "custom", dir: "/custom/ui" },
+    ]);
+    state.flow = "presetsOnly";
+    state.presetSourceMode = "custom";
+
+    expect(visiblePresetChoices(state).map((preset) => `${preset.source}:${preset.name}`)).toEqual([
+      "custom:react-web",
+      "custom:ui",
+      "bundled:backend",
+    ]);
   });
 });
