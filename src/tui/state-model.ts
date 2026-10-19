@@ -28,7 +28,7 @@ export type TuiAction = "validate" | "presetValidate" | "build" | "install" | "p
 export type TuiFlow = "project" | "global" | "custom" | "presetsOnly";
 export type SourceMode = "project" | "global" | "custom";
 export type DestinationMode = "project" | "global";
-export type PresetSourceMode = "auto" | "project" | "global" | "bundled" | "custom";
+export type PresetSourceMode = "auto" | "project" | "global" | "custom";
 export type TuiPreferenceScope = TuiFlow;
 
 export interface PlannedSource {

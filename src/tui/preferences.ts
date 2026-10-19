@@ -262,7 +262,7 @@ function isDestinationMode(value: unknown): value is DestinationMode {
 }
 
 function isPresetSourceMode(value: unknown): value is PresetSourceMode {
-  return value === "auto" || value === "project" || value === "global" || value === "bundled" || value === "custom";
+  return value === "auto" || value === "project" || value === "global" || value === "custom";
 }
 
 function isPlatform(value: unknown): value is Platform {

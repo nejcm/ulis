@@ -140,11 +140,10 @@ export function formatPresets(state: TuiState): string {
 export function formatPresetSourceMode(mode: PresetSourceMode, customPresetSource?: string): string {
   if (mode === "project") return "Project ./.ulis/presets";
   if (mode === "global") return "Global ~/.ulis/presets";
-  if (mode === "bundled") return "Bundled presets";
   if (mode === "custom") {
     return customPresetSource ? `Custom ${redactUserinfo(customPresetSource)}` : "Custom preset directory";
   }
-  return "Auto project -> global -> bundled";
+  return "Auto project -> global";
 }
 
 export function formatFlow(flow: TuiFlow): string {
@@ -214,7 +213,8 @@ export function visiblePresetChoices(state: TuiState): readonly PresetListEntry[
           (preset) => preset.source === "project" || presetSourceMatchesMode(preset.source, "global"),
         )
       : state.availablePresets.filter((preset) => presetSourceMatchesMode(preset.source, mode));
-  return dedupePresetChoices(filtered);
+  const bundled = state.availablePresets.filter((preset) => preset.source === "bundled");
+  return dedupePresetChoices([...filtered, ...bundled]);
 }
 
 export function showsPresetSourcePicker(state: TuiState): boolean {
@@ -250,14 +250,13 @@ function comparePresetChoices(a: PresetListEntry, b: PresetListEntry): number {
 function presetSourceRank(source: PresetListEntry["source"]): number {
   if (source === "project") return 0;
   if (source === "global" || source === "user") return 1;
-  if (source === "bundled") return 2;
+  if (source === "custom") return 2;
   return 3;
 }
 
 export function nextPresetSourceMode(mode: PresetSourceMode): PresetSourceMode {
   if (mode === "auto") return "project";
   if (mode === "project") return "global";
-  if (mode === "global") return "bundled";
   return "auto";
 }
 
