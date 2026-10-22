@@ -720,6 +720,7 @@ Body.
       cursor: join("agents", "evil.mdc"),
       opencode: join("agents", "evil.md"),
       forgecode: join(".forge", "agents", "evil.md"),
+      antigravity: join("agents", "evil.md"),
     } as const;
 
     const liveBodies = Object.entries(paths).map(([platform, path]) => {
@@ -728,7 +729,7 @@ Body.
       const parsed = matter(artifact!);
       return textOutsideHtmlComments(parsed.content).trim();
     });
-    expect(liveBodies).toEqual(["Body.", "Body.", "Body.", "Body."]);
+    expect(liveBodies).toEqual(["Body.", "Body.", "Body.", "Body.", "Body."]);
   });
 
   it("rule indexes preserve hostile prose on one bullet", () => {

@@ -173,6 +173,46 @@ describe("runInstall", () => {
     expect(shellOptions).toEqual([process.platform === "win32"]);
   });
 
+  it.each([
+    ['"*"', ["antigravity"] as const, ["-a", "antigravity"]],
+    ["antigravity", ["antigravity"] as const, ["-a", "antigravity"]],
+    ['"*"', ["forgecode"] as const, undefined],
+  ])("maps the %s skills section to the skills CLI agent for %p", async (section, platforms, expected) => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    write(join(outputDir, "antigravity", "rules", "a.md"), "Rule.\n");
+    createForgecodeOutput(outputDir);
+    write(join(sourceDir, "skills.yaml"), [`${section}:`, "  skills:", "    - name: test/skill", ""].join("\n"));
+
+    const commands: Array<{ command: string; args: readonly string[] }> = [];
+    __test.setRuntimeDependencies({
+      async runAsyncCommand(command, args) {
+        commands.push({ command, args });
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    await runInstall({
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms,
+      rebuild: false,
+      logger: silentLogger,
+    });
+
+    const skillsCommands = commands.filter((command) => command.command === "npx");
+    if (!expected) expect(skillsCommands).toHaveLength(0);
+    else expect(skillsCommands[0]!.args.join(" ")).toContain(expected.join(" "));
+  });
+
   it("skips external skill installs when installSkills is false", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");

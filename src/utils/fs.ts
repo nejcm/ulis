@@ -68,6 +68,7 @@ export function copySkillDirs(
     readonly name: string;
     readonly dir: string;
     readonly extraFrontmatter?: Record<string, unknown>;
+    readonly stripKeys?: readonly string[];
   }>,
   outSkillsDir: string,
 ): void {
@@ -76,7 +77,7 @@ export function copySkillDirs(
     copyDir(skill.dir, destDir);
     const skillMdPath = join(destDir, "SKILL.md");
     if (existsSync(skillMdPath)) {
-      const content = toPlatformSkillMarkdown(readFile(skillMdPath), skill.extraFrontmatter);
+      const content = toPlatformSkillMarkdown(readFile(skillMdPath), skill.extraFrontmatter, skill.stripKeys);
       writeFile(skillMdPath, content + "\n");
     }
   }

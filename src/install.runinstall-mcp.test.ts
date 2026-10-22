@@ -228,6 +228,44 @@ describe("runInstall", () => {
     });
   });
 
+  it("prunes only previously managed Antigravity MCP servers, and none with prune off", async () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    const generated = join(outputDir, "antigravity", "mcp_config.json");
+    const installed = join(projectDir, ".agents", "mcp_config.json");
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: ["antigravity"] as const,
+      rebuild: false,
+      logger: silentLogger,
+    };
+    const servers = () => Object.keys(JSON.parse(read(installed)).mcpServers).sort();
+
+    write(installed, JSON.stringify({ mcpServers: { mine: { command: "old" } } }, null, 2));
+    write(generated, JSON.stringify({ mcpServers: { managed: { serverUrl: "https://x" } } }, null, 2));
+    await runInstall(options);
+    expect(servers()).toEqual(["managed", "mine"]);
+
+    write(generated, JSON.stringify({ mcpServers: {} }, null, 2));
+    await runInstall(options);
+    expect(servers()).toEqual(["mine"]);
+
+    write(generated, JSON.stringify({ mcpServers: { managed: { serverUrl: "https://x" } } }, null, 2));
+    await runInstall(options);
+    write(generated, JSON.stringify({ mcpServers: {} }, null, 2));
+    await runInstall({ ...options, prune: false });
+    expect(servers()).toEqual(["managed", "mine"]);
+  });
+
   it("preserves an existing project .mcp.json and merges with generated mcpServers", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");

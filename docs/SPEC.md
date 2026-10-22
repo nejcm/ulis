@@ -4,7 +4,7 @@ title: Specification
 
 # ULIS — Unified LLM Interface Specification
 
-Version `1.0.0` · Source: `src/schema/` · Targets: Claude Code, OpenCode, Codex, Cursor, ForgeCode · CLI: `@nejcm/ulis`
+Version `1.0.0` · Source: `src/schema/` · Targets: Claude Code, OpenCode, Codex, Cursor, ForgeCode, Antigravity · CLI: `@nejcm/ulis`
 
 ---
 
@@ -18,7 +18,8 @@ ULIS is a CLI (`ulis`) that lets you define AI agent configurations **once** and
 ├── skills/*/         ─────►  ├── opencode/ (opencode.json, agents/, commands/, rules/, skills/, settings.json)
 │   SKILL.md                  ├── codex/    (config.toml, agents/*.toml, rules/, skills/, AGENTS.md)
 ├── mcp.yaml          ─────►  ├── cursor/   (agents/*.mdc, rules/, skills/, mcp.json, permissions.json)
-│                             └── forgecode/ (AGENTS.md, .forge/agents, .forge/rules, .forge/skills, .forge/.mcp.json)
+│                             ├── forgecode/ (AGENTS.md, .forge/agents, .forge/rules, .forge/skills, .forge/.mcp.json)
+│                             └── antigravity/ (agents/*.md, rules/*.md, skills/, mcp_config.json)
 ├── skills.yaml          (external skill installs)
 ├── extensions.yaml      (third-party CLI extension installs via npx/bunx)
 ├── permissions.yaml
@@ -37,9 +38,9 @@ or any recorded remote source makes install refuse before writing a destination.
 `ulis install --preset <url>` to rebuild and review the source. A root-level `generated/.ulis-provenance.json` from
 the pre-release format also refuses; only a full `ulis build` without `--target` removes that opaque legacy flag.
 
-`ulis install` deploys the generated tree to the per-platform destination (`./.claude/`, `./.forge/`, etc.). Existing unmanaged destination agents and skills are left in place unless a generated entry has the same native name. Codex `config.toml`, Claude `settings.json`, and global `.claude.json` use base-first overlays: generated values overwrite matching paths and absent native values remain. Codex and ForgeCode TOML comments and ordering outside generated paths are preserved. Fresh native configs are copied byte-for-byte; installs that leave the native values unchanged retain the existing bytes. Other native configs preserve their allowlisted values or files, such as MCP server maps and ForgeCode `.forge.toml`. The ownership manifest records generated top-level MCP server names across all platforms, including raw fragments, and per-project MCP servers in Claude global `~/.claude.json` raw fragments. Removed managed servers are pruned; unmanaged servers survive. `--no-prune` retains stale MCP servers and makes them unmanaged. Older manifests have no MCP ownership data, so pre-existing servers remain unmanaged until ULIS generates them again.
+`ulis install` deploys the generated tree to the per-platform destination (`./.claude/`, `./.forge/`, `./.agents/`, etc.). Existing unmanaged destination agents and skills are left in place unless a generated entry has the same native name; replacing an entry the previous manifest did not record logs a warning, since directories such as `.agents/` are shared with other tools. Codex `config.toml`, Claude `settings.json`, and global `.claude.json` use base-first overlays: generated values overwrite matching paths and absent native values remain. Codex and ForgeCode TOML comments and ordering outside generated paths are preserved. Fresh native configs are copied byte-for-byte; installs that leave the native values unchanged retain the existing bytes. Other native configs preserve their allowlisted values or files, such as MCP server maps and ForgeCode `.forge.toml`. The ownership manifest records generated top-level MCP server names across all platforms, including raw fragments, and per-project MCP servers in Claude global `~/.claude.json` raw fragments. Removed managed servers are pruned; unmanaged servers survive. `--no-prune` retains stale MCP servers and makes them unmanaged. Older manifests have no MCP ownership data, so pre-existing servers remain unmanaged until ULIS generates them again.
 
-**Why it exists:** Claude Code, OpenCode, Codex, Cursor, and ForgeCode all have incompatible config formats. Without ULIS you maintain separate, drift-prone config trees. ULIS keeps one source of truth and compiles it.
+**Why it exists:** Claude Code, OpenCode, Codex, Cursor, ForgeCode, and Antigravity all have incompatible config formats. Without ULIS you maintain separate, drift-prone config trees. ULIS keeps one source of truth and compiles it.
 
 ---
 
@@ -57,10 +58,10 @@ the pre-release format also refuses; only a full `ulis build` without `--target`
 │  ParsedAgent[]  ParsedSkill[]  McpConfig                │
 └──────────┬──────────┬──────────┬──────────┬────────────┘
            │          │          │          │
-    generateClaude  generateOpencode  generateCodex  generateCursor  generateForgecode
-           │          │          │          │               │
-           ▼          ▼          ▼          ▼               ▼
-     generated/claude  opencode  codex    cursor        forgecode
+    generateClaude  generateOpencode  generateCodex  generateCursor  generateForgecode  generateAntigravity
+           │          │          │          │               │                │
+           ▼          ▼          ▼          ▼               ▼                ▼
+     generated/claude  opencode  codex    cursor        forgecode        antigravity
 ```
 
 Each `generate*` function:
@@ -77,10 +78,11 @@ Between parsing and generation the orchestrator runs **validators** (`src/valida
 
 - `validateCrossRefs(agents, skills, mcp)` — agent → skill (warn), agent → mcp (**error**), agent → subagent allowlist (warn)
 - `validateCollisions(agents, skills)` — duplicate agent or skill names (**error**)
+- `validateMcpPlaceholders(mcp)` — `${VAR}` in an MCP server bound for Antigravity, which interpolates nothing (warn, variable name only)
 
 Errors abort the build (exit code 1, no files written). Warnings print and the build proceeds.
 
-Parse and validation failures are reported as **Diagnostics**. A diagnostic includes the source label (`base` or `preset:<name>`), source-relative file, absolute file path, field path, target platform (`claude`, `codex`, `cursor`, `opencode`, `forgecode`, `all`, or `none`), optional line/column, and a suggested fix when ULIS can infer one. Platform override fields such as `platforms.codex.*` report that platform; wildcard or cross-platform fields report `all`; source-only config errors report `none`.
+Parse and validation failures are reported as **Diagnostics**. A diagnostic includes the source label (`base` or `preset:<name>`), source-relative file, absolute file path, field path, target platform (`claude`, `codex`, `cursor`, `opencode`, `forgecode`, `antigravity`, `all`, or `none`), optional line/column, and a suggested fix when ULIS can infer one. Platform override fields such as `platforms.codex.*` report that platform; wildcard or cross-platform fields report `all`; source-only config errors report `none`.
 
 ## 2.1 Build configuration
 
@@ -181,6 +183,7 @@ Skills become:
 - **Codex**: skill directories in `generated/codex/skills/`
 - **Cursor**: skill directories in `generated/cursor/skills/`
 - **ForgeCode**: skill directories in `generated/forgecode/.forge/skills/`
+- **Antigravity**: skill directories in `generated/antigravity/skills/`; the canonical `model` is dropped from `SKILL.md` because Antigravity documents no such field. `platforms.antigravity` extras win.
 
 Commands (`.ulis/commands/*.md`) are emitted for Claude and OpenCode only. `platforms.claude` / `platforms.opencode` take `enabled` (default `true`; `false` skips the command on that platform) and `model`; other keys pass through to that platform's frontmatter.
 
@@ -222,7 +225,9 @@ Defined once in `.ulis/mcp.yaml` (JSON is also accepted for backwards compatibil
 
 Codex emits native remote MCP `url` configuration, including supported HTTP headers. A remote URL takes precedence over `localFallback`; the fallback branch applies only when no URL is present. See the [Codex config reference](https://developers.openai.com/codex/config-reference/).
 
-Environment variables use `${VAR}` syntax everywhere. The build translates to platform-specific syntax (OpenCode local environment and remote headers use `{env:VAR}`; Cursor uses `${env:VAR}` in `command`, `args`, `env`, `url` and `headers`). Codex interpolates nothing: a local server's `KEY: ${KEY}` becomes `env_vars = ["KEY"]`, a remote header that is exactly `${VAR}` becomes `env_http_headers`, and `Authorization: Bearer ${VAR}` becomes `bearer_token_env_var`; any other placeholder is written literally because Codex has no way to rename or embed a variable. MCP `args` also stay literal, including `${VAR}` and fallback arguments. Pass secrets through same-name `env_vars`, or use a user-owned wrapper that reads its environment. Generators have no diagnostic channel, so ULIS does not warn for these literals. [Codex launches stdio arguments unchanged](https://github.com/openai/codex/blob/main/codex-rs/rmcp-client/src/stdio_server_launcher.rs).
+Environment variables use `${VAR}` syntax everywhere. The build translates to platform-specific syntax (OpenCode local environment and remote headers use `{env:VAR}`; Cursor uses `${env:VAR}` in `command`, `args`, `env`, `url` and `headers`). Codex interpolates nothing: a local server's `KEY: ${KEY}` becomes `env_vars = ["KEY"]`, a remote header that is exactly `${VAR}` becomes `env_http_headers`, and `Authorization: Bearer ${VAR}` becomes `bearer_token_env_var`; any other placeholder is written literally because Codex has no way to rename or embed a variable. MCP `args` also stay literal, including `${VAR}` and fallback arguments. Pass secrets through same-name `env_vars`, or use a user-owned wrapper that reads its environment. Generators have no diagnostic channel, so ULIS does not warn for these literals.
+
+Antigravity writes `mcp_config.json` (`{ mcpServers }`): a remote server becomes `{ serverUrl, headers? }`, a local one `{ command?, args?, env? }`, and `enabled: false` / `disabled: true` becomes `disabled: true`. `localFallback`, `transport` and `cwd` are not emitted. Antigravity documents no `${VAR}` interpolation, so placeholders are written verbatim and the build warns once per placeholder (name only) for every server that targets Antigravity; set a literal in `raw/antigravity/mcp_config.json` or drop `antigravity` from `targets`. See [Antigravity MCP](https://antigravity.google/docs/mcp). [Codex launches stdio arguments unchanged](https://github.com/openai/codex/blob/main/codex-rs/rmcp-client/src/stdio_server_launcher.rs).
 
 ### 3.4 Skill / Extension registry entries
 
@@ -310,24 +315,24 @@ Claude output always nests each entry as `{ matcher?, hooks: [{ type: command, c
 
 ## 4. Capability Matrix
 
-| Feature                              |   Claude Code   |       OpenCode       |    Codex     | Cursor  |  ForgeCode   |
-| ------------------------------------ | :-------------: | :------------------: | :----------: | :-----: | :----------: |
-| Native agents                        |        ✓        |          ✓           |      ✓       |    ✓    |      ✓       |
-| Native skills/commands               |        ✓        |          ✓           |      ✓       |    ✓    |      ✓       |
-| Rule instruction discovery           |     native      |     global index     | global index | native  | global index |
-| Hooks (PreToolUse/PostToolUse/Stop)  |        ✓        |          —           |      —       |    —    |      —       |
-| Subagent spawning                    |        ✓        |          ✓           |   comment    |    —    |      —       |
-| Background execution                 |        ✓        |          —           |      —       |    ✓    |      —       |
-| Git worktree isolation               |        ✓        |          —           |      —       |    —    |      —       |
-| Local MCP servers                    |        ✓        |          ✓           |      ✓       |    ✓    |      ✓       |
-| Remote MCP servers                   |        ✓        |          ✓           |      ✓       |    ✓    |      ✓       |
-| Fine-grained tool permissions        |        ✓        |          ✓           |      —       |    —    |  tools list  |
-| `contextHints` enforcement           |     comment     |       comment        |   comment    | comment |   comment    |
-| `toolPolicy.avoid`                   | disallowedTools |       comment        |   comment    | comment |   comment    |
-| `toolPolicy.requireConfirmation`     | permissionMode  | permission.edit/bash |   comment    | comment |   comment    |
-| `security.permissionLevel: readonly` |    plan mode    |      deny perms      |   comment    | comment |   comment    |
-| `security.blockedCommands`           | PreToolUse hook |       comment        |   comment    | comment |   comment    |
-| `security.rateLimit`                 |     comment     | rate_limit_per_hour  |   comment    | comment |   comment    |
+| Feature                              |   Claude Code   |       OpenCode       |    Codex     | Cursor  |  ForgeCode   | Antigravity  |
+| ------------------------------------ | :-------------: | :------------------: | :----------: | :-----: | :----------: | ------------ |
+| Native agents                        |        ✓        |          ✓           |      ✓       |    ✓    |      ✓       | ✓            |
+| Native skills/commands               |        ✓        |          ✓           |      ✓       |    ✓    |      ✓       | ✓            |
+| Rule instruction discovery           |     native      |     global index     | global index | native  | global index | native       |
+| Hooks (PreToolUse/PostToolUse/Stop)  |        ✓        |          —           |      —       |    —    |      —       | —            |
+| Subagent spawning                    |        ✓        |          ✓           |   comment    |    —    |      —       | —            |
+| Background execution                 |        ✓        |          —           |      —       |    ✓    |      —       | —            |
+| Git worktree isolation               |        ✓        |          —           |      —       |    —    |      —       | —            |
+| Local MCP servers                    |        ✓        |          ✓           |      ✓       |    ✓    |      ✓       | ✓            |
+| Remote MCP servers                   |        ✓        |          ✓           |      ✓       |    ✓    |      ✓       | ✓            |
+| Fine-grained tool permissions        |        ✓        |          ✓           |      —       |    —    |  tools list  | pass-through |
+| `contextHints` enforcement           |     comment     |       comment        |   comment    | comment |   comment    | comment      |
+| `toolPolicy.avoid`                   | disallowedTools |       comment        |   comment    | comment |   comment    | comment      |
+| `toolPolicy.requireConfirmation`     | permissionMode  | permission.edit/bash |   comment    | comment |   comment    | comment      |
+| `security.permissionLevel: readonly` |    plan mode    |      deny perms      |   comment    | comment |   comment    | comment      |
+| `security.blockedCommands`           | PreToolUse hook |       comment        |   comment    | comment |   comment    | comment      |
+| `security.rateLimit`                 |     comment     | rate_limit_per_hour  |   comment    | comment |   comment    | comment      |
 
 **Legend:** ✓ native · comment = emitted as comment in output file · — = not emitted
 
@@ -336,6 +341,10 @@ Claude output always nests each entry as `{ matcher?, hooks: [{ type: command, c
 Cursor documents no per-subagent `tools` field or deny-all form. Its subagents inherit parent tools, including MCP; ULIS tool lists do not provide an enforced restriction. `readonly` restricts writes, not tool access. See [Cursor subagents](https://cursor.com/docs/subagents).
 
 ForgeCode agents with omitted tools default to no tools, so an all-false canonical object is already restrictive. See [ForgeCode agent tools](https://forgecode.dev/docs/creating-agents/).
+
+Antigravity subagents (`agents/<name>.md`) take `name`, `description`, `tools` and optional `mcpServers` / `skills` lists. Antigravity types `mcpServers` as objects without documenting the entry, so canonical references are not emitted and the build warns once per agent (workspace servers still land in `mcp_config.json`); `skills` names become `skills/<name>` paths, relative to the directory that also holds `agents/`, as the docs' `skills/my-helper-skill` example suggests. `platforms.antigravity.mcpServers` (native objects, passed through verbatim) is the only way to attach servers to a subagent; `platforms.antigravity.skills` replaces the mapped paths. Canonical tools map only to documented names — `read` → `view_file`, `grep_search`; `edit` → `replace_file_content`; `bash` → `run_command`; `agent` → `invoke_subagent` — and `tools` is always emitted, so an all-false object yields `tools: []`. `write`, `search`, `browser` and string allowlists have no documented counterpart and are listed in a `[ULIS tools]` comment instead of guessed (an unknown tool name hangs the subagent). The canonical `model` is dropped (omission means inherit); `platforms.antigravity` passes `model` (`inherit` / `flash` / `pro`), `tools` (replaces the mapped list), `mainAgent`, `subagent`, `commandExecutionPolicy` and anything else straight through. Rules land in `rules/<name>.md` with nested paths flattened (`golang/coding-style.md` → `rules/golang-coding-style.md`; a collision fails the build) and a `trigger`: `alwaysApply` → `always_on`, `paths` → `glob` with `globs` joined by commas, `description` alone → `model_decision`, nothing → `always_on`. Antigravity truncates rule files past 24,000 bytes. Permissions and hooks are not emitted. See [Antigravity subagents](https://antigravity.google/docs/subagents), [rules](https://antigravity.google/docs/rules) and [skills](https://antigravity.google/docs/skills).
+
+Install targets `./.agents/` (project) and `~/.gemini/config/` (global). `.agents/` is also written by the `skills` CLI and other tools, hence the replacement warning above; the `skills` CLI's global Antigravity directory (`~/.gemini/antigravity/skills`) differs from the one ULIS writes.
 
 ---
 
@@ -360,7 +369,7 @@ for (const target of activeTargets) {
 }
 ```
 
-`generate()` (`src/generators/index.ts`) dispatches through the `GENERATORS` map to `generateClaude`, `generateOpencode`, `generateCodex`, `generateCursor`, and `generateForgecode`. Each returns a pure `GenerationResult`; `writeResult` (`src/generators/writer.ts`) owns the filesystem side effects.
+`generate()` (`src/generators/index.ts`) dispatches through the `GENERATORS` map to `generateClaude`, `generateOpencode`, `generateCodex`, `generateCursor`, `generateForgecode`, and `generateAntigravity`. Each returns a pure `GenerationResult`; `writeResult` (`src/generators/writer.ts`) owns the filesystem side effects.
 
 Parsing validates against Zod schemas and reports localized diagnostics for broken Markdown frontmatter, YAML/JSON config syntax, and schema failures. Semantic validators reuse the same diagnostic shape for cross-reference and collision failures.
 

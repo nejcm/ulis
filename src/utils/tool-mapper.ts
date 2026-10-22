@@ -1,6 +1,6 @@
 import type { ToolPermissions } from "../schema.js";
 
-export type ToolPlatform = "claude" | "cursor" | "opencode" | "codex" | "forgecode";
+export type ToolPlatform = "claude" | "cursor" | "opencode" | "codex" | "forgecode" | "antigravity";
 
 // mapping agent tool permissions to tool names for each platform
 const PLATFORM_TOOL_NAMES: Record<
@@ -38,6 +38,15 @@ const PLATFORM_TOOL_NAMES: Record<
     search: ["search", "fetch"],
     browser: ["mcp_*"],
   },
+  // Only documented Antigravity tool names; an unknown name hangs the subagent, so none are guessed.
+  antigravity: {
+    read: ["view_file", "grep_search"],
+    write: [],
+    edit: ["replace_file_content"],
+    bash: ["run_command"],
+    search: [],
+    browser: [],
+  },
 };
 
 /** Every tool name `mapTools` can emit for a list-based platform, in declaration order. */
@@ -50,13 +59,14 @@ export function allMappedToolNames(platform: keyof typeof PLATFORM_TOOL_NAMES): 
  * names. Returns an empty array for `opencode` (see `mapOpencodeTools`) and
  * `codex`, which has no per-agent tool list.
  *
- * Subagent allowlist (`tools.agent`) is appended for `claude` only — it is
- * the only platform that supports `Agent(name1, name2)` in `allowed-tools`.
+ * Subagent allowlist (`tools.agent`) is appended for `claude` (`Agent(name1, name2)`
+ * in `allowed-tools`) and `antigravity` (`invoke_subagent`, no allowlist).
  *
  * Tool name maps are internal ULIS defaults and not user-configurable.
  */
 export function mapTools(perms: ToolPermissions, platform: ToolPlatform): string[] {
-  if (typeof perms === "string") return perms.split(",").map((t) => t.trim());
+  // A string allowlist holds Claude tool names, which Antigravity would not recognize.
+  if (typeof perms === "string") return platform === "antigravity" ? [] : perms.split(",").map((t) => t.trim());
 
   if (platform === "opencode" || platform === "codex") {
     // These platforms consume the structured `ToolPermissions` directly;
@@ -81,6 +91,11 @@ export function mapTools(perms: ToolPermissions, platform: ToolPlatform): string
     } else if (Array.isArray(perms.agent)) {
       tools.push(`Agent(${perms.agent.join(", ")})`);
     }
+  } else if (
+    platform === "antigravity" &&
+    (perms.agent === true || (Array.isArray(perms.agent) && perms.agent.length > 0))
+  ) {
+    tools.push("invoke_subagent");
   }
 
   return tools;

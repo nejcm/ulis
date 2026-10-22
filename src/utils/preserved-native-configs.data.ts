@@ -106,4 +106,14 @@ export const PRESERVED_NATIVE_CONFIGS = [
     targetPath: (context) => join(platformConfigDir("forgecode", context.destBase, context.userHome), ".forge.toml"),
     preservedPaths: [[]],
   },
+  {
+    platform: "antigravity",
+    label: "mcp_config.json",
+    names: ["mcp_config.json"],
+    generatedPath: (context) => join(context.outputDir, "antigravity", "mcp_config.json"),
+    targetPath: (context) =>
+      join(platformConfigDir("antigravity", context.destBase, context.userHome), "mcp_config.json"),
+    preservedPaths: [["mcpServers"]],
+    mcpKey: "mcpServers",
+  },
 ] as const satisfies readonly PreservedNativeConfigSpec[];

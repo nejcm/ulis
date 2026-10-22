@@ -38,6 +38,8 @@ export interface CopyPlatformContentsOptions {
   readonly previouslyManagedRootEntries?: readonly string[];
   /** Root entries this install records, in the same shape. The sweep needs both to see a change. */
   readonly currentManagedRootEntries?: readonly string[];
+  /** Agent and skill entries a previous install recorded; replacing any other existing entry warns. Omit to never warn. */
+  readonly previouslyManagedEntries?: readonly string[];
   /** Called with each `targetDir`-relative path this copy left content at, even when it then fails. */
   readonly onWritten?: (relativePath: string) => void;
 }
@@ -94,9 +96,18 @@ export function copyPlatformContents(
     pruneExtraNames = false,
     previouslyManagedRootEntries,
     currentManagedRootEntries,
+    previouslyManagedEntries,
     onWritten,
   } = options;
-  const recordWritten = onWritten && ((path: string) => onWritten(relative(targetDir, path).split(sep).join("/")));
+  const relativeTo = (path: string) => relative(targetDir, path).split(sep).join("/");
+  const recordWritten = onWritten && ((path: string) => onWritten(relativeTo(path)));
+  const managed = new Set(previouslyManagedEntries);
+  const onReplaced =
+    previouslyManagedEntries &&
+    ((path: string) => {
+      const entry = relativeTo(path);
+      if (!managed.has(entry)) logger?.warn(`Replacing ${entry}: not written by a previous ULIS install`);
+    });
   ensureDir(targetDir);
   if (!existsSync(sourceDir)) {
     throw new InstallError(`Generated platform directory does not exist: ${sourceDir}`);
@@ -124,7 +135,7 @@ export function copyPlatformContents(
     const targetPath = join(targetDir, entry);
     const namedDirectory = findNamedDirectory(namedDirectories, entry);
     if (namedDirectory) {
-      copyNamedDirectory(sourcePath, targetPath, namedDirectory, logger, recordWritten);
+      copyNamedDirectory(sourcePath, targetPath, namedDirectory, logger, recordWritten, onReplaced);
       logger?.success(entry);
       continue;
     }
@@ -507,7 +518,13 @@ function copyFileToNewPath(sourcePath: string, targetPath: string): boolean {
 }
 
 /** Replace whatever is at `targetPath` with `sourcePath` outright - never merging, never following a link. */
-function replaceWithSource(sourcePath: string, targetPath: string, onWritten?: (path: string) => void): void {
+function replaceWithSource(
+  sourcePath: string,
+  targetPath: string,
+  onWritten?: (path: string) => void,
+  onReplaced?: (path: string) => void,
+): void {
+  if (onReplaced && statsOf(targetPath)) onReplaced(targetPath);
   removePath(targetPath);
   const sourceStats = statsOf(sourcePath);
   if (!sourceStats?.isDirectory()) {
@@ -655,10 +672,11 @@ function copyNamedDirectory(
   rule: NamedDirectoryCopyRule,
   logger?: Logger,
   onWritten?: (path: string) => void,
+  onReplaced?: (path: string) => void,
 ): void {
   ensureManagedDirectory(targetDir);
   if (rule.alternateRelativeDirs && rule.alternateRelativeDirs.length > 0) {
-    copyNestedNamedDirectory(sourceDir, targetDir, rule, logger, onWritten);
+    copyNestedNamedDirectory(sourceDir, targetDir, rule, logger, onWritten, onReplaced);
     return;
   }
 
@@ -666,7 +684,7 @@ function copyNamedDirectory(
   for (const entry of entries) {
     const sourcePath = join(sourceDir, entry);
     const targetPath = join(targetDir, entry);
-    replaceWithSource(sourcePath, targetPath, onWritten);
+    replaceWithSource(sourcePath, targetPath, onWritten, onReplaced);
     logger?.dim(`  ${entry}`);
   }
 }
@@ -677,6 +695,7 @@ function copyNestedNamedDirectory(
   rule: NamedDirectoryCopyRule,
   logger?: Logger,
   onWritten?: (path: string) => void,
+  onReplaced?: (path: string) => void,
 ): void {
   for (const relativeDir of rule.alternateRelativeDirs ?? []) {
     const sourceNestedDir = join(sourceDir, relativeDir);
@@ -689,7 +708,7 @@ function copyNestedNamedDirectory(
     for (const entry of readDirectoryEntries(sourceNestedDir)) {
       const sourcePath = join(sourceNestedDir, entry);
       const targetPath = join(targetNestedDir, entry);
-      replaceWithSource(sourcePath, targetPath, onWritten);
+      replaceWithSource(sourcePath, targetPath, onWritten, onReplaced);
       logger?.dim(`  ${relativeDir}/${entry}`);
     }
   }

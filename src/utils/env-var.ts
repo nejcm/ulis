@@ -8,10 +8,11 @@
  * - cursor:          ${VAR} → ${env:VAR}  (Cursor mcp.json command, args, env, url, headers)
  * - claude:          ${VAR} → ${VAR}
  * - forgecode:       ${VAR} → ${VAR}
+ * - antigravity:     ${VAR} → ${VAR}     (verbatim; Antigravity documents no interpolation)
  */
 export function translateEnvVar(
   value: string,
-  target: "opencode_env" | "opencode_header" | "codex" | "cursor" | "claude" | "forgecode",
+  target: "opencode_env" | "opencode_header" | "codex" | "cursor" | "claude" | "forgecode" | "antigravity",
 ): string {
   return value.replace(/\$\{(\w+)\}/g, (_match, varName) => {
     switch (target) {
@@ -23,6 +24,7 @@ export function translateEnvVar(
       case "codex":
       case "claude":
       case "forgecode":
+      case "antigravity":
         return `\${${varName}}`;
       default:
         return `\${${varName}}`;

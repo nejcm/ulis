@@ -20,6 +20,8 @@ platforms:
     rate_limit_per_hour: 10
   cursor:
     readonly: true
+  antigravity:
+    commandExecutionPolicy: off
 ---
 
 # Security Agent

@@ -23,6 +23,13 @@ describe("platform paths", () => {
     expect(platformConfigDir("forgecode", workspace, userHome)).toBe(join(workspace, ".forge"));
   });
 
+  it("uses .gemini/config for home installs and .agents for project installs of antigravity", () => {
+    const userHome = createTempRoot("ulis-platform-aghome-");
+    const workspace = createTempRoot("ulis-platform-agws-");
+    expect(platformConfigDir("antigravity", userHome, userHome)).toBe(join(userHome, ".gemini", "config"));
+    expect(platformConfigDir("antigravity", workspace, userHome)).toBe(join(workspace, ".agents"));
+  });
+
   it("uses .config/opencode for home installs and .opencode for project installs", () => {
     const userHome = createTempRoot("ulis-platform-ochome-");
     const workspace = createTempRoot("ulis-platform-ocws-");

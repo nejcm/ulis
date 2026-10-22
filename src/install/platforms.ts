@@ -53,6 +53,7 @@ export async function installOpencode(
     onWritten,
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.opencode,
     namedDirectories: managedDirectoryRules("opencode"),
+    previouslyManagedEntries: previouslyManagedEntries(ownership),
     pruneExtraNames: context.prune,
     previouslyManagedRootEntries: ownership?.previous?.rootEntries,
     currentManagedRootEntries: ownership?.current.rootEntries,
@@ -63,6 +64,7 @@ export async function installOpencode(
 
 export async function installClaude(
   context: InstallContext,
+  ownership?: PlatformOwnership,
   onWritten?: (relativePath: string) => void,
 ): Promise<void> {
   const targetDir = platformConfigDir("claude", context.destBase, context.userHome);
@@ -84,11 +86,16 @@ export async function installClaude(
     onWritten,
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.claude,
     namedDirectories: managedDirectoryRules("claude"),
+    previouslyManagedEntries: previouslyManagedEntries(ownership),
   });
   prunePlatformMcpServers("claude", context);
 }
 
-export async function installCodex(context: InstallContext, onWritten?: (relativePath: string) => void): Promise<void> {
+export async function installCodex(
+  context: InstallContext,
+  ownership?: PlatformOwnership,
+  onWritten?: (relativePath: string) => void,
+): Promise<void> {
   const targetDir = platformConfigDir("codex", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "codex");
 
@@ -102,12 +109,14 @@ export async function installCodex(context: InstallContext, onWritten?: (relativ
     onWritten,
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.codex,
     namedDirectories: managedDirectoryRules("codex"),
+    previouslyManagedEntries: previouslyManagedEntries(ownership),
   });
   prunePlatformMcpServers("codex", context);
 }
 
 export async function installCursor(
   context: InstallContext,
+  ownership?: PlatformOwnership,
   onWritten?: (relativePath: string) => void,
 ): Promise<void> {
   const targetDir = platformConfigDir("cursor", context.destBase, context.userHome);
@@ -125,12 +134,14 @@ export async function installCursor(
     onWritten,
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.cursor,
     namedDirectories: managedDirectoryRules("cursor"),
+    previouslyManagedEntries: previouslyManagedEntries(ownership),
   });
   prunePlatformMcpServers("cursor", context);
 }
 
 export async function installForgecode(
   context: InstallContext,
+  ownership?: PlatformOwnership,
   onWritten?: (relativePath: string) => void,
 ): Promise<void> {
   const sourceDir = join(context.outputDir, "forgecode");
@@ -151,6 +162,7 @@ export async function installForgecode(
       onWritten,
       skipNames: PLATFORM_INSTALL_SKIP_NAMES.forgecode,
       namedDirectories: managedDirectoryRules("forgecode"),
+      previouslyManagedEntries: previouslyManagedEntries(ownership),
     });
   }
 
@@ -163,6 +175,33 @@ export async function installForgecode(
     ),
   });
   prunePlatformMcpServers("forgecode", context);
+}
+
+export async function installAntigravity(
+  context: InstallContext,
+  ownership?: PlatformOwnership,
+  onWritten?: (relativePath: string) => void,
+): Promise<void> {
+  const targetDir = platformConfigDir("antigravity", context.destBase, context.userHome);
+  const sourceDir = join(context.outputDir, "antigravity");
+
+  logHeader(context, `Installing ${PLATFORM_LABELS.antigravity}`);
+  backupDirectory(targetDir, context);
+  const preservedConfigs = capturePlatformPreservedNativeConfigs("antigravity", context);
+  ensureDir(targetDir);
+  writePlatformPreservedNativeConfigs("antigravity", preservedConfigs, context, onWritten);
+
+  copyPlatformContents(sourceDir, targetDir, {
+    logger: context.logger,
+    onWritten,
+    skipNames: PLATFORM_INSTALL_SKIP_NAMES.antigravity,
+    namedDirectories: managedDirectoryRules("antigravity"),
+    previouslyManagedEntries: previouslyManagedEntries(ownership),
+    pruneExtraNames: context.prune,
+    previouslyManagedRootEntries: ownership?.previous?.rootEntries,
+    currentManagedRootEntries: ownership?.current.rootEntries,
+  });
+  prunePlatformMcpServers("antigravity", context);
 }
 
 export function detectInstallCollisions(
@@ -188,6 +227,7 @@ function detectPlatformCollisions(platform: Platform, destBase: string, userHome
     case "codex":
     case "cursor":
     case "opencode":
+    case "antigravity":
       return detectPlatformDirCollisions(platform, destBase, userHome);
   }
 }
@@ -359,6 +399,10 @@ function copyToUnusedBackupPath(sourcePath: string, context: InstallContext): Ba
 
 function reservedNames(...names: readonly string[]): ReadonlySet<string> {
   return new Set([ULIS_MANIFEST_FILENAME, ULIS_PROVENANCE_FILENAME, ...names]);
+}
+
+function previouslyManagedEntries(ownership?: PlatformOwnership): readonly string[] {
+  return ownership?.previous ? [...ownership.previous.agents, ...ownership.previous.skills] : [];
 }
 
 function managedDirectoryRules(platform: Platform) {

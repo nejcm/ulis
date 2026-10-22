@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { parsePlatformList } from "./platforms.js";
+import { PLATFORMS, parsePlatformList } from "./platforms.js";
 import { resolveWorkflowPlan, toggleAllPlatformSelections, togglePlatformSelection } from "./workflow.js";
 
 describe("parsePlatformList", () => {
@@ -27,7 +27,7 @@ describe("workflow helpers", () => {
   });
 
   it("toggles all platforms on and off", () => {
-    expect(toggleAllPlatformSelections(["claude"])).toEqual(["opencode", "claude", "codex", "cursor", "forgecode"]);
-    expect(toggleAllPlatformSelections(["opencode", "claude", "codex", "cursor", "forgecode"])).toEqual([]);
+    expect(toggleAllPlatformSelections(["claude"])).toEqual([...PLATFORMS]);
+    expect(toggleAllPlatformSelections(PLATFORMS)).toEqual([]);
   });
 });

@@ -66,6 +66,24 @@ describe("mapTools — cursor", () => {
   });
 });
 
+describe("mapTools — antigravity", () => {
+  it("returns empty for empty permissions and for a Claude-name allowlist", () => {
+    expect(mapTools(empty, "antigravity")).toEqual([]);
+    expect(mapTools("Read, Bash", "antigravity")).toEqual([]);
+  });
+
+  it("maps only documented tool names, so write/search/browser add nothing", () => {
+    expect(mapTools(all, "antigravity")).toEqual(["view_file", "grep_search", "replace_file_content", "run_command"]);
+  });
+
+  it("emits invoke_subagent for any non-empty subagent permission", () => {
+    expect(mapTools({ ...empty, agent: true }, "antigravity")).toEqual(["invoke_subagent"]);
+    expect(mapTools({ ...empty, agent: ["helper"] }, "antigravity")).toEqual(["invoke_subagent"]);
+    expect(mapTools({ ...empty, agent: [] }, "antigravity")).toEqual([]);
+    expect(mapTools({ ...empty, agent: false }, "antigravity")).toEqual([]);
+  });
+});
+
 describe("mapTools — opencode/codex", () => {
   it("returns empty for opencode (see mapOpencodeTools)", () => {
     expect(mapTools(all, "opencode")).toEqual([]);

@@ -11,21 +11,23 @@ raw/
 ├── codex/      # Codex-specific injections
 ├── cursor/     # Cursor-specific injections
 ├── opencode/   # OpenCode-specific injections
-└── forgecode/  # ForgeCode-specific injections
+├── forgecode/  # ForgeCode-specific injections
+└── antigravity/ # Antigravity-specific injections
 ```
 
 ## How It's Used
 
 During `bun run build`, the build system reads each subdirectory and copies its contents into the corresponding platform's generated output directory:
 
-| Source dir       | Destination            |
-| ---------------- | ---------------------- |
-| `raw/all/`       | All platform outputs   |
-| `raw/claude/`    | `generated/claude/`    |
-| `raw/codex/`     | `generated/codex/`     |
-| `raw/cursor/`    | `generated/cursor/`    |
-| `raw/opencode/`  | `generated/opencode/`  |
-| `raw/forgecode/` | `generated/forgecode/` |
+| Source dir         | Destination              |
+| ------------------ | ------------------------ |
+| `raw/all/`         | All platform outputs     |
+| `raw/claude/`      | `generated/claude/`      |
+| `raw/codex/`       | `generated/codex/`       |
+| `raw/cursor/`      | `generated/cursor/`      |
+| `raw/opencode/`    | `generated/opencode/`    |
+| `raw/forgecode/`   | `generated/forgecode/`   |
+| `raw/antigravity/` | `generated/antigravity/` |
 
 Files in `raw/all/` are copied to **every** platform's generated directory.
 

@@ -107,6 +107,49 @@ describe("writeResult", () => {
     );
   });
 
+  it("keeps a source model in copied SKILL.md when the platform strips nothing", () => {
+    const root = createTempRoot("ulis-writer-");
+    const outDir = join(root, "out");
+    const skillDir = join(root, "source-skill");
+    write(join(skillDir, "SKILL.md"), ["---", "name: s", "model: claude-haiku", "---", "", "Body."].join("\n"));
+
+    writeResult(
+      { artifacts: [], post: { rawDirs: [], aliasFiles: [], skillDirs: [{ name: "s", dir: skillDir }] } },
+      outDir,
+      "cursor",
+    );
+
+    expect(read(join(outDir, "skills", "s", "SKILL.md"))).toContain("model: claude-haiku\n");
+  });
+
+  it("strips the keys a platform names from copied SKILL.md frontmatter", () => {
+    const root = createTempRoot("ulis-writer-");
+    const outDir = join(root, "out");
+    const skillDir = join(root, "source-skill");
+    write(
+      join(skillDir, "SKILL.md"),
+      ["---", "name: s", "model: claude-haiku", "custom: keep", "---", "", "Body."].join("\n"),
+    );
+
+    writeResult(
+      {
+        artifacts: [],
+        post: {
+          rawDirs: [],
+          aliasFiles: [],
+          skillDirs: [{ name: "s", dir: skillDir, extraFrontmatter: { extra: 1 }, stripKeys: ["model"] }],
+        },
+      },
+      outDir,
+      "antigravity",
+    );
+
+    const copied = read(join(outDir, "skills", "s", "SKILL.md"));
+    expect(copied).not.toContain("model:");
+    expect(copied).toContain("custom: keep");
+    expect(copied).toContain("extra: 1");
+  });
+
   it("copies skill directories into a custom skills destination", () => {
     const root = createTempRoot("ulis-writer-");
     const outDir = join(root, "out");

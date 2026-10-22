@@ -59,7 +59,8 @@ pageClass: ulis-landing-page
           <div>├── codex/<span class="ul-dim">         agents · skills · config.toml</span></div>
           <div>├── cursor/<span class="ul-dim">        rules · mcp.json · permissions.json</span></div>
           <div>├── opencode/<span class="ul-dim">      agents · skills · opencode.json</span></div>
-          <div>└── forgecode/<span class="ul-dim">     AGENTS.md · .forge/</span></div>
+          <div>├── forgecode/<span class="ul-dim">     AGENTS.md · .forge/</span></div>
+          <div>└── antigravity/<span class="ul-dim">   agents · rules · mcp_config.json</span></div>
         </div>
       </div>
     </div>
@@ -86,6 +87,7 @@ const targets = [
   { name: 'Cursor', path: '.cursor/' },
   { name: 'OpenCode', path: '.opencode/' },
   { name: 'ForgeCode', path: '.forge/' },
+  { name: 'Antigravity', path: '.agents/' },
 ]
 const steps = [
   { cmd: 'ulis init', title: 'Scaffold', body: 'Creates the canonical .ulis/ tree with sane defaults for agents, skills, MCP and permissions.' },

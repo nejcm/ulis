@@ -103,6 +103,7 @@ export const SkillFrontmatterSchema = z
             model: z.string().optional(),
           })
           .optional(),
+        antigravity: z.looseObject({ enabled: z.boolean().default(true) }).optional(),
       })
       .loose()
       .optional(),

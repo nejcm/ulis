@@ -2,7 +2,7 @@
 
 # Declarative skill installs per platform (via the `skills` CLI).
 # - "*"      applies to every platform
-# - "claude" / "codex" / "cursor" / "opencode" scope to one platform
+# - "claude" / "codex" / "cursor" / "opencode" / "forgecode" / "antigravity" scope to one platform
 #
 # Example:
 #
