@@ -66,19 +66,19 @@ ulis install --skip-rebuild --yes
 ulis install --source https://github.com/acme/ulis-config#main
 ```
 
-| Flag                     | Effect                                                        |
-| ------------------------ | ------------------------------------------------------------- |
-| `-g`, `--global`         | Home source and home destinations                             |
-| `--source <path\|url>`   | Override source. Git URL allowed here                         |
-| `--target`               | Subset of platforms                                           |
-| `-y`, `--yes`            | Skip overwrite **and** remote trust gate                      |
-| `--skip-rebuild`         | Use existing `generated/`. Refused if provenance says remote  |
-| `--backup`               | Timestamped copies of existing platform dirs                  |
-| `--no-prune`             | Keep stale managed agents/local skills; they become unmanaged |
-| `--preset`               | Layer presets, then base source                               |
-| `--runner npx\|bunx`     | Runner for `extensions.yaml`                                  |
-| `--skip-extensions`      | Do not run `extensions.yaml`                                  |
-| `--skip-external-skills` | Do not run `skills.yaml`                                      |
+| Flag                     | Effect                                                                                                             |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `-g`, `--global`         | Home source and home destinations                                                                                  |
+| `--source <path\|url>`   | Override source. Git URL allowed here                                                                              |
+| `--target`               | Subset of platforms                                                                                                |
+| `-y`, `--yes`            | Skip overwrite **and** remote trust gate                                                                           |
+| `--skip-rebuild`         | Use existing `generated/`. Refused if provenance says remote                                                       |
+| `--backup`               | Timestamped copies of existing platform dirs                                                                       |
+| `--no-prune`             | Keep stale managed agents, local skills, rules, commands, instruction files and MCP servers; they become unmanaged |
+| `--preset`               | Layer presets, then base source                                                                                    |
+| `--runner npx\|bunx`     | Runner for `extensions.yaml`                                                                                       |
+| `--skip-extensions`      | Do not run `extensions.yaml`                                                                                       |
+| `--skip-external-skills` | Do not run `skills.yaml`                                                                                           |
 
 Ownership: `.ulis-manifest.json` in each selected platform root. First manifest-aware install adopts the current set and prunes nothing. Later installs prune `previous managed − current generated` for **selected** platforms only. External `skills.yaml` installs are not in the manifest.
 

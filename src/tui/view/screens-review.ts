@@ -139,7 +139,12 @@ export function installReviewView(state: TuiState, cwd?: string, userHome?: stri
     field("Destination", plan.destBase),
     field("Platforms", formatPlatforms(state.platforms)),
     field("Presets", sanitizeConsentText(formatPresets(state))),
-    field("Prune", state.prune ? "Removed agents, skills and MCP servers" : "Off; stale entries become unmanaged"),
+    field(
+      "Prune",
+      state.prune
+        ? "Removes stale agents, skills, rules, commands, instructions and MCP servers"
+        : "Off; stale entries become unmanaged",
+    ),
     { kind: "blank" },
     { kind: "text", text: `Command: ${command}`, tone: "muted", copy: command },
     { kind: "blank" },
@@ -176,7 +181,12 @@ export function presetInstallReviewView(
     field("Destination", plan.destBase),
     field("Platforms", formatPlatforms(state.platforms)),
     field("Presets", sanitizeConsentText(formatPresets(state))),
-    field("Prune", state.prune ? "Removed agents, skills and MCP servers" : "Off; stale entries become unmanaged"),
+    field(
+      "Prune",
+      state.prune
+        ? "Removes stale agents, skills, rules, commands, instructions and MCP servers"
+        : "Off; stale entries become unmanaged",
+    ),
     { kind: "blank" },
     { kind: "text", text: "Action: install the selected preset directories resolved by the TUI.", tone: "muted" },
     { kind: "blank" },
@@ -184,7 +194,7 @@ export function presetInstallReviewView(
   ];
   const actionRows: ViewRow[] = [
     option(state, 0, "Backup existing configs before install", { checked: state.backup }),
-    option(state, 1, "Prune agents, skills and MCP servers", { checked: state.prune }),
+    option(state, 1, "Prune stale ULIS-installed entries", { checked: state.prune }),
     option(state, 2, "Run preset extensions", { checked: state.presetInstallExtensions }),
     ...(state.presetSourceMode === "custom" && state.presetInstallExtensions
       ? [

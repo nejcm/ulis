@@ -174,19 +174,19 @@ In CI or other non-interactive runs, add `--yes` so a missing preset name fails 
 
 ### Common flags
 
-| Flag                     | Applies to                | Description                                                                                         |
-| ------------------------ | ------------------------- | --------------------------------------------------------------------------------------------------- |
-| `-g`, `--global`         | all                       | Operate on `~/.ulis/` and home-level install targets (`~/.claude/`…)                                |
-| `--source <path>`        | `build`, `install`        | Override the source directory; with `--global`, installs still target home                          |
-| `--target <platforms>`   | `build`, `install`        | Comma-separated list: `claude`, `codex`, `cursor`, `opencode`, `forgecode`, `antigravity`, `hermes` |
-| `--preset <names>`       | `build`, `install`        | Apply preset(s) from `~/.ulis/presets/` or bundled presets (comma-separated)                        |
-| `-y`, `--yes`            | `install`                 | Skip confirmation prompts                                                                           |
-| `--skip-rebuild`         | `install`                 | Skip the build step and deploy existing `generated/`                                                |
-| `--backup`               | `install`                 | Back up existing platform dirs (`<dir>.backup.YYYYMMDD_HHMMSS`)                                     |
-| `--no-prune`             | `install`, preset install | Keep stale ULIS-installed agents and local skills; relinquish their ownership                       |
-| `--runner <npx\|bunx>`   | `install`                 | Package runner for `extensions.yaml` (`npx` or `bunx`)                                              |
-| `--skip-extensions`      | `install`                 | Skip running entries from `extensions.yaml`                                                         |
-| `--skip-external-skills` | `install`                 | Skip installing external skills declared in `skills.yaml`                                           |
+| Flag                     | Applies to                | Description                                                                                                                    |
+| ------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `-g`, `--global`         | all                       | Operate on `~/.ulis/` and home-level install targets (`~/.claude/`…)                                                           |
+| `--source <path>`        | `build`, `install`        | Override the source directory; with `--global`, installs still target home                                                     |
+| `--target <platforms>`   | `build`, `install`        | Comma-separated list: `claude`, `codex`, `cursor`, `opencode`, `forgecode`, `antigravity`, `hermes`                            |
+| `--preset <names>`       | `build`, `install`        | Apply preset(s) from `~/.ulis/presets/` or bundled presets (comma-separated)                                                   |
+| `-y`, `--yes`            | `install`                 | Skip confirmation prompts                                                                                                      |
+| `--skip-rebuild`         | `install`                 | Skip the build step and deploy existing `generated/`                                                                           |
+| `--backup`               | `install`                 | Back up existing platform dirs (`<dir>.backup.YYYYMMDD_HHMMSS`)                                                                |
+| `--no-prune`             | `install`, preset install | Keep stale ULIS-installed agents, local skills, rules, commands, instruction files and MCP servers; relinquish their ownership |
+| `--runner <npx\|bunx>`   | `install`                 | Package runner for `extensions.yaml` (`npx` or `bunx`)                                                                         |
+| `--skip-extensions`      | `install`                 | Skip running entries from `extensions.yaml`                                                                                    |
+| `--skip-external-skills` | `install`                 | Skip installing external skills declared in `skills.yaml`                                                                      |
 
 ### Presets (quick reference)
 
