@@ -149,6 +149,16 @@ it("never sweeps a global Claude settings file an older manifest lists", async (
   for (const native of natives) expect(read(join(targetDir, native.name))).toContain(native.keeps);
 });
 
+it("keeps stale ForgeCode native-root rules on disk when the outer-tree copy fails", async () => {
+  const { sourceDir, targetDir, options } = rulesSource("forgecode", ".forge");
+  await runInstall(options);
+  rmSync(join(sourceDir, "rules", "b.md"));
+  rmSync(join(targetDir, "AGENTS.md"));
+  write(join(targetDir, "AGENTS.md", "keep.txt"), "in the way\n");
+  await expect(runInstall(options)).rejects.toThrow();
+  expect(existsSync(join(targetDir, "rules", "b.md"))).toBe(true);
+});
+
 it("clears a stale ForgeCode native-root directory a raw fragment now needs as a file", async () => {
   const { sourceDir, targetDir, options } = rulesSource("forgecode", ".forge");
   write(join(sourceDir, "raw", "forgecode", ".forge", "foo", "old.md"), "Old.\n");

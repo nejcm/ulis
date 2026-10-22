@@ -279,10 +279,7 @@ describe("copyPlatformContents: sweep ordering", () => {
     mkdirSync(sourceDir, { recursive: true });
     writeFileSync(join(sourceDir, "foo"), "new file content");
 
-    // "foo/stale.txt" was the only thing recorded inside the old "foo" directory and is not
-    // current any more; nothing records "foo" itself as current since the source now wants it to
-    // be a plain file. If nothing were swept before the copy, the type-change replace below would
-    // find a non-empty directory still in its way and abort the whole install.
+    // Without the pre-copy sweep the replace below meets a non-empty directory and aborts.
     expect(() =>
       copyPlatformContents(sourceDir, targetDir, {
         pruneExtraNames: true,
@@ -293,6 +290,26 @@ describe("copyPlatformContents: sweep ordering", () => {
 
     expect(lstatSync(join(targetDir, "foo")).isFile()).toBe(true);
     expect(readFileSync(join(targetDir, "foo"), "utf-8")).toBe("new file content");
+  });
+
+  it("leaves the ancestors of a cleared blocking entry in place, mode included", () => {
+    const root = createTempRoot();
+    const sourceDir = join(root, "source");
+    const targetDir = join(root, "target");
+    mkdirSync(join(targetDir, "a", "b"), { recursive: true });
+    writeFileSync(join(targetDir, "a", "b", "old"), "stale");
+    chmodSync(join(targetDir, "a"), 0o700);
+    mkdirSync(join(sourceDir, "a"), { recursive: true });
+    writeFileSync(join(sourceDir, "a", "b"), "new file content");
+
+    copyPlatformContents(sourceDir, targetDir, {
+      pruneExtraNames: true,
+      previouslyManagedRootEntries: ["a/b/old"],
+      currentManagedRootEntries: ["a/b"],
+    });
+
+    expect(lstatSync(join(targetDir, "a")).mode & 0o777).toBe(0o700);
+    expect(readFileSync(join(targetDir, "a", "b"), "utf-8")).toBe("new file content");
   });
 });
 

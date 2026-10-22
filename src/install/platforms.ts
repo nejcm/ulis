@@ -176,6 +176,7 @@ export async function installForgecode(
       pruneExtraNames: context.prune,
       previouslyManagedRootEntries: ownership?.previous?.rootEntries,
       currentManagedRootEntries: ownership?.current.rootEntries,
+      finalSweep: false,
     });
   }
 

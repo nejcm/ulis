@@ -38,6 +38,8 @@ export interface CopyPlatformContentsOptions {
   readonly previouslyManagedRootEntries?: readonly string[];
   /** Root entries this install records, in the same shape. The sweep needs both to see a change. */
   readonly currentManagedRootEntries?: readonly string[];
+  /** False leaves the sweep after the copy to a later pass into the same root; the blocking pre-sweep still runs. */
+  readonly finalSweep?: boolean;
   /** Agent and skill entries a previous install recorded; replacing any other existing entry warns. Omit to never warn. */
   readonly previouslyManagedEntries?: readonly string[];
   /** Called with each `targetDir`-relative path this copy left content at, even when it then fails. */
@@ -96,6 +98,7 @@ export function copyPlatformContents(
     pruneExtraNames = false,
     previouslyManagedRootEntries,
     currentManagedRootEntries,
+    finalSweep = true,
     previouslyManagedEntries,
     onWritten,
   } = options;
@@ -152,7 +155,7 @@ export function copyPlatformContents(
     copyIntoTarget(sourcePath, targetPath, undefined, recordWritten);
     logger?.success(entry);
   }
-  sweep();
+  if (finalSweep) sweep();
 }
 
 function blocksSourceFile(sourceDir: string, entry: string): boolean {
@@ -204,6 +207,7 @@ function pruneExtraTargetEntries(
 
   // Deepest first: a directory only becomes empty once the subdirectories under it are gone.
   for (const parent of [...emptiedParents].sort((left, right) => right.split("/").length - left.split("/").length)) {
+    if (only && !only(parent)) continue;
     removeManagedRootEntry(targetDir, parent);
   }
 }
@@ -410,16 +414,7 @@ function copyIntoTarget(
   copyLeaf(sourcePath, targetPath, onLeafWritten);
 }
 
-/**
- * Clear a path so a generated non-directory can take it - never recursively.
- *
- * A generated set that turns a name from a directory into a file used to bring `rmSync -r` down on
- * whatever the destination had under that name, which is the same shape as the `$HOME` deletion this
- * release exists to fix. Worse, the sweep deliberately keeps descendants no previous install
- * recorded, so the copy destroyed precisely the files the sweep had just saved. An empty
- * directory is removed and the file takes its place; one with anything in it stops the install and
- * says which path and why.
- */
+// Never recursive: a directory the sweep left non-empty holds files no install recorded as its own.
 function removeForReplacement(targetPath: string): void {
   const stats = statsOf(targetPath);
   if (!stats) return;
