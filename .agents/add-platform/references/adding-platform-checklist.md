@@ -41,6 +41,14 @@ Audit:
 
 Why it matters: some targets install into a single config directory, while others also merge files like `settings.json`, `mcp.json`, or root-level artifacts.
 
+Also wire:
+
+- `src/install/platforms.ts`: the `install<Target>` function. Copy the root-entry prune options from an installer that already passes them.
+- `src/utils/preserved-native-configs.data.ts`: one entry per native config ULIS merges into, with `overlay` (`json`, `toml` or `yaml`), `mcpKey`, `preservedPaths`, and `scope: "global"` if the file exists in only one scope.
+- `src/install/preview.ts`: the trust preview must show what the new config will run (commands, URLs, policies), and only for configs active in the install scope.
+- `src/install/post-install.ts`: `SKILL_PLATFORM_AGENT_NAMES` takes the skills CLI's agent name, verified in its source. Test both the `"*"` section and an explicit section.
+- `src/utils/skill-frontmatter.ts`: `stripKeys` for canonical frontmatter the target rejects or misreads (Hermes drops `model`).
+
 ## 4. Audit Schema And Parser Surfaces
 
 Search for hardcoded platform names and explicit unions. At minimum inspect:
@@ -63,7 +71,8 @@ Questions to answer:
 Inspect utility code that switches on platform identity:
 
 - `src/utils/env-var.ts`
-- `src/utils/tool-mapper.ts`
+- `src/utils/tool-mapper.ts`: map only to tool names the docs list. Decide what an empty result means natively, and warn at build if it means "no tools".
+- `src/validators/`: build warnings for anything dropped or written verbatim (`mcp-placeholders.ts` is the pattern)
 - any helper used by the new generator
 
 Common miss: adding the platform to `PLATFORMS` but forgetting a utility that still uses a narrower target union.
@@ -92,10 +101,17 @@ Reminder: `raw/all/` is injected into every generated platform output, while `ra
 
 Check whether these docs need updates:
 
-- `docs/SPEC.md`
+- `docs/SPEC.md`: capability matrix, adapter section, install targets, and anything the target omits or can't confirm
 - `docs/REFERENCE.md`
-- `docs/CLI.md`
-- any README that lists supported platforms or generated directories
+- `docs/CLI.md`, `docs/index.md`, `docs/guide/getting-started.md`, `docs/guide/project-vs-global.md`
+- `README.md` platform list, install table and caveats
+- `skills/ulis/SKILL.md` and `skills/ulis/references/`
+- `AGENTS.md`: the platform list, blast-radius directories, "Preserve what we did not write" list, "other N adapters" count, and the platform documentation link
+- `CONTEXT.md` if the target adds a term
+- `CHANGELOG.md` Unreleased, including behavior changes on other platforms
+- `package.json` `description`
+- `src/scaffold/`: both the `*.template.yaml` file and its inlined twin in `index.ts`
+- `src/tools/dev-install.ts`
 
 Important detail from `AGENTS.md`: if you changed Zod schemas, run `bun run gen:reference` so `docs/REFERENCE.md` stays in sync.
 
@@ -111,9 +127,12 @@ Focus on tests that reduce regression risk:
 
 - parsing the new platform from CLI target lists
 - preserving canonical ordering
-- generator output for the new target
-- install behavior if it has merge logic or special paths
+- generator output for the new target, including `tests/golden-artifacts.ts` (hand-edited) and `tests/integration.test.ts`
+- install behavior in a new `src/install.runinstall-<target>.test.ts`, temp directories only: stale managed entries pruned, unmanaged entries and native config values kept, `--no-prune`, failed copy, both scopes
+- every shared install test that iterates `PLATFORMS` (MCP ownership, native config, trust gate). A scope where the target writes no MCP config needs an explicit branch, not a skipped assertion.
 - schema acceptance/rejection for new platform keys
+
+A new test must fail without the change it covers. Revert the change once and watch it fail.
 
 ## 9. Verification Sequence
 
@@ -128,6 +147,12 @@ Also run these when applicable:
 4. `bun run build`
 5. `node dist/cli.js build --source example`
 6. `bun run gen:reference` if Zod schemas changed
+7. `bun run gen:screenshot`, then commit `tui.svg` if it changed. The TUI screenshot lists the platforms, and CI fails when it is stale.
+8. `bun run format:check`, which is what CI runs
+
+In a stack of PRs, run all of these on every branch, not just the top one.
+
+Then compare the generated `example/` output with the tool's online docs, page by page: keys, enums, separators, limits and paths. Record any mismatch you leave in the PR body.
 
 Do not commit `dist/` or `example/generated/`.
 
@@ -139,6 +164,11 @@ Do not commit `dist/` or `example/generated/`.
 - Forgot env-var translation or tool-name mapping helpers
 - Updated schemas without regenerating reference docs
 - Added example output instead of source example config
+- Emitted a value that is valid in shape but wrong in meaning (empty tool list, unknown tool name, a dropped `transport: sse`)
+- Used the platform id where an external CLI expects its own name
+- Forgot `tui.svg`, so CI failed on every branch above the change
+- Recorded a merged native config as a managed root entry
+- A fix to install code that changed copy semantics for unmanaged content, such as inheriting `namedDirectories` into another pass
 
 ## Recommended Working Style
 
