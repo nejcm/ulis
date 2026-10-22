@@ -12,6 +12,7 @@ import { logger as defaultLogger } from "./utils/logger.js";
 import { mergeProjects } from "./utils/merge-projects.js";
 import { legacyRootRecordPath } from "./utils/provenance.js";
 import type { ResolvedPreset } from "./utils/resolve-presets.js";
+import { validateAntigravityAgentTools, validateAntigravityRuleSize } from "./validators/antigravity.js";
 import { validateCollisions } from "./validators/collisions.js";
 import { validateCrossRefs } from "./validators/cross-refs.js";
 import { validateAntigravityAgentMcp, validateMcpPlaceholders } from "./validators/mcp-placeholders.js";
@@ -98,6 +99,8 @@ function validateAndReport(parsed: ParsedProject, logger: Logger): ProjectAnalys
     ...validateCollisions(parsed.agents, parsed.skills),
     ...validateMcpPlaceholders(parsed.mcp),
     ...validateAntigravityAgentMcp(parsed.agents),
+    ...validateAntigravityAgentTools(parsed.agents),
+    ...validateAntigravityRuleSize(parsed.rules),
   ];
 
   for (const diagnostic of diagnostics) {

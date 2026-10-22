@@ -8,7 +8,7 @@ function ruleFrontmatter(rule: ParsedRule): Record<string, unknown> {
   const fm = rule.frontmatter;
   const description = fm.description || undefined;
   if (fm.alwaysApply) return { trigger: "always_on", description };
-  if (fm.paths?.length) return { trigger: "glob", description, globs: fm.paths.join(",") };
+  if (fm.paths?.length) return { trigger: "glob", description, globs: fm.paths.join(", ") };
   if (description) return { trigger: "model_decision", description };
   return { trigger: "always_on" };
 }

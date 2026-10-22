@@ -51,7 +51,7 @@ describe("buildAntigravityRuleArtifact", () => {
   it("maps paths to glob with a comma-joined globs string", () => {
     const artifact = buildAntigravityRuleArtifact(rule("golang/coding-style", { paths: ["**/*.go", "**/go.mod"] }));
     expect(artifact.path).toBe(join("rules", "golang-coding-style.md"));
-    expect(artifact.contents).toContain('trigger: glob\nglobs: "**/*.go,**/go.mod"\n');
+    expect(artifact.contents).toContain('trigger: glob\nglobs: "**/*.go, **/go.mod"\n');
   });
 
   it("maps a bare description to model_decision and nothing to always_on", () => {

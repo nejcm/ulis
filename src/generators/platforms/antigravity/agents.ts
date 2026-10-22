@@ -9,7 +9,7 @@ import type { FileArtifact } from "../../types.js";
 
 const UNMAPPABLE_CAPABILITIES = ["write", "search", "browser"] as const;
 
-function unmappedTools(perms: ToolPermissions): string[] {
+export function unmappedTools(perms: ToolPermissions): string[] {
   if (typeof perms === "string")
     return perms
       .split(",")
