@@ -16,7 +16,7 @@ Releases before this one predate this file. See [GitHub Releases](https://github
 ### Changed
 
 - `ulis install` warns when replacing an agent or skill it did not install (an entry absent from the previous ownership manifest). The entry is still replaced, as before.
-- Antigravity root files (`rules/*.md`, `AGENTS.md`) are swept through the ownership manifest the way OpenCode root entries are; the other platforms still keep a removed rule file in place.
+- Root files outside `agents/` and `skills/` (rules, commands, `AGENTS.md`, `CLAUDE.md`, Cursor `permissions.json`) are swept through the ownership manifest on every platform, as OpenCode's already were. A rule removed, renamed or disabled for a platform no longer stays installed and active on Claude Code, Codex, Cursor or ForgeCode; `--no-prune` keeps it and makes it unmanaged. Preserved native configs are never swept.
 
 ## [0.8.0] — 2026-08-20
 

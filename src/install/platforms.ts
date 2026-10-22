@@ -88,6 +88,9 @@ export async function installClaude(
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.claude,
     namedDirectories: managedDirectoryRules("claude"),
     previouslyManagedEntries: previouslyManagedEntries(ownership),
+    pruneExtraNames: context.prune,
+    previouslyManagedRootEntries: ownership?.previous?.rootEntries,
+    currentManagedRootEntries: ownership?.current.rootEntries,
   });
   prunePlatformMcpServers("claude", context);
 }
@@ -111,6 +114,9 @@ export async function installCodex(
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.codex,
     namedDirectories: managedDirectoryRules("codex"),
     previouslyManagedEntries: previouslyManagedEntries(ownership),
+    pruneExtraNames: context.prune,
+    previouslyManagedRootEntries: ownership?.previous?.rootEntries,
+    currentManagedRootEntries: ownership?.current.rootEntries,
   });
   prunePlatformMcpServers("codex", context);
 }
@@ -136,6 +142,9 @@ export async function installCursor(
     skipNames: PLATFORM_INSTALL_SKIP_NAMES.cursor,
     namedDirectories: managedDirectoryRules("cursor"),
     previouslyManagedEntries: previouslyManagedEntries(ownership),
+    pruneExtraNames: context.prune,
+    previouslyManagedRootEntries: ownership?.previous?.rootEntries,
+    currentManagedRootEntries: ownership?.current.rootEntries,
   });
   prunePlatformMcpServers("cursor", context);
 }
@@ -174,6 +183,9 @@ export async function installForgecode(
       ...PLATFORM_INSTALL_SKIP_NAMES.forgecode,
       resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project),
     ),
+    pruneExtraNames: context.prune,
+    previouslyManagedRootEntries: ownership?.previous?.rootEntries,
+    currentManagedRootEntries: ownership?.current.rootEntries,
   });
   prunePlatformMcpServers("forgecode", context);
 }
