@@ -378,13 +378,14 @@ describe("remote trust gate", () => {
     const run = await runWithRemote({
       remoteSources: ["https://github.com/o/r"],
       answer: false,
-      platforms: ["codex", "cursor", "forgecode", "opencode", "claude"],
+      platforms: ["codex", "cursor", "forgecode", "opencode", "claude", "antigravity"],
       rawFiles: [
         "cursor/mcp.json",
         "forgecode/.mcp.json",
         "opencode/opencode.json",
         "forgecode/.forge.toml",
         "claude/settings.local.json",
+        "antigravity/mcp_config.json",
       ],
     });
 
@@ -395,6 +396,7 @@ describe("remote trust gate", () => {
       "opencode/opencode.json",
       "forgecode/.forge.toml",
       "claude/settings.local.json",
+      "antigravity/mcp_config.json",
     ]) {
       expect(shown.some((line) => line.startsWith(`installs ${file}`))).toBe(true);
     }

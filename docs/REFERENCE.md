@@ -102,6 +102,17 @@ YAML frontmatter of a file under `agents/`.
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`effort` | `"low"` \| `"medium"` \| `"high"` |  |  |  |  |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`max_tokens` | `integer` |  |  | > 0 |  |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`exclude` | `boolean` |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;`antigravity` | `object` |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`enabled` | `boolean` |  | `true` |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`model` | `"inherit"` \| `"flash"` \| `"pro"` |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`tools` | `string`[] |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`mainAgent` | `boolean` |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`subagent` | `boolean` |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`commandExecutionPolicy` | `"sandbox"` \| `"off"` \| `"auto"` \| `"eager"` |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`mcpServers` | `object` — map of `any`[] |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`<key>` | `any` |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`skills` | `string`[] |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`plugins` | `string`[] |  |  |  |  |
 
 ## Skill
 
@@ -167,6 +178,8 @@ YAML frontmatter of `skills/<name>/SKILL.md`.
 | &nbsp;&nbsp;&nbsp;&nbsp;`forgecode` | `object` |  |  |  |  |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`enabled` | `boolean` |  | `true` |  |  |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`model` | `string` |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;`antigravity` | `object` |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`enabled` | `boolean` |  | `true` |  |  |
 
 ## MCP Config
 
@@ -228,6 +241,11 @@ Fields of `skills.yaml`.
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`key` | `string` |  |  |  |  |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`name` | `string` | ✓ |  | pattern `^[^-\s]\S*$` |  |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`args` | `string`[] |  |  |  | Command-line fragments; each item may contain an option and its value. |
+| `antigravity` | `object` |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;`skills` | `object`[] |  | `[]` |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`key` | `string` |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`name` | `string` | ✓ |  | pattern `^[^-\s]\S*$` |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`args` | `string`[] |  |  |  | Command-line fragments; each item may contain an option and its value. |
 
 ## Extensions Config
 
@@ -261,6 +279,11 @@ Fields of `extensions.yaml`.
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`name` | `string` | ✓ |  | pattern `^[^-\s]\S*$` |  |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`args` | `string`[] |  |  |  |  |
 | `forgecode` | `object` |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;`extensions` | `object`[] |  | `[]` |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`key` | `string` |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`name` | `string` | ✓ |  | pattern `^[^-\s]\S*$` |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`args` | `string`[] |  |  |  |  |
+| `antigravity` | `object` |  |  |  |  |
 | &nbsp;&nbsp;&nbsp;&nbsp;`extensions` | `object`[] |  | `[]` |  |  |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`key` | `string` |  |  |  |  |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`name` | `string` | ✓ |  | pattern `^[^-\s]\S*$` |  |

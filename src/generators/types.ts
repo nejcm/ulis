@@ -38,6 +38,8 @@ export interface PostEmit {
     readonly dir: string;
     /** Platform-specific frontmatter fields to merge into the copied SKILL.md. */
     readonly extraFrontmatter?: Record<string, unknown>;
+    /** Native frontmatter keys to drop from the copied SKILL.md. */
+    readonly stripKeys?: readonly string[];
   }[];
   /** Destination directory for `skillDirs` relative to `outDir`. Defaults to `"skills"`. */
   readonly skillsDestRelative?: string;

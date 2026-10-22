@@ -184,12 +184,14 @@ function walk(node: unknown, found: string[], depth: number, seen: WeakSet<objec
   // `command: ["npx", "-y", …]` where the whole argv is the one field.
   const argv = commandArgv(record);
   if (argv.length > 0) found.push(`runs: ${formatCommandPreview(argv)}${envSuffix(record)}`);
-  else if (typeof record.url === "string" && record.url.length > 0) {
-    // A remote MCP server runs no local process, but it is the same trust decision: on its next
-    // launch the agent connects to that endpoint, every tool the endpoint advertises becomes
-    // callable, and a source-supplied `headers` entry can carry the credential it authenticates
-    // with. Only reported where no command was found, so a local server reads as the spawn it is.
-    found.push(`connects to ${formatCommandPreview([record.url])}`);
+  // Endpoints are the same trust decision as a spawn, so a command never hides them; Antigravity spells the key `serverUrl`.
+  for (const endpoint of new Set([record.url, record.serverUrl])) {
+    if (typeof endpoint === "string" && endpoint.length > 0) {
+      found.push(`connects to ${formatCommandPreview([endpoint])}`);
+    }
+  }
+  if (typeof record.commandExecutionPolicy === "string") {
+    found.push(settingLine(["commandExecutionPolicy"], record.commandExecutionPolicy));
   }
   for (const key of EXEC_STRING_KEYS) {
     const value = record[key];
@@ -269,7 +271,7 @@ function simulatedOutput(result: GenerationResult): Map<string, OutputFile> {
     const skillFile = output.get(skillPath);
     if (skillFile?.contents !== undefined) {
       output.set(skillPath, {
-        contents: toPlatformSkillMarkdown(skillFile.contents, skill.extraFrontmatter) + "\n",
+        contents: toPlatformSkillMarkdown(skillFile.contents, skill.extraFrontmatter, skill.stripKeys) + "\n",
         copied: true,
       });
     }

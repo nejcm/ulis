@@ -19,4 +19,5 @@ export const MANAGED_PLATFORM_LAYOUTS: Readonly<Record<Platform, ManagedPlatform
     legacyAgentDirectories: ["core", "specialized"],
   },
   forgecode: { nativeRoot: [".forge"], agentDirectories: [""], agentExtension: ".md" },
+  antigravity: { nativeRoot: [], agentDirectories: [""], agentExtension: ".md" },
 };

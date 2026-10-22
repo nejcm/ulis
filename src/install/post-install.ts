@@ -14,6 +14,7 @@ const SKILL_PLATFORM_AGENT_NAMES: Partial<Record<Platform, string>> = {
   opencode: "opencode",
   codex: "codex",
   cursor: "cursor",
+  antigravity: "antigravity",
 };
 
 const SKILL_INSTALL_CONCURRENCY = 4;

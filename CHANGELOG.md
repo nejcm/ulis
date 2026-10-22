@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format loosely foll
 
 Releases before this one predate this file. See [GitHub Releases](https://github.com/nejcm/ulis/releases) for their notes.
 
+## [Unreleased]
+
+### Added
+
+- `antigravity` platform target: subagents in `agents/*.md` (documented tool names only, unmapped capabilities as a `[ULIS tools]` comment, canonical `mcpServers` references omitted with a warning because Antigravity does not document the entry object — pass native objects via `platforms.antigravity.mcpServers`; `skills` as `skills/<name>` paths), rules in `rules/*.md` with a `trigger` frontmatter, skills, and `mcp_config.json` (`serverUrl` for remote servers, `${VAR}` written verbatim). Installs to `./.agents/` and `~/.gemini/config/`; `mcp_config.json` servers are merged and pruned like the other platforms' MCP maps. The `skills` CLI mapping (`-a antigravity`) is wired.
+- `ulis build` warns, naming the variable only, for every `${VAR}` placeholder in an MCP server bound for Antigravity, which interpolates nothing.
+- The trust preview reports `serverUrl` endpoints and native `commandExecutionPolicy` settings.
+
+### Changed
+
+- `ulis install` warns when replacing an agent or skill it did not install (an entry absent from the previous ownership manifest). The entry is still replaced, as before.
+- Antigravity root files (`rules/*.md`, `AGENTS.md`) are swept through the ownership manifest the way OpenCode root entries are; the other platforms still keep a removed rule file in place.
+
 ## [0.8.0] — 2026-08-20
 
 **`ulis install` could delete files it did not write.** Every release up to and including 0.7.0 swept the OpenCode destination directory clean of every top-level entry that was not in the generated set — ignoring `--no-prune` and ignoring the ownership manifest, which exists precisely to decide what ULIS may remove. On Linux and macOS, `--global` pointed that sweep at `~/opencode`, a directory the docs never named (they say `~/.config/opencode`). **If you have ever installed the `opencode` target, check `~/opencode`, `~/.opencode` and your projects' `.opencode/` for anything you put there yourself.** This one has nothing to do with remote sources — a purely local `ulis install` reached it. See **Fixed** below; the destination moves in this release and you have to act on the old one yourself.

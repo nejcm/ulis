@@ -14,7 +14,14 @@ import {
   recordPartialOwnership,
   type PlatformOwnership,
 } from "./install/manifest.js";
-import { installClaude, installCodex, installCursor, installForgecode, installOpencode } from "./install/platforms.js";
+import {
+  installAntigravity,
+  installClaude,
+  installCodex,
+  installCursor,
+  installForgecode,
+  installOpencode,
+} from "./install/platforms.js";
 import { installExtensions, installSkills, runPlatformExtensions } from "./install/post-install.js";
 import type { PreviewInputs } from "./install/preview.js";
 import { makeTimestamp, resolveRunner } from "./install/runner.js";
@@ -390,16 +397,19 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
             await installOpencode(context, platformOwnership, onWritten);
             break;
           case "claude":
-            await installClaude(context, onWritten);
+            await installClaude(context, platformOwnership, onWritten);
             break;
           case "codex":
-            await installCodex(context, onWritten);
+            await installCodex(context, platformOwnership, onWritten);
             break;
           case "cursor":
-            await installCursor(context, onWritten);
+            await installCursor(context, platformOwnership, onWritten);
             break;
           case "forgecode":
-            await installForgecode(context, onWritten);
+            await installForgecode(context, platformOwnership, onWritten);
+            break;
+          case "antigravity":
+            await installAntigravity(context, platformOwnership, onWritten);
             break;
         }
         reconcileOwnership(platform, platformOwnership, context.prune, context.logger);

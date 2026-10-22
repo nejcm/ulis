@@ -7,6 +7,7 @@ import { cleanupTempRoots, createTempRoot, writeTextFile } from "../test-utils/f
 import * as installFs from "./fs.js";
 import {
   detectInstallCollisions,
+  installAntigravity,
   installClaude,
   installCodex,
   installCursor,
@@ -88,6 +89,7 @@ describe("platform install skip names", () => {
       codex: [".ulis-manifest.json", ".ulis-provenance.json", "config.toml"],
       cursor: [".ulis-manifest.json", ".ulis-provenance.json", "mcp.json"],
       forgecode: [".ulis-manifest.json", ".ulis-provenance.json", ".mcp.json", ".forge.toml"],
+      antigravity: [".ulis-manifest.json", ".ulis-provenance.json", "mcp_config.json"],
     };
     const installers = {
       opencode: installOpencode,
@@ -95,6 +97,7 @@ describe("platform install skip names", () => {
       codex: installCodex,
       cursor: installCursor,
       forgecode: installForgecode,
+      antigravity: installAntigravity,
     } satisfies Record<Platform, (context: InstallContext) => Promise<void>>;
     const copySpy = spyOn(installFs, "copyPlatformContents").mockImplementation(() => {});
 

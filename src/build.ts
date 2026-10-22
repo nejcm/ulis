@@ -14,6 +14,7 @@ import { legacyRootRecordPath } from "./utils/provenance.js";
 import type { ResolvedPreset } from "./utils/resolve-presets.js";
 import { validateCollisions } from "./validators/collisions.js";
 import { validateCrossRefs } from "./validators/cross-refs.js";
+import { validateAntigravityAgentMcp, validateMcpPlaceholders } from "./validators/mcp-placeholders.js";
 
 export interface Logger {
   info(message: string): void;
@@ -95,6 +96,8 @@ function validateAndReport(parsed: ParsedProject, logger: Logger): ProjectAnalys
   const diagnostics: readonly Diagnostic[] = [
     ...validateCrossRefs(parsed.agents, parsed.skills, parsed.mcp),
     ...validateCollisions(parsed.agents, parsed.skills),
+    ...validateMcpPlaceholders(parsed.mcp),
+    ...validateAntigravityAgentMcp(parsed.agents),
   ];
 
   for (const diagnostic of diagnostics) {

@@ -219,4 +219,56 @@ tools:
 You are a minimal worker agent used for testing.
 `,
   },
+  antigravity: {
+    "mcp_config.json": `{
+  "mcpServers": {
+    "test-local": {
+      "command": "node",
+      "args": [
+        "./mcp-server.js"
+      ],
+      "env": {
+        "API_KEY": "\${TEST_API_KEY}"
+      }
+    },
+    "test-remote": {
+      "serverUrl": "https://mcp.example.com/sse",
+      "headers": {
+        "Authorization": "Bearer \${TEST_REMOTE_TOKEN}"
+      }
+    }
+  }
+}
+`,
+    "agents/worker.md": `---
+name: worker
+description: "A minimal test agent, focus: safe changes"
+tools:
+  - view_file
+  - grep_search
+  - replace_file_content
+---
+
+<!--
+  [ULIS contextHints]
+    maxInputTokens: 20000
+    priority: high
+-->
+
+<!--
+  [ULIS toolPolicy]
+    avoid: Bash
+    requireConfirmation: Write
+-->
+
+<!--
+  [ULIS security]
+    permissionLevel: readonly
+    blockedCommands: rm -rf
+    rateLimit: 30/hour
+-->
+
+You are a minimal worker agent used for testing.
+`,
+  },
 } as const;

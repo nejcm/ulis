@@ -1,6 +1,6 @@
 # ulis — Agent Guide
 
-Source for the `@nejcm/ulis` CLI: a single source of truth for AI tool configs. It reads a user-owned `.ulis/` tree (project-local) or `~/.ulis/` (global) and generates native configs for Claude Code, Codex, OpenCode, Cursor and ForgeCode.
+Source for the `@nejcm/ulis` CLI: a single source of truth for AI tool configs. It reads a user-owned `.ulis/` tree (project-local) or `~/.ulis/` (global) and generates native configs for Claude Code, Codex, OpenCode, Cursor, ForgeCode and Antigravity.
 
 TypeScript bundled with `tsup` (Node 20.3+, ESM — `engines.node` in `package.json`). Dev runtime: Bun. CLI framework: `cac`. Validation: `zod` v4.
 
@@ -15,7 +15,7 @@ This repo has no `CLAUDE.md`, and should not get one. `AGENTS.md` is the single 
 
 ## Blast radius
 
-`ulis install` writes into real config directories, and with `--global` into `$HOME`: `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.forge/`, `~/.config/opencode/`. Two defaults matter (`src/install.ts`):
+`ulis install` writes into real config directories, and with `--global` into `$HOME`: `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.forge/`, `~/.config/opencode/`, `~/.gemini/config/`. A project install of the `antigravity` target writes `./.agents/`, which in this repo already holds `.agents/add-platform/`. Two defaults matter (`src/install.ts`):
 
 - **`prune` defaults to on** — install deletes destination agents and local skills that appear in the manifest but not in the current generated set.
 - **`backup` defaults to off** — nothing is copied aside before overwrite.
@@ -30,7 +30,7 @@ So:
 
 - **No bundled canonical content.** The CLI parses, validates, generates. Anything user-facing is scaffolded by `ulis init` or read from the user's tree. `example/` is a reference config, not shipped content.
 - **Deterministic output.** Same source in, byte-identical generated files out. No timestamps, no map-iteration order, no `Date.now()` in generated content.
-- **Preserve what we did not write.** Unmanaged destination entries and allowlisted native config (MCP servers, hooks, Codex trusted projects, `.forge.toml`) survive an install.
+- **Preserve what we did not write.** Unmanaged destination entries and allowlisted native config (MCP servers, hooks, Codex trusted projects, `.forge.toml`, Antigravity `mcp_config.json` servers) survive an install.
 - **New runtime dependencies need a reason.** The dependency list is short on purpose.
 
 ## Key conventions
@@ -56,7 +56,7 @@ Full layout is in [`docs/SPEC.md`](docs/SPEC.md); it is maintained and this file
 
 A change to one platform is almost never one file. For any edit under `src/generators/platforms/<p>/`, check each:
 
-- **The other four adapters.** `PLATFORMS` is opencode, claude, codex, cursor, forgecode. Asymmetry is allowed but must be deliberate, not accidental.
+- **The other five adapters.** `PLATFORMS` is opencode, claude, codex, cursor, forgecode, antigravity. Asymmetry is allowed but must be deliberate, not accidental.
 - `src/platforms.ts` — registry entries and path maps.
 - `src/install/platforms.ts` and `src/install.ts` — merge vs copy, preserved native config.
 - `src/generators/shared/` and `writer.ts` — cross-platform behavior lives here first.
@@ -106,4 +106,4 @@ There is no fixture regeneration command. `tests/golden-artifacts.ts` is hand-ma
 
 ## Platform documentation
 
-Claude Code https://code.claude.com/docs/en/overview · Codex https://developers.openai.com/codex · OpenCode https://opencode.ai/docs · Cursor https://cursor.com/docs · Forge Code https://forgecode.dev/docs/
+Claude Code https://code.claude.com/docs/en/overview · Codex https://developers.openai.com/codex · OpenCode https://opencode.ai/docs · Cursor https://cursor.com/docs · Forge Code https://forgecode.dev/docs/ · Antigravity https://antigravity.google/docs

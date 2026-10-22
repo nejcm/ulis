@@ -377,6 +377,10 @@ platforms:
     hooks:
       Stop:
         - command: native-hook
+  antigravity:
+    hooks:
+      Stop:
+        - command: native-hook
 ---
 Body.
 `,
@@ -395,6 +399,86 @@ Body.
       expect(installed.hooks.Stop[0].command).toBe("native-hook");
       expect(preview).toContain(`${platform}/${path} runs: native-hook`);
     }
+  });
+
+  it("reports an Antigravity remote server endpoint without its headers", () => {
+    const sourceDir = sourceWith({
+      "mcp.yaml": [
+        "servers:",
+        "  remote:",
+        "    type: remote",
+        "    url: https://remote.example/sse",
+        "    headers:",
+        "      Authorization: Bearer TOPSECRET",
+        "",
+      ].join("\n"),
+    });
+    const preview = previewInstalledExecution({ sourceDir, presets: [], platforms: ["antigravity"] }).join("\n");
+    expect(preview).toContain("antigravity/mcp_config.json connects to https://remote.example/sse");
+    expect(preview).not.toContain("TOPSECRET");
+  });
+
+  it("reports every distinct url and serverUrl of a raw Antigravity MCP fragment", () => {
+    const sourceDir = sourceWith({
+      "raw/antigravity/mcp_config.json": JSON.stringify({
+        mcpServers: {
+          both: { url: "https://one.example", serverUrl: "https://two.example" },
+          same: { url: "https://three.example", serverUrl: "https://three.example" },
+          blank: { url: "", serverUrl: "https://four.example" },
+        },
+      }),
+    });
+    const preview = previewInstalledExecution({ sourceDir, presets: [], platforms: ["antigravity"] });
+    expect(preview).toContain("installs antigravity/mcp_config.json");
+    const endpoints = preview.filter((line) => line.includes("connects to"));
+    expect(endpoints).toEqual([
+      "antigravity/mcp_config.json connects to https://one.example",
+      "antigravity/mcp_config.json connects to https://two.example",
+      "antigravity/mcp_config.json connects to https://three.example",
+      "antigravity/mcp_config.json connects to https://four.example",
+    ]);
+  });
+
+  it("reports a command and both endpoints of one raw server without its headers", () => {
+    const sourceDir = sourceWith({
+      "raw/antigravity/mcp_config.json": JSON.stringify({
+        mcpServers: {
+          both: {
+            command: "echo",
+            url: "https://one.example",
+            serverUrl: "https://two.example",
+            headers: { Authorization: "Bearer TOPSECRET" },
+          },
+        },
+      }),
+    });
+    const preview = previewInstalledExecution({ sourceDir, presets: [], platforms: ["antigravity"] });
+    expect(preview).toContain("antigravity/mcp_config.json runs: echo");
+    expect(preview).toContain("antigravity/mcp_config.json connects to https://one.example");
+    expect(preview).toContain("antigravity/mcp_config.json connects to https://two.example");
+    expect(preview.join("\n")).not.toContain("TOPSECRET");
+  });
+
+  it("reports a native Antigravity command execution policy from generated and raw agents", () => {
+    const sourceDir = sourceWith({
+      "agents/eager.md": [
+        "---",
+        "description: Eager",
+        "tools:",
+        "  read: true",
+        "platforms:",
+        "  antigravity:",
+        "    commandExecutionPolicy: eager",
+        "---",
+        "",
+        "Body.",
+        "",
+      ].join("\n"),
+      "raw/antigravity/agents/raw.md": ["---", "description: raw", "commandExecutionPolicy: off", "---", ""].join("\n"),
+    });
+    const preview = previewInstalledExecution({ sourceDir, presets: [], platforms: ["antigravity"] });
+    expect(preview).toContain("antigravity/agents/eager.md sets approval policy commandExecutionPolicy = eager");
+    expect(preview).toContain("antigravity/agents/raw.md sets approval policy commandExecutionPolicy = off");
   });
 
   it("is deterministic, because the caller compares it against a list already shown", () => {

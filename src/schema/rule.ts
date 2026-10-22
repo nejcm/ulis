@@ -11,6 +11,7 @@ export const RuleFrontmatterSchema = z.object({
       codex: z.object({ enabled: z.boolean().default(true) }).optional(),
       cursor: z.object({ enabled: z.boolean().default(true) }).optional(),
       forgecode: z.object({ enabled: z.boolean().default(true) }).optional(),
+      antigravity: z.object({ enabled: z.boolean().default(true) }).optional(),
     })
     .optional(),
 });

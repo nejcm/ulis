@@ -1,4 +1,5 @@
 import type { Platform } from "../platforms.js";
+import { generateAntigravity } from "./platforms/antigravity/index.js";
 import { generateClaude } from "./platforms/claude/index.js";
 import { generateCodex } from "./platforms/codex/index.js";
 import { generateCursor } from "./platforms/cursor/index.js";
@@ -18,6 +19,7 @@ const GENERATORS: Partial<Record<Platform, (p: ProjectBundle) => GenerationResul
   cursor: generateCursor,
   forgecode: generateForgecode,
   opencode: generateOpencode,
+  antigravity: generateAntigravity,
 };
 
 /**

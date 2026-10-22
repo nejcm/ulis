@@ -7,6 +7,7 @@ import { type Logger } from "./build.js";
 import { __test, runInstall } from "./install.js";
 import { InstallError } from "./install/errors.js";
 import { preflightOwnership } from "./install/manifest.js";
+import { PLATFORMS, platformConfigDir } from "./platforms.js";
 import {
   cleanupInstallTempRoots,
   createForgecodeOutput,
@@ -70,6 +71,45 @@ function opencodeInstall(root: string) {
 // runInstall: ownership-manifest lifecycle for managed agents/skills across platforms - adoption,
 // validation, type-conflict aborts, path safety, case-rename handling, and pruning.
 describe("runInstall", () => {
+  it.each([...PLATFORMS])("warns once when replacing a %s skill no previous install recorded", async (platform) => {
+    const root = createTempRoot();
+    const sourceDir = join(root, ".ulis");
+    const outputDir = join(sourceDir, "generated");
+    const projectDir = join(root, "project");
+    const userHome = join(root, "home");
+    mkdirSync(sourceDir, { recursive: true });
+    mkdirSync(projectDir, { recursive: true });
+    mkdirSync(userHome, { recursive: true });
+    const nativeRoot = platform === "forgecode" ? join(outputDir, "forgecode", ".forge") : join(outputDir, platform);
+    if (platform === "forgecode") createForgecodeOutput(outputDir);
+    write(join(nativeRoot, "skills", "mine", "SKILL.md"), "Generated.\n");
+    const installedSkill = join(platformConfigDir(platform, projectDir, userHome), "skills", "mine", "SKILL.md");
+    write(installedSkill, "User content.\n");
+    const logs: string[] = [];
+    const options = {
+      sourceDir,
+      outputDir,
+      destBase: projectDir,
+      userHome,
+      platforms: [platform],
+      rebuild: false,
+      installSkills: false,
+      installExtensions: false,
+      logger: { ...silentLogger, warn: (message: string) => logs.push(message) },
+    };
+
+    await runInstall(options);
+    expect(read(installedSkill)).toBe("Generated.\n");
+    expect(logs.filter((line) => line.includes("skills/mine"))).toEqual([
+      "Replacing skills/mine: not written by a previous ULIS install",
+    ]);
+
+    logs.length = 0;
+    await runInstall(options);
+    expect(read(installedSkill)).toBe("Generated.\n");
+    expect(logs).toEqual([]);
+  });
+
   it("preserves unmanaged agents and skills while replacing generated same-name entries", async () => {
     const root = createTempRoot();
     const sourceDir = join(root, ".ulis");

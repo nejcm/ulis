@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
-export const PLATFORMS = ["opencode", "claude", "codex", "cursor", "forgecode"] as const;
+export const PLATFORMS = ["opencode", "claude", "codex", "cursor", "forgecode", "antigravity"] as const;
 
 export type Platform = (typeof PLATFORMS)[number];
 
@@ -25,6 +25,7 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   codex: "Codex",
   cursor: "Cursor",
   forgecode: "ForgeCode",
+  antigravity: "Antigravity",
 };
 
 export const PLATFORM_DESCRIPTIONS: Record<Platform, string> = {
@@ -33,6 +34,7 @@ export const PLATFORM_DESCRIPTIONS: Record<Platform, string> = {
   codex: "Generate Codex config, agents, and skill metadata.",
   cursor: "Generate Cursor agents, MCP config, and skill directories.",
   forgecode: "Generate ForgeCode agents, skills, MCP config, and project rules.",
+  antigravity: "Generate Antigravity subagents, rules, skills, and MCP config.",
 };
 
 export const PLATFORM_DIRS: Record<Platform, PlatformDirsEntry> = {
@@ -41,6 +43,7 @@ export const PLATFORM_DIRS: Record<Platform, PlatformDirsEntry> = {
   codex: { home: ".codex", project: ".codex" },
   cursor: { home: ".cursor", project: ".cursor" },
   forgecode: { home: ".forge", project: ".forge" },
+  antigravity: { home: ".gemini/config", project: ".agents" },
 };
 
 export function resolvePlatformDirSegment(segment: PlatformDirSegment): string {

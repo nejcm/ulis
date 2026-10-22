@@ -513,6 +513,24 @@ describe("ForgeCode generator", () => {
   });
 });
 
+describe("Antigravity generator", () => {
+  const m = run("antigravity");
+
+  it("generates agent markdown with name, description and mapped tools", () => {
+    const c = get(m, "agents/worker.md");
+    expect(c).toContain("name: worker");
+    expect(c).not.toContain("model:");
+    expect(c).toContain("  - view_file");
+  });
+
+  it("generates mcp_config.json with serverUrl for remote servers", () => {
+    const mcp = JSON.parse(get(m, "mcp_config.json"));
+    expect(mcp.mcpServers["test-local"].command).toBe("node");
+    expect(mcp.mcpServers["test-remote"].serverUrl).toBe("https://mcp.example.com/sse");
+    expect(mcp.mcpServers["test-remote"].url).toBeUndefined();
+  });
+});
+
 // ─── Generator boundary ──────────────────────────────────────────────────────
 
 describe("Generator boundary", () => {
@@ -567,9 +585,10 @@ Review security-sensitive changes.
       "codex:skills/my-skill/SKILL.md": ["name", "description", "custom_agent_hint"],
       "cursor:agents/worker.mdc": ["description", "model", "readonly", "tools"],
       "forgecode:.forge/agents/worker.md": ["id", "title", "description", "model", "tools"],
+      "antigravity:agents/worker.md": ["name", "description", "tools"],
     };
 
-    for (const platform of ["claude", "codex", "cursor", "opencode", "forgecode"] as const) {
+    for (const platform of ["claude", "codex", "cursor", "opencode", "forgecode", "antigravity"] as const) {
       const result = generate(platform, buildProject());
       expect(result).toBeDefined();
       for (const art of result!.artifacts as readonly FileArtifact[]) {
@@ -620,7 +639,7 @@ Review security-sensitive changes.
   });
 
   it("returns FileArtifact[] for every registered platform", () => {
-    for (const platform of ["claude", "codex", "cursor", "opencode", "forgecode"] as const) {
+    for (const platform of ["claude", "codex", "cursor", "opencode", "forgecode", "antigravity"] as const) {
       const result = generate(platform, buildProject());
       expect(result).toBeDefined();
       expect(Array.isArray(result!.artifacts)).toBe(true);

@@ -12,7 +12,7 @@ export interface ParsedRule {
   origin?: DiagnosticOrigin;
 }
 
-export type RulePlatform = "claude" | "opencode" | "codex" | "cursor" | "forgecode";
+export type RulePlatform = "claude" | "opencode" | "codex" | "cursor" | "forgecode" | "antigravity";
 
 /** Filter rules not explicitly disabled for the given platform. */
 export function enabledRulesFor(rules: readonly ParsedRule[], platform: RulePlatform): readonly ParsedRule[] {

@@ -8,7 +8,7 @@ describe("rawDirs", () => {
   it("uses raw/all before each platform-specific raw directory", () => {
     const project = { sourceDir: "source" } as ProjectBundle;
 
-    for (const platform of ["claude", "codex", "cursor", "opencode", "forgecode"]) {
+    for (const platform of ["claude", "codex", "cursor", "opencode", "forgecode", "antigravity"]) {
       expect(rawDirs(project, platform)).toEqual([join("source", "raw", "all"), join("source", "raw", platform)]);
     }
   });

@@ -260,6 +260,10 @@ describe("runInstall", () => {
       JSON.stringify({ model: "generated", mcp: { shared: { command: ["generated"] } } }, null, 2),
     );
     write(
+      join(outputDir, "antigravity", "mcp_config.json"),
+      JSON.stringify({ mcpServers: { shared: { command: "generated" } } }, null, 2),
+    );
+    write(
       join(projectDir, ".claude", "settings.json"),
       JSON.stringify(
         {
@@ -309,13 +313,21 @@ describe("runInstall", () => {
       join(projectDir, ".opencode", "opencode.json"),
       JSON.stringify({ model: "old", mcp: { existing: { command: ["old"] }, shared: { command: ["old"] } } }, null, 2),
     );
+    write(
+      join(projectDir, ".agents", "mcp_config.json"),
+      JSON.stringify(
+        { other: true, mcpServers: { existing: { command: "old" }, shared: { command: "old" } } },
+        null,
+        2,
+      ),
+    );
 
     await runInstall({
       sourceDir,
       outputDir,
       destBase: projectDir,
       userHome,
-      platforms: ["claude", "cursor", "forgecode", "opencode"],
+      platforms: ["claude", "cursor", "forgecode", "opencode", "antigravity"],
       rebuild: false,
       logger: silentLogger,
     });
@@ -348,6 +360,9 @@ describe("runInstall", () => {
     expect(JSON.parse(read(join(projectDir, ".opencode", "opencode.json")))).toEqual({
       model: "generated",
       mcp: { existing: { command: ["old"] }, shared: { command: ["generated"] } },
+    });
+    expect(JSON.parse(read(join(projectDir, ".agents", "mcp_config.json")))).toEqual({
+      mcpServers: { existing: { command: "old" }, shared: { command: "generated" } },
     });
   });
 

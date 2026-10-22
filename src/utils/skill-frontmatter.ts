@@ -28,10 +28,14 @@ export function applySkillFrontmatterOverrides(md: string, extra: Record<string,
 }
 
 /** Strip ULIS control keys, preserve native frontmatter, then apply platform overrides. */
-export function toPlatformSkillMarkdown(rawSkillMd: string, extra: Record<string, unknown> = {}): string {
+export function toPlatformSkillMarkdown(
+  rawSkillMd: string,
+  extra: Record<string, unknown> = {},
+  stripKeys: readonly string[] = [],
+): string {
   const parsed = parseFrontmatter(rawSkillMd);
   const filteredFrontmatter = Object.fromEntries(
-    Object.entries(parsed.data).filter(([key]) => !ULIS_SKILL_FRONTMATTER_KEYS.has(key)),
+    Object.entries(parsed.data).filter(([key]) => !ULIS_SKILL_FRONTMATTER_KEYS.has(key) && !stripKeys.includes(key)),
   );
   const body = parsed.content.trim();
   const markdown =

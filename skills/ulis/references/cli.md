@@ -14,15 +14,16 @@ Use this when you need exact flags, destinations, or preset/remote behavior.
 
 ## Project vs global destinations
 
-|           | Project (default)                | `--global`                                                         |
-| --------- | -------------------------------- | ------------------------------------------------------------------ |
-| Source    | `./.ulis/`                       | `~/.ulis/`                                                         |
-| Generated | `<source>/generated/<platform>/` | same, under that source                                            |
-| Claude    | `./.claude/`                     | `~/.claude/`                                                       |
-| Codex     | `./.codex/`                      | `~/.codex/`                                                        |
-| Cursor    | `./.cursor/`                     | `~/.cursor/`                                                       |
-| OpenCode  | `./.opencode/`                   | `~/.config/opencode/` (Windows: `%USERPROFILE%\.config\opencode\`) |
-| ForgeCode | `./.forge/`                      | `~/.forge/`                                                        |
+|             | Project (default)                | `--global`                                                         |
+| ----------- | -------------------------------- | ------------------------------------------------------------------ |
+| Source      | `./.ulis/`                       | `~/.ulis/`                                                         |
+| Generated   | `<source>/generated/<platform>/` | same, under that source                                            |
+| Claude      | `./.claude/`                     | `~/.claude/`                                                       |
+| Codex       | `./.codex/`                      | `~/.codex/`                                                        |
+| Cursor      | `./.cursor/`                     | `~/.cursor/`                                                       |
+| OpenCode    | `./.opencode/`                   | `~/.config/opencode/` (Windows: `%USERPROFILE%\.config\opencode\`) |
+| ForgeCode   | `./.forge/`                      | `~/.forge/`                                                        |
+| Antigravity | `./.agents/`                     | `~/.gemini/config/`                                                |
 
 `init` in project mode also appends `/.ulis/generated/` to `.gitignore`. Global init does not write a gitignore.
 
@@ -80,7 +81,7 @@ ulis install --source https://github.com/acme/ulis-config#main
 
 Ownership: `.ulis-manifest.json` in each selected platform root. First manifest-aware install adopts the current set and prunes nothing. Later installs prune `previous managed − current generated` for **selected** platforms only. External `skills.yaml` installs are not in the manifest.
 
-Preserved when possible: Claude `settings.json` / `settings.local.json` / `.claude.json`, project `.mcp.json` servers, OpenCode `opencode.json` `mcp`, Codex `config.toml` (base-first overlay), Cursor `mcp.json` servers, ForgeCode `.forge/.mcp.json` and `.forge.toml`.
+Preserved when possible: Claude `settings.json` / `settings.local.json` / `.claude.json`, project `.mcp.json` servers, OpenCode `opencode.json` `mcp`, Codex `config.toml` (base-first overlay), Cursor `mcp.json` servers, ForgeCode `.forge/.mcp.json` and `.forge.toml`, Antigravity `mcp_config.json` servers.
 
 `.env`: install loads `<destBase>/.env` then `<source>/.env` into **its** process only, adding keys, never overwriting the existing environment. A **remote** source's `.env` is never read.
 

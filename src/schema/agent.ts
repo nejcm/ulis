@@ -160,6 +160,19 @@ export const AgentFrontmatterSchema = z
               .optional(),
           })
           .optional(),
+        antigravity: z
+          .looseObject({
+            enabled: z.boolean().default(true),
+            model: z.enum(["inherit", "flash", "pro"]).optional(),
+            tools: z.array(z.string()).optional(),
+            mainAgent: z.boolean().optional(),
+            subagent: z.boolean().optional(),
+            commandExecutionPolicy: z.enum(["sandbox", "off", "auto", "eager"]).optional(),
+            mcpServers: z.array(z.record(z.string(), z.unknown())).optional(),
+            skills: z.array(z.string()).optional(),
+            plugins: z.array(z.string()).optional(),
+          })
+          .optional(),
       })
       .loose()
       .optional(),
