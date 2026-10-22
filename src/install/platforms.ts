@@ -12,6 +12,7 @@ import {
   resolvePlatformDirSegment,
   type Platform,
 } from "../platforms.js";
+import { readFile } from "../utils/fs.js";
 import {
   capturePreservedNativeConfigs,
   nativeConfigFilenames,
@@ -204,6 +205,38 @@ export async function installAntigravity(
   prunePlatformMcpServers("antigravity", context);
 }
 
+export async function installHermes(
+  context: InstallContext,
+  ownership?: PlatformOwnership,
+  onWritten?: (relativePath: string) => void,
+): Promise<void> {
+  const targetDir = platformConfigDir("hermes", context.destBase, context.userHome);
+  const sourceDir = join(context.outputDir, "hermes");
+
+  logHeader(context, `Installing ${PLATFORM_LABELS.hermes}`);
+  backupDirectory(targetDir, context);
+  const preservedConfigs = capturePlatformPreservedNativeConfigs("hermes", context);
+  ensureDir(targetDir);
+  writePlatformPreservedNativeConfigs("hermes", preservedConfigs, context, onWritten);
+
+  copyPlatformContents(sourceDir, targetDir, {
+    logger: context.logger,
+    onWritten,
+    skipNames: PLATFORM_INSTALL_SKIP_NAMES.hermes,
+    namedDirectories: managedDirectoryRules("hermes"),
+    previouslyManagedEntries: previouslyManagedEntries(ownership),
+    pruneExtraNames: context.prune,
+    previouslyManagedRootEntries: ownership?.previous?.rootEntries,
+    currentManagedRootEntries: ownership?.current.rootEntries,
+  });
+  prunePlatformMcpServers("hermes", context);
+  for (const entry of preservedConfigs) {
+    if (entry.originalContent?.includes("#") && readFile(entry.targetPath) !== entry.originalContent) {
+      logWarn(context, `${entry.label}: rewritten without its comments (YAML is re-serialised); --backup keeps a copy`);
+    }
+  }
+}
+
 export function detectInstallCollisions(
   destBase: string,
   targets: readonly Platform[],
@@ -228,6 +261,7 @@ function detectPlatformCollisions(platform: Platform, destBase: string, userHome
     case "cursor":
     case "opencode":
     case "antigravity":
+    case "hermes":
       return detectPlatformDirCollisions(platform, destBase, userHome);
   }
 }

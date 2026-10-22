@@ -7,7 +7,7 @@
 # when `bunx` is on PATH).
 #
 # - "*"      applies to every platform
-# - "claude" / "codex" / "cursor" / "opencode" / "forgecode" / "antigravity" scope to one platform
+# - "claude" / "codex" / "cursor" / "opencode" / "forgecode" / "antigravity" / "hermes" scope to one platform
 #
 # Example:
 #

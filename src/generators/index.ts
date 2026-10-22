@@ -4,6 +4,7 @@ import { generateClaude } from "./platforms/claude/index.js";
 import { generateCodex } from "./platforms/codex/index.js";
 import { generateCursor } from "./platforms/cursor/index.js";
 import { generateForgecode } from "./platforms/forgecode/index.js";
+import { generateHermes } from "./platforms/hermes/index.js";
 import { generateOpencode } from "./platforms/opencode/index.js";
 import type { GenerationResult, ProjectBundle } from "./types.js";
 
@@ -20,6 +21,7 @@ const GENERATORS: Partial<Record<Platform, (p: ProjectBundle) => GenerationResul
   forgecode: generateForgecode,
   opencode: generateOpencode,
   antigravity: generateAntigravity,
+  hermes: generateHermes,
 };
 
 /**

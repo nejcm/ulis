@@ -1,4 +1,5 @@
 import { afterEach, expect, it, spyOn } from "bun:test";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import { buildCursorConfigArtifacts } from "./generators/platforms/cursor/config.js";
@@ -10,7 +11,7 @@ import { installCursor } from "./install/platforms.js";
 import type { InstallContext } from "./install/types.js";
 import { PLATFORMS, platformConfigDir } from "./platforms.js";
 import { cleanupInstallTempRoots, createTempRoot, read, silentLogger, write } from "./test-utils/install.js";
-import { readMergeableConfig } from "./utils/config-merge.js";
+import { readMergeableConfig, serializeMergeableConfig } from "./utils/config-merge.js";
 import { getPreservedNativeConfigEntries } from "./utils/preserved-native-configs.js";
 
 afterEach(cleanupInstallTempRoots);
@@ -37,24 +38,32 @@ for (const platform of PLATFORMS) {
         installExtensions: false,
       };
       await runInstall(options);
-      const entry = getPreservedNativeConfigEntries(platform, { outputDir, destBase, userHome }).find((entry) =>
-        entry.preservedPaths.some(([key]) => ["mcp", "mcpServers", "mcp_servers"].includes(key!)),
-      )!;
-      const key = platform === "opencode" ? "mcp" : platform === "codex" ? "mcp_servers" : "mcpServers";
+      const manifestPath = join(platformConfigDir(platform, destBase, userHome), ".ulis-manifest.json");
+      const entry = getPreservedNativeConfigEntries(platform, { outputDir, destBase, userHome }).find(
+        (entry) => entry.mcpKey,
+      );
+      if (platform === "hermes" && !global) {
+        // Hermes has no project-level config.yaml: nothing is written or claimed.
+        expect(entry).toBeUndefined();
+        expect(existsSync(join(destBase, ".hermes", "config.yaml"))).toBe(false);
+        expect(JSON.parse(read(manifestPath)).mcpServers).toEqual([]);
+        return;
+      }
+      expect(entry).toBeDefined();
+      const key = entry!.mcpKey!;
       if (platform === "codex") {
-        write(entry.targetPath, read(entry.targetPath) + '\n[mcp_servers.user]\ncommand = "user-server"\n');
+        write(entry!.targetPath, read(entry!.targetPath) + '\n[mcp_servers.user]\ncommand = "user-server"\n');
       } else {
-        const config = readMergeableConfig(entry.targetPath) as Record<string, any>;
+        const config = readMergeableConfig(entry!.targetPath) as Record<string, any>;
         config[key].user = { command: "user-server" };
-        write(entry.targetPath, JSON.stringify(config));
+        write(entry!.targetPath, serializeMergeableConfig(entry!.targetPath, config));
       }
       write(join(sourceDir, "mcp.yaml"), "servers: {}\n");
       await runInstall(options);
-      const config = readMergeableConfig(entry.targetPath) as Record<string, any>;
+      const config = readMergeableConfig(entry!.targetPath) as Record<string, any>;
       expect(config[key]).not.toHaveProperty("managed");
       expect(config[key].user.command).toBe("user-server");
-      const manifest = JSON.parse(read(join(platformConfigDir(platform, destBase, userHome), ".ulis-manifest.json")));
-      expect(manifest.mcpServers).toEqual([]);
+      expect(JSON.parse(read(manifestPath)).mcpServers).toEqual([]);
     });
   }
 }

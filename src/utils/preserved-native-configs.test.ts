@@ -21,6 +21,7 @@ import { mergeConfigValues } from "./config-merge.js";
 import {
   capturePreservedNativeConfigs,
   getPreservedNativeConfigEntries,
+  inactiveNativeConfigFilenames,
   PreservedNativeConfigParseError,
   UnsafeNativeConfigPathError,
   writePreservedNativeConfigs,
@@ -151,6 +152,29 @@ describe("preserved native config registry", () => {
         preservedPaths: [["mcpServers"]],
         mcpKey: "mcpServers",
         ownership: "file",
+      },
+    ]);
+  });
+
+  it("lists Hermes config.yaml for global installs only", () => {
+    const outputDir = join("root", ".ulis", "generated");
+    const userHome = join("root", "home");
+    expect(
+      getPreservedNativeConfigEntries("hermes", { outputDir, destBase: join("root", "project"), userHome }),
+    ).toEqual([]);
+    expect(inactiveNativeConfigFilenames("hermes", { destBase: join("root", "project"), userHome })).toEqual(
+      new Set(["config.yaml"]),
+    );
+    expect(inactiveNativeConfigFilenames("hermes", { destBase: userHome, userHome })).toEqual(new Set());
+    expect(getPreservedNativeConfigEntries("hermes", { outputDir, destBase: userHome, userHome })).toEqual([
+      {
+        label: "config.yaml",
+        generatedPath: join(outputDir, "hermes", "config.yaml"),
+        targetPath: join(userHome, ".hermes", "config.yaml"),
+        preservedPaths: [["mcp_servers"]],
+        mcpKey: "mcp_servers",
+        ownership: "file",
+        overlay: "yaml",
       },
     ]);
   });

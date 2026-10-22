@@ -30,6 +30,13 @@ describe("platform paths", () => {
     expect(platformConfigDir("antigravity", workspace, userHome)).toBe(join(workspace, ".agents"));
   });
 
+  it("uses .hermes for both home and project installs of hermes", () => {
+    const userHome = createTempRoot("ulis-platform-hmhome-");
+    const workspace = createTempRoot("ulis-platform-hmws-");
+    expect(platformConfigDir("hermes", userHome, userHome)).toBe(join(userHome, ".hermes"));
+    expect(platformConfigDir("hermes", workspace, userHome)).toBe(join(workspace, ".hermes"));
+  });
+
   it("uses .config/opencode for home installs and .opencode for project installs", () => {
     const userHome = createTempRoot("ulis-platform-ochome-");
     const workspace = createTempRoot("ulis-platform-ocws-");
