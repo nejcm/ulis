@@ -241,6 +241,8 @@ For the full field-level schema and examples, see [docs/REFERENCE.md](docs/REFER
 | ForgeCode   | Merge (additive) | `./.forge/`           | `~/.forge/`                                                                |
 | Antigravity | Merge (additive) | `./.agents/`          | `~/.gemini/config/` (the `skills` CLI uses `~/.gemini/antigravity/skills`) |
 
+Zed has no target of its own: it reads project skills from `./.agents/skills/` in trusted worktrees, so a project install with `--target antigravity` covers them. A global Antigravity install does not reach Zed's `~/.agents/skills/`.
+
 Generated agent and local skill entries replace destination entries with the same native name. ULIS records their paths in each platform root's `.ulis-manifest.json`; later installs remove tracked paths that are no longer generated while preserving untracked and tool-provided entries. The first manifest-aware install only adopts the current set. Replacing an agent or skill no previous install recorded logs a warning, since `.agents/` is shared with other tools. Use `--no-prune` to retain stale paths and make them unmanaged. External `skills.yaml` installs are not tracked.
 
 `settings.json`, `settings.local.json`, `.claude.json`, `mcp.json`, ForgeCode's `.forge/.mcp.json`, and Antigravity's `mcp_config.json` are deep-merged so user content outside ULIS-managed keys is preserved. With `--backup`, existing platform directories/files, ownership manifests, and entries are copied aside before overwriting or pruning.
