@@ -346,6 +346,8 @@ Antigravity subagents (`agents/<name>.md`) take `name`, `description`, `tools` a
 
 Install targets `./.agents/` (project) and `~/.gemini/config/` (global). `.agents/` is also written by the `skills` CLI and other tools, hence the replacement warning above; the `skills` CLI's global Antigravity directory (`~/.gemini/antigravity/skills`) differs from the one ULIS writes.
 
+Zed has no ULIS target. It reads skills only from `.agents/skills/` in trusted worktrees and from `~/.agents/skills/`, so a project install of Antigravity covers Zed's project skills; a global Antigravity install writes `~/.gemini/config/skills/`, which Zed does not read. Zed loads a project's root `AGENTS.md` unless a higher-priority instruction file such as `.rules` matches. Its MCP servers and tool permissions live in a commented `settings.json` that ULIS does not edit. See [Zed skills](https://zed.dev/docs/ai/skills.html) and [instructions](https://zed.dev/docs/ai/instructions.html).
+
 ---
 
 ## 5. Build Pipeline
