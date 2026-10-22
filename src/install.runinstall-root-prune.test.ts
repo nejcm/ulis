@@ -170,6 +170,15 @@ it("prunes a stale managed entry under ForgeCode's nested .forge name", async ()
   expect(existsSync(join(targetDir, ".forge", "stale.md"))).toBe(false);
 });
 
+it.each([true, false])("merges a raw ForgeCode outer skill into an unmanaged skill dir (prune %p)", async (prune) => {
+  const { sourceDir, targetDir, options } = rulesSource("forgecode", ".forge");
+  write(join(sourceDir, "raw", "forgecode", "skills", "example", "SKILL.md"), "Skill.\n");
+  write(join(targetDir, "skills", "example", "mine.txt"), "Mine.\n");
+  await runInstall({ ...options, prune });
+  expect(read(join(targetDir, "skills", "example", "SKILL.md"))).toBe("Skill.\n");
+  expect(read(join(targetDir, "skills", "example", "mine.txt"))).toBe("Mine.\n");
+});
+
 it("clears a stale ForgeCode native-root directory a raw fragment now needs as a file", async () => {
   const { sourceDir, targetDir, options } = rulesSource("forgecode", ".forge");
   write(join(sourceDir, "raw", "forgecode", ".forge", "foo", "old.md"), "Old.\n");

@@ -193,6 +193,7 @@ export async function installForgecode(
 
   copyPlatformContents(sourceDir, targetForgeDir, {
     ...forgeRoot,
+    namedDirectories: {},
     logger: context.logger,
     onWritten,
     skipNames: reservedNames(
