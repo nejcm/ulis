@@ -16,7 +16,7 @@ Releases before this one predate this file. See [GitHub Releases](https://github
 ### Changed
 
 - `ulis install` warns when replacing an agent or skill it did not install (an entry absent from the previous ownership manifest). The entry is still replaced, as before.
-- Root files outside `agents/` and `skills/` (rules, commands, `AGENTS.md`, `CLAUDE.md`, Cursor `permissions.json`) are swept through the ownership manifest on every platform, as OpenCode's already were. A rule removed, renamed or disabled for a platform no longer stays installed and active on Claude Code, Codex, Cursor or ForgeCode; `--no-prune` keeps it and makes it unmanaged. Preserved native configs are never swept.
+- Root files outside `agents/` and `skills/` (rules, commands, `AGENTS.md`, `CLAUDE.md`, Cursor `permissions.json`) are swept through the ownership manifest on every platform, as OpenCode's already were. A rule removed, renamed or disabled for a platform no longer stays installed and active on Claude Code, Codex, Cursor or ForgeCode; `--no-prune` keeps it and makes it unmanaged. The sweep runs after the copy succeeds (only a stale entry standing where a generated file must land goes first), so a failed install leaves stale root files in place. Preserved native configs are no longer recorded as root entries and are never swept.
 
 ## [0.8.0] — 2026-08-20
 

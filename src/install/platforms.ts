@@ -173,6 +173,9 @@ export async function installForgecode(
       skipNames: PLATFORM_INSTALL_SKIP_NAMES.forgecode,
       namedDirectories: managedDirectoryRules("forgecode"),
       previouslyManagedEntries: previouslyManagedEntries(ownership),
+      pruneExtraNames: context.prune,
+      previouslyManagedRootEntries: ownership?.previous?.rootEntries,
+      currentManagedRootEntries: ownership?.current.rootEntries,
     });
   }
 

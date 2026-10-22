@@ -32,7 +32,7 @@ function listenOnUnixSocket(path: string): Promise<Server> {
 }
 
 // fs.ts: the destination-mutation safety rules - symlink refusal at a destination path, exclusive
-// creation, mode preservation, the sweep-before-copy ordering, narrow (non-recursive) removal of
+// creation, mode preservation, the sweep ordering around the copy, narrow (non-recursive) removal of
 // managed entries, and the filesystemIdentity seam manifest.ts relies on.
 describe("backupPath", () => {
   it("names the first attempt with no discriminator", () => {
@@ -269,7 +269,7 @@ describe("copyPlatformContents: destination symlink refusal", () => {
   });
 });
 
-describe("copyPlatformContents: sweep runs before copy", () => {
+describe("copyPlatformContents: sweep ordering", () => {
   it("lets a type change (directory -> file) succeed once the sweep has cleared what was recorded inside it", () => {
     const root = createTempRoot();
     const sourceDir = join(root, "source");
@@ -281,8 +281,8 @@ describe("copyPlatformContents: sweep runs before copy", () => {
 
     // "foo/stale.txt" was the only thing recorded inside the old "foo" directory and is not
     // current any more; nothing records "foo" itself as current since the source now wants it to
-    // be a plain file. If the sweep ran after the copy instead of before, the type-change replace
-    // below would find a non-empty directory still in its way and abort the whole install.
+    // be a plain file. If nothing were swept before the copy, the type-change replace below would
+    // find a non-empty directory still in its way and abort the whole install.
     expect(() =>
       copyPlatformContents(sourceDir, targetDir, {
         pruneExtraNames: true,

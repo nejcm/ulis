@@ -274,7 +274,7 @@ describe("runInstall", () => {
 
     const ownership = preflightOwnership(["forgecode"], outputDir, join(root, "project"), join(root, "home"), true);
 
-    expect(ownership.get("forgecode")!.current.rootEntries).toEqual([".mcp.json", "AGENTS.md", "commands/review.md"]);
+    expect(ownership.get("forgecode")!.current.rootEntries).toEqual(["AGENTS.md", "commands/review.md"]);
   });
 
   // A version 2 manifest recorded top-level *names*. A name that is a file was recorded by a previous

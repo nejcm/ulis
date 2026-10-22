@@ -15,7 +15,7 @@ import { ULIS_PROVENANCE_FILENAME } from "../config.js";
 import { platformConfigDir, type Platform } from "../platforms.js";
 import { readMergeableConfig } from "../utils/config-merge.js";
 import { getConfigPath, isPlainObject } from "../utils/config-paths.js";
-import { getPreservedNativeConfigEntries, inactiveNativeConfigFilenames } from "../utils/preserved-native-configs.js";
+import { getPreservedNativeConfigEntries, nativeConfigFilenames } from "../utils/preserved-native-configs.js";
 import { InstallError } from "./errors.js";
 import { ensureDir, filesystemIdentity, removePath } from "./fs.js";
 import { MANAGED_PLATFORM_LAYOUTS, type ManagedPlatformLayout } from "./layouts.js";
@@ -238,7 +238,7 @@ function collectGeneratedManifest(
     agents: validatePaths(platform, "agents", agents, platformOutput),
     skills: validatePaths(platform, "skills", skills, platformOutput),
     rootEntries: validateRootEntries(
-      listManagedRootFiles(platformOutput, layout, inactiveNativeConfigFilenames(platform, context)),
+      listManagedRootFiles(platformOutput, layout, nativeConfigFilenames(platform)),
       platformOutput,
     ),
   };
@@ -255,9 +255,9 @@ function collectGeneratedManifest(
 function listManagedRootFiles(
   platformOutput: string,
   layout: ManagedPlatformLayout,
-  unclaimed: ReadonlySet<string>,
+  nativeConfigs: ReadonlySet<string>,
 ): string[] {
-  const skip = new Set([...SEPARATELY_MANAGED_ROOT_NAMES, ...unclaimed]);
+  const skip = new Set([...SEPARATELY_MANAGED_ROOT_NAMES, ...nativeConfigs]);
   const files = listRootFiles(join(platformOutput, ...layout.nativeRoot), "", skip);
   if (layout.nativeRoot.length > 0) {
     const outerSkip = new Set([...skip, layout.nativeRoot[0]!]);

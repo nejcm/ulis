@@ -116,15 +116,21 @@ export function copyPlatformContents(
   const entries = readDirectoryEntries(sourceDir);
   // No current list means nothing to compare against, and sweeping then would read as "this
   // install owns nothing" - which would remove everything the last one recorded.
-  if (pruneExtraNames && currentManagedRootEntries) {
-    pruneExtraTargetEntries(
-      targetDir,
-      currentManagedRootEntries,
-      previouslyManagedRootEntries,
-      skipNames,
-      namedDirectories,
-    );
-  }
+  const sweep = (only?: (entry: string) => boolean) => {
+    if (pruneExtraNames && currentManagedRootEntries) {
+      pruneExtraTargetEntries(
+        targetDir,
+        currentManagedRootEntries,
+        previouslyManagedRootEntries,
+        skipNames,
+        namedDirectories,
+        only,
+      );
+    }
+  };
+  // Before the copy only what stands in its way, so a copy that fails leaves every other stale
+  // entry in place; the rest goes once every write has succeeded.
+  sweep((entry) => blocksSourceFile(sourceDir, entry));
 
   for (const entry of entries) {
     if (hasName(skipNames, entry)) {
@@ -146,6 +152,14 @@ export function copyPlatformContents(
     copyIntoTarget(sourcePath, targetPath, undefined, recordWritten);
     logger?.success(entry);
   }
+  sweep();
+}
+
+function blocksSourceFile(sourceDir: string, entry: string): boolean {
+  const parts = entry.split("/");
+  return parts
+    .slice(0, -1)
+    .some((_, depth) => statsOf(join(sourceDir, ...parts.slice(0, depth + 1)))?.isDirectory() === false);
 }
 
 function pruneExtraTargetEntries(
@@ -154,6 +168,7 @@ function pruneExtraTargetEntries(
   previouslyManagedRootEntries: readonly string[] | undefined,
   skipNames: ReadonlySet<string>,
   namedDirectories: Readonly<Record<string, NamedDirectoryCopyRule>>,
+  only?: (entry: string) => boolean,
 ): void {
   // Compared exactly, never case-folded. Case-folding makes `commands/Old.md` and `commands/old.md`
   // look like one entry, so on a case-sensitive destination the sweep skipped the old file while
@@ -177,6 +192,7 @@ function pruneExtraTargetEntries(
     if (current.has(targetEntry) || hasName(skipNames, rootName) || findNamedDirectory(namedDirectories, rootName)) {
       continue;
     }
+    if (only && !only(targetEntry)) continue;
 
     const identity = managedRootIdentity(targetDir, targetEntry);
     if (identity && identitiesOfCurrent().has(identity)) continue;
@@ -399,8 +415,8 @@ function copyIntoTarget(
  *
  * A generated set that turns a name from a directory into a file used to bring `rmSync -r` down on
  * whatever the destination had under that name, which is the same shape as the `$HOME` deletion this
- * release exists to fix. Worse, the sweep runs first and deliberately keeps descendants no previous
- * install recorded, so the copy destroyed precisely the files the sweep had just saved. An empty
+ * release exists to fix. Worse, the sweep deliberately keeps descendants no previous install
+ * recorded, so the copy destroyed precisely the files the sweep had just saved. An empty
  * directory is removed and the file takes its place; one with anything in it stops the install and
  * says which path and why.
  */

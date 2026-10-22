@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { __test, runInstall } from "./install.js";
@@ -11,14 +11,46 @@ afterEach(() => {
   cleanupInstallTempRoots();
 });
 
-const CASES: { platform: Platform; dir: string; ext: string; nativeConfig: string }[] = [
-  { platform: "claude", dir: ".claude", ext: ".md", nativeConfig: "settings.json" },
-  { platform: "codex", dir: ".codex", ext: ".md", nativeConfig: "config.toml" },
-  { platform: "cursor", dir: ".cursor", ext: ".mdc", nativeConfig: "mcp.json" },
-  { platform: "forgecode", dir: ".forge", ext: ".md", nativeConfig: ".forge.toml" },
+interface NativeConfig {
+  name: string;
+  content: string;
+  keeps: string;
+}
+
+const CASES: { platform: Platform; dir: string; ext: string; natives: NativeConfig[] }[] = [
+  {
+    platform: "claude",
+    dir: ".claude",
+    ext: ".md",
+    natives: [
+      { name: "settings.json", content: '{\n  "theme": "mine"\n}\n', keeps: '"theme": "mine"' },
+      { name: "settings.local.json", content: '{ "local": true }\n', keeps: '{ "local": true }\n' },
+    ],
+  },
+  {
+    platform: "codex",
+    dir: ".codex",
+    ext: ".md",
+    natives: [{ name: "config.toml", content: '[tui]\ntheme = "mine"\n', keeps: 'theme = "mine"' }],
+  },
+  {
+    platform: "cursor",
+    dir: ".cursor",
+    ext: ".mdc",
+    natives: [{ name: "mcp.json", content: '{ "mcpServers": { "mine": { "command": "x" } } }\n', keeps: '"mine"' }],
+  },
+  {
+    platform: "forgecode",
+    dir: ".forge",
+    ext: ".md",
+    natives: [
+      { name: ".mcp.json", content: '{ "mcpServers": { "mine": { "command": "x" } } }\n', keeps: '"mine"' },
+      { name: ".forge.toml", content: 'model = "mine"\n', keeps: 'model = "mine"\n' },
+    ],
+  },
 ];
 
-function rulesSource(platform: Platform, dir: string) {
+function rulesSource(platform: Platform, dir: string, global = false) {
   const root = createTempRoot();
   const sourceDir = join(root, ".ulis");
   const projectDir = join(root, "project");
@@ -28,12 +60,13 @@ function rulesSource(platform: Platform, dir: string) {
   write(join(sourceDir, "config.yaml"), "version: 1\nname: test\n");
   write(join(sourceDir, "rules", "a.md"), "Rule A.\n");
   write(join(sourceDir, "rules", "b.md"), "Rule B.\n");
-  const targetDir = join(projectDir, dir);
+  const destBase = global ? userHome : projectDir;
+  const targetDir = join(destBase, dir);
   write(join(targetDir, "rules", "mine.md"), "Mine.\n");
   const options = {
     sourceDir,
     outputDir: join(sourceDir, "generated"),
-    destBase: projectDir,
+    destBase,
     userHome,
     platforms: [platform] as const,
     rebuild: true,
@@ -45,7 +78,15 @@ function rulesSource(platform: Platform, dir: string) {
   return { sourceDir, targetDir, options, manifest };
 }
 
-describe.each(CASES)("runInstall $platform rules", ({ platform, dir, ext, nativeConfig }) => {
+function plantStaleNativeManifest(targetDir: string, natives: readonly NativeConfig[]) {
+  for (const native of natives) write(join(targetDir, native.name), native.content);
+  write(
+    join(targetDir, ".ulis-manifest.json"),
+    JSON.stringify({ version: 3, agents: [], skills: [], rootEntries: natives.map((native) => native.name) }),
+  );
+}
+
+describe.each(CASES)("runInstall $platform rules", ({ platform, dir, ext, natives }) => {
   it("prunes a rule removed from the source and keeps an unmanaged one", async () => {
     const { sourceDir, targetDir, options, manifest } = rulesSource(platform, dir);
     await runInstall(options);
@@ -78,14 +119,45 @@ describe.each(CASES)("runInstall $platform rules", ({ platform, dir, ext, native
     expect(manifest().rootEntries).not.toContain(`rules/b${ext}`);
   });
 
-  it("never sweeps a preserved native config, even one a manifest lists", async () => {
-    const { targetDir, options } = rulesSource(platform, dir);
-    write(join(targetDir, nativeConfig), nativeConfig.endsWith(".toml") ? "" : "{}\n");
-    write(
-      join(targetDir, ".ulis-manifest.json"),
-      JSON.stringify({ version: 3, agents: [], skills: [], rootEntries: [nativeConfig] }),
-    );
+  it("keeps a stale rule on disk when a later copy fails", async () => {
+    const { sourceDir, targetDir, options } = rulesSource(platform, dir);
     await runInstall(options);
-    expect(existsSync(join(targetDir, nativeConfig))).toBe(true);
+    rmSync(join(sourceDir, "rules", "b.md"));
+    write(join(sourceDir, "rules", "c.md"), "Rule C.\n");
+    write(join(targetDir, "rules", `c${ext}`, "keep.txt"), "in the way\n");
+    await expect(runInstall(options)).rejects.toThrow();
+    expect(existsSync(join(targetDir, "rules", `b${ext}`))).toBe(true);
+    expect(read(join(targetDir, "rules", `c${ext}`, "keep.txt"))).toBe("in the way\n");
   });
+
+  it("never records or sweeps a preserved native config, even one an older manifest lists", async () => {
+    const { targetDir, options, manifest } = rulesSource(platform, dir);
+    plantStaleNativeManifest(targetDir, natives);
+    await runInstall(options);
+    for (const native of natives) {
+      expect(read(join(targetDir, native.name))).toContain(native.keeps);
+      expect(manifest().rootEntries).not.toContain(native.name);
+    }
+  });
+});
+
+it("never sweeps a global Claude settings file an older manifest lists", async () => {
+  const natives = CASES[0]!.natives;
+  const { targetDir, options } = rulesSource("claude", ".claude", true);
+  plantStaleNativeManifest(targetDir, natives);
+  await runInstall(options);
+  for (const native of natives) expect(read(join(targetDir, native.name))).toContain(native.keeps);
+});
+
+it("clears a stale ForgeCode native-root directory a raw fragment now needs as a file", async () => {
+  const { sourceDir, targetDir, options } = rulesSource("forgecode", ".forge");
+  write(join(sourceDir, "raw", "forgecode", ".forge", "foo", "old.md"), "Old.\n");
+  await runInstall(options);
+  expect(read(join(targetDir, "foo", "old.md"))).toBe("Old.\n");
+
+  rmSync(join(sourceDir, "raw", "forgecode", ".forge", "foo"), { recursive: true });
+  write(join(sourceDir, "raw", "forgecode", ".forge", "foo"), "New.\n");
+  await runInstall(options);
+  expect(lstatSync(join(targetDir, "foo")).isFile()).toBe(true);
+  expect(read(join(targetDir, "foo"))).toBe("New.\n");
 });
