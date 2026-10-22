@@ -86,6 +86,8 @@ export function planRemoteCommands(options: {
       sourceDir: options.sourceDir,
       presets: options.presets ?? [],
       platforms: uniquePlatforms(options.platforms),
+      destBase,
+      userHome,
     },
     runner: resolveRunner({ cliFlag: options.runner, configValue: ulisConfig?.runner }),
     globalInstall: resolveGlobalInstall({ ...options, destBase, userHome }),

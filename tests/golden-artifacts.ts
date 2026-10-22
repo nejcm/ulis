@@ -271,4 +271,18 @@ tools:
 You are a minimal worker agent used for testing.
 `,
   },
+  hermes: {
+    "config.yaml": `mcp_servers:
+  test-local:
+    command: node
+    args:
+      - ./mcp-server.js
+    env:
+      API_KEY: \${TEST_API_KEY}
+  test-remote:
+    url: https://mcp.example.com/sse
+    headers:
+      Authorization: Bearer \${TEST_REMOTE_TOKEN}
+`,
+  },
 } as const;

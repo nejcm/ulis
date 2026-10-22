@@ -15,7 +15,7 @@ import { ULIS_PROVENANCE_FILENAME } from "../config.js";
 import { platformConfigDir, type Platform } from "../platforms.js";
 import { readMergeableConfig } from "../utils/config-merge.js";
 import { getConfigPath, isPlainObject } from "../utils/config-paths.js";
-import { getPreservedNativeConfigEntries } from "../utils/preserved-native-configs.js";
+import { getPreservedNativeConfigEntries, inactiveNativeConfigFilenames } from "../utils/preserved-native-configs.js";
 import { InstallError } from "./errors.js";
 import { ensureDir, filesystemIdentity, removePath } from "./fs.js";
 import { MANAGED_PLATFORM_LAYOUTS, type ManagedPlatformLayout } from "./layouts.js";
@@ -212,9 +212,8 @@ function collectGeneratedManifest(
   });
   const skills = listNames(join(nativeRoot, "skills"), "directory").map((name) => `skills/${name}`);
 
-  const mcpEntry = getPreservedNativeConfigEntries(platform, { outputDir, destBase, userHome }).find(
-    (entry) => entry.mcpKey,
-  );
+  const context = { outputDir, destBase, userHome };
+  const mcpEntry = getPreservedNativeConfigEntries(platform, context).find((entry) => entry.mcpKey);
   const mcpConfig =
     mcpEntry && existsSync(mcpEntry.generatedPath) ? readMergeableConfig(mcpEntry.generatedPath) : undefined;
   const mcpServers = mcpEntry ? getConfigPath(mcpConfig, [mcpEntry.mcpKey!]) : undefined;
@@ -238,7 +237,10 @@ function collectGeneratedManifest(
     mcpConfig: mcpEntry ? basename(mcpEntry.generatedPath) : undefined,
     agents: validatePaths(platform, "agents", agents, platformOutput),
     skills: validatePaths(platform, "skills", skills, platformOutput),
-    rootEntries: validateRootEntries(listManagedRootFiles(platformOutput, layout), platformOutput),
+    rootEntries: validateRootEntries(
+      listManagedRootFiles(platformOutput, layout, inactiveNativeConfigFilenames(platform, context)),
+      platformOutput,
+    ),
   };
 }
 
@@ -250,10 +252,15 @@ function collectGeneratedManifest(
  * outer tree minus that root - so listing the outer tree alone recorded `.forge` itself, a name
  * that never exists in the destination.
  */
-function listManagedRootFiles(platformOutput: string, layout: ManagedPlatformLayout): string[] {
-  const files = listRootFiles(join(platformOutput, ...layout.nativeRoot), "", SEPARATELY_MANAGED_ROOT_NAMES);
+function listManagedRootFiles(
+  platformOutput: string,
+  layout: ManagedPlatformLayout,
+  unclaimed: ReadonlySet<string>,
+): string[] {
+  const skip = new Set([...SEPARATELY_MANAGED_ROOT_NAMES, ...unclaimed]);
+  const files = listRootFiles(join(platformOutput, ...layout.nativeRoot), "", skip);
   if (layout.nativeRoot.length > 0) {
-    const outerSkip = new Set([...SEPARATELY_MANAGED_ROOT_NAMES, layout.nativeRoot[0]!]);
+    const outerSkip = new Set([...skip, layout.nativeRoot[0]!]);
     files.push(...listRootFiles(platformOutput, "", outerSkip));
   }
   return files;

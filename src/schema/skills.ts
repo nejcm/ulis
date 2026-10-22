@@ -25,6 +25,7 @@ export const SkillsConfigSchema = emptyYamlAsEmptyObject(
     cursor: PER_PLATFORM_SKILLS_SCHEMA.optional(),
     forgecode: PER_PLATFORM_SKILLS_SCHEMA.optional(),
     antigravity: PER_PLATFORM_SKILLS_SCHEMA.optional(),
+    hermes: PER_PLATFORM_SKILLS_SCHEMA.optional(),
   }),
 );
 

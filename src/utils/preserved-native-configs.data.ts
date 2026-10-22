@@ -116,4 +116,17 @@ export const PRESERVED_NATIVE_CONFIGS = [
     preservedPaths: [["mcpServers"]],
     mcpKey: "mcpServers",
   },
+  {
+    platform: "hermes",
+    // Hermes owns this file (`hermes config set` rewrites it); ULIS contributes `mcp_servers` and
+    // raw-fragment keys only, so the existing file is the base. There is no project-level config.yaml.
+    label: "config.yaml",
+    names: ["config.yaml"],
+    generatedPath: (context) => join(context.outputDir, "hermes", "config.yaml"),
+    targetPath: (context) => join(platformConfigDir("hermes", context.destBase, context.userHome), "config.yaml"),
+    preservedPaths: [["mcp_servers"]],
+    mcpKey: "mcp_servers",
+    overlay: "yaml",
+    scope: "global",
+  },
 ] as const satisfies readonly PreservedNativeConfigSpec[];

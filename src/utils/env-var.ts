@@ -9,10 +9,11 @@
  * - claude:          ${VAR} → ${VAR}
  * - forgecode:       ${VAR} → ${VAR}
  * - antigravity:     ${VAR} → ${VAR}     (verbatim; Antigravity documents no interpolation)
+ * - hermes:          ${VAR} → ${VAR}     (verbatim; Hermes interpolates from env and ~/.hermes/.env)
  */
 export function translateEnvVar(
   value: string,
-  target: "opencode_env" | "opencode_header" | "codex" | "cursor" | "claude" | "forgecode" | "antigravity",
+  target: "opencode_env" | "opencode_header" | "codex" | "cursor" | "claude" | "forgecode" | "antigravity" | "hermes",
 ): string {
   return value.replace(/\$\{(\w+)\}/g, (_match, varName) => {
     switch (target) {
@@ -25,6 +26,7 @@ export function translateEnvVar(
       case "claude":
       case "forgecode":
       case "antigravity":
+      case "hermes":
         return `\${${varName}}`;
       default:
         return `\${${varName}}`;

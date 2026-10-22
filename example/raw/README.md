@@ -12,7 +12,8 @@ raw/
 ├── cursor/     # Cursor-specific injections
 ├── opencode/   # OpenCode-specific injections
 ├── forgecode/  # ForgeCode-specific injections
-└── antigravity/ # Antigravity-specific injections
+├── antigravity/ # Antigravity-specific injections
+└── hermes/      # Hermes Agent-specific injections
 ```
 
 ## How It's Used
@@ -28,6 +29,7 @@ During `bun run build`, the build system reads each subdirectory and copies its 
 | `raw/opencode/`    | `generated/opencode/`    |
 | `raw/forgecode/`   | `generated/forgecode/`   |
 | `raw/antigravity/` | `generated/antigravity/` |
+| `raw/hermes/`      | `generated/hermes/`      |
 
 Files in `raw/all/` are copied to **every** platform's generated directory.
 

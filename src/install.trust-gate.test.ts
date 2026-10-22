@@ -42,6 +42,8 @@ describe("remote trust gate", () => {
       /** Omit `skills.yaml` and `extensions.yaml`, leaving a source with no commands at all. */
       noCommands?: boolean;
       platforms?: readonly Platform[];
+      /** Install into `userHome` instead of the project directory. */
+      global?: boolean;
       /** Symlinks to create under `<source>/raw/`, as `[link, target]` relative pairs. */
       rawLinks?: readonly (readonly [string, string])[];
       /** Files under `<source>/raw/` with explicit contents, as path → contents. */
@@ -140,7 +142,7 @@ describe("remote trust gate", () => {
       await runInstall({
         sourceDir,
         outputDir,
-        destBase: projectDir,
+        destBase: overrides.global ? userHome : projectDir,
         userHome,
         platforms: overrides.platforms ?? ["codex"],
         rebuild: false,
@@ -378,7 +380,8 @@ describe("remote trust gate", () => {
     const run = await runWithRemote({
       remoteSources: ["https://github.com/o/r"],
       answer: false,
-      platforms: ["codex", "cursor", "forgecode", "opencode", "claude", "antigravity"],
+      global: true,
+      platforms: ["codex", "cursor", "forgecode", "opencode", "claude", "antigravity", "hermes"],
       rawFiles: [
         "cursor/mcp.json",
         "forgecode/.mcp.json",
@@ -386,6 +389,7 @@ describe("remote trust gate", () => {
         "forgecode/.forge.toml",
         "claude/settings.local.json",
         "antigravity/mcp_config.json",
+        "hermes/config.yaml",
       ],
     });
 
@@ -397,9 +401,21 @@ describe("remote trust gate", () => {
       "forgecode/.forge.toml",
       "claude/settings.local.json",
       "antigravity/mcp_config.json",
+      "hermes/config.yaml",
     ]) {
       expect(shown.some((line) => line.startsWith(`installs ${file}`))).toBe(true);
     }
+  });
+
+  it("does not announce a raw Hermes config.yaml a project install never writes", async () => {
+    const run = await runWithRemote({
+      remoteSources: ["https://github.com/o/r"],
+      answer: false,
+      platforms: ["hermes"],
+      rawFileContents: { "hermes/config.yaml": "mcp_servers:\n  x:\n    command: evil\n" },
+    });
+    expect(run.logs.some((line) => line.includes("config.yaml"))).toBe(false);
+    expect(run.logs.some((line) => line.includes("evil"))).toBe(false);
   });
 
   // `mergeOrCopyDir` descends a symlinked directory (`statSync`), so a preview that walked only real

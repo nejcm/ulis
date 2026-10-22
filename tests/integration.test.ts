@@ -513,6 +513,19 @@ describe("ForgeCode generator", () => {
   });
 });
 
+describe("Hermes generator", () => {
+  const m = run("hermes");
+
+  it("generates config.yaml with url for remote servers and only mcp_servers", () => {
+    const config = parseYaml(get(m, "config.yaml")) as Record<string, any>;
+    expect(Object.keys(config)).toEqual(["mcp_servers"]);
+    expect(config.mcp_servers["test-local"].command).toBe("node");
+    expect(config.mcp_servers["test-remote"].url).toBe("https://mcp.example.com/sse");
+    expect(config.mcp_servers["test-remote"].serverUrl).toBeUndefined();
+    expect([...m.keys()]).toEqual(["config.yaml"]);
+  });
+});
+
 describe("Antigravity generator", () => {
   const m = run("antigravity");
 
@@ -588,7 +601,7 @@ Review security-sensitive changes.
       "antigravity:agents/worker.md": ["name", "description", "tools"],
     };
 
-    for (const platform of ["claude", "codex", "cursor", "opencode", "forgecode", "antigravity"] as const) {
+    for (const platform of ["claude", "codex", "cursor", "opencode", "forgecode", "antigravity", "hermes"] as const) {
       const result = generate(platform, buildProject());
       expect(result).toBeDefined();
       for (const art of result!.artifacts as readonly FileArtifact[]) {
@@ -639,7 +652,7 @@ Review security-sensitive changes.
   });
 
   it("returns FileArtifact[] for every registered platform", () => {
-    for (const platform of ["claude", "codex", "cursor", "opencode", "forgecode", "antigravity"] as const) {
+    for (const platform of ["claude", "codex", "cursor", "opencode", "forgecode", "antigravity", "hermes"] as const) {
       const result = generate(platform, buildProject());
       expect(result).toBeDefined();
       expect(Array.isArray(result!.artifacts)).toBe(true);

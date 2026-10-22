@@ -4,7 +4,7 @@ title: Getting Started
 
 # Getting Started
 
-`ulis` compiles one canonical config tree into native configuration for Claude Code, Codex, Cursor, OpenCode, ForgeCode, and Antigravity.
+`ulis` compiles one canonical config tree into native configuration for Claude Code, Codex, Cursor, OpenCode, ForgeCode, Antigravity, and Hermes Agent.
 
 ## Install
 

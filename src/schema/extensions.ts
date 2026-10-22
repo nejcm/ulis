@@ -22,6 +22,7 @@ export const ExtensionsConfigSchema = emptyYamlAsEmptyObject(
     cursor: PER_PLATFORM_EXTENSIONS_SCHEMA.optional(),
     forgecode: PER_PLATFORM_EXTENSIONS_SCHEMA.optional(),
     antigravity: PER_PLATFORM_EXTENSIONS_SCHEMA.optional(),
+    hermes: PER_PLATFORM_EXTENSIONS_SCHEMA.optional(),
   }),
 );
 

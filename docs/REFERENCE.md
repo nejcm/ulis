@@ -180,6 +180,8 @@ YAML frontmatter of `skills/<name>/SKILL.md`.
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`model` | `string` |  |  |  |  |
 | &nbsp;&nbsp;&nbsp;&nbsp;`antigravity` | `object` |  |  |  |  |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`enabled` | `boolean` |  | `true` |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;`hermes` | `object` |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`enabled` | `boolean` |  | `true` |  |  |
 
 ## MCP Config
 
@@ -246,6 +248,11 @@ Fields of `skills.yaml`.
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`key` | `string` |  |  |  |  |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`name` | `string` | ✓ |  | pattern `^[^-\s]\S*$` |  |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`args` | `string`[] |  |  |  | Command-line fragments; each item may contain an option and its value. |
+| `hermes` | `object` |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;`skills` | `object`[] |  | `[]` |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`key` | `string` |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`name` | `string` | ✓ |  | pattern `^[^-\s]\S*$` |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`args` | `string`[] |  |  |  | Command-line fragments; each item may contain an option and its value. |
 
 ## Extensions Config
 
@@ -284,6 +291,11 @@ Fields of `extensions.yaml`.
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`name` | `string` | ✓ |  | pattern `^[^-\s]\S*$` |  |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`args` | `string`[] |  |  |  |  |
 | `antigravity` | `object` |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;`extensions` | `object`[] |  | `[]` |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`key` | `string` |  |  |  |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`name` | `string` | ✓ |  | pattern `^[^-\s]\S*$` |  |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`args` | `string`[] |  |  |  |  |
+| `hermes` | `object` |  |  |  |  |
 | &nbsp;&nbsp;&nbsp;&nbsp;`extensions` | `object`[] |  | `[]` |  |  |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`key` | `string` |  |  |  |  |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`name` | `string` | ✓ |  | pattern `^[^-\s]\S*$` |  |

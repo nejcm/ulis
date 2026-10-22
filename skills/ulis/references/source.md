@@ -17,7 +17,7 @@ Edit these files. Then `ulis build`. Full fields: https://nejcm.github.io/ulis/R
 ├── rules/
 └── raw/
     ├── all/
-    └── {claude|codex|cursor|opencode|forgecode|antigravity}/
+    └── {claude|codex|cursor|opencode|forgecode|antigravity|hermes}/
 ```
 
 A preset is the same shape, plus optional `preset.yaml` (`name`, `description`) for `ulis preset list` only.

@@ -10,7 +10,7 @@ title: Project vs Global Mode
 
 - Source path: `./.ulis/` in the current directory
 - Typical init command: `ulis init`
-- Typical install target: `./.claude/`, `./.codex/`, `./.cursor/`, `./.opencode/`, `./.forge/`, `./.agents/`
+- Typical install target: `./.claude/`, `./.codex/`, `./.cursor/`, `./.opencode/`, `./.forge/`, `./.agents/`, `./.hermes/` (skills only)
 
 Use project mode when each repository needs distinct agent or MCP behavior.
 

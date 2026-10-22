@@ -12,6 +12,7 @@ import {
   installCodex,
   installCursor,
   installForgecode,
+  installHermes,
   installOpencode,
 } from "./platforms.js";
 import type { InstallContext } from "./types.js";
@@ -90,6 +91,7 @@ describe("platform install skip names", () => {
       cursor: [".ulis-manifest.json", ".ulis-provenance.json", "mcp.json"],
       forgecode: [".ulis-manifest.json", ".ulis-provenance.json", ".mcp.json", ".forge.toml"],
       antigravity: [".ulis-manifest.json", ".ulis-provenance.json", "mcp_config.json"],
+      hermes: [".ulis-manifest.json", ".ulis-provenance.json", "config.yaml"],
     };
     const installers = {
       opencode: installOpencode,
@@ -98,6 +100,7 @@ describe("platform install skip names", () => {
       cursor: installCursor,
       forgecode: installForgecode,
       antigravity: installAntigravity,
+      hermes: installHermes,
     } satisfies Record<Platform, (context: InstallContext) => Promise<void>>;
     const copySpy = spyOn(installFs, "copyPlatformContents").mockImplementation(() => {});
 

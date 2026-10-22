@@ -1,14 +1,12 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
 
-import { parse as parseToml } from "smol-toml";
-
 import { analyzePresets, analyzeProject, type Logger } from "../build.js";
 import { generate, type GenerationResult, type ProjectBundle } from "../generators/index.js";
 import type { Platform } from "../platforms.js";
 import type { PermissionsConfig } from "../schema.js";
 import { isMergeable, mergeConfigValues, parseMergeableConfig } from "../utils/config-merge.js";
-import { NATIVE_CONFIG_FILENAMES } from "../utils/preserved-native-configs.js";
+import { inactiveNativeConfigFilenames, NATIVE_CONFIG_FILENAMES } from "../utils/preserved-native-configs.js";
 import { sanitizeLogText } from "../utils/redact.js";
 import type { ResolvedPreset } from "../utils/resolve-presets.js";
 import { parseFrontmatter } from "../utils/safe-matter.js";
@@ -32,6 +30,9 @@ export interface PreviewInputs {
   readonly sourceDir?: string;
   readonly presets: readonly ResolvedPreset[];
   readonly platforms: readonly Platform[];
+  /** Destination scope; without it every native config is announced, including ones a project install skips. */
+  readonly destBase?: string;
+  readonly userHome?: string;
 }
 
 const SILENT_LOGGER: Logger = {
@@ -93,7 +94,11 @@ export function previewInstalledExecution(inputs: PreviewInputs): string[] {
   for (const platform of inputs.platforms) {
     const result = generate(platform, project);
     if (!result) continue;
-    previews.push(...outputPreviews(simulatedOutput(result), platform));
+    const skipped =
+      inputs.destBase && inputs.userHome
+        ? inactiveNativeConfigFilenames(platform, { destBase: inputs.destBase, userHome: inputs.userHome })
+        : new Set<string>();
+    previews.push(...outputPreviews(simulatedOutput(result), platform, skipped));
   }
 
   previews.push(...approvalSettingPreviews(project.permissions));
@@ -149,9 +154,10 @@ function structuredValue(contents: string, path: string): unknown {
   try {
     switch (extname(path).toLowerCase()) {
       case ".json":
-        return JSON.parse(contents);
       case ".toml":
-        return parseToml(contents);
+      case ".yaml":
+      case ".yml":
+        return parseMergeableConfig(path, contents);
       case ".md":
       case ".mdc":
       case ".markdown": {
@@ -320,9 +326,14 @@ function mergedFragment(
 }
 
 /** Disclose copied files when their destination or contents can execute, or a read was incomplete. */
-function outputPreviews(output: ReadonlyMap<string, OutputFile>, platform: Platform): string[] {
+function outputPreviews(
+  output: ReadonlyMap<string, OutputFile>,
+  platform: Platform,
+  skipped: ReadonlySet<string>,
+): string[] {
   const previews: string[] = [];
   for (const [destination, file] of output) {
+    if (skipped.has(destination)) continue;
     const scan = file.value === undefined ? commandsIn(file.contents, destination) : commandsInValue(file.value);
     if (file.copied) {
       const runsByWhereItLands = runsByDestination(destination);

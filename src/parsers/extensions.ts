@@ -1,7 +1,16 @@
 import { ExtensionsConfigSchema, type Extension, type ExtensionsConfig } from "../schema.js";
 import { loadValidatedConfigFile, type ConfigDiagnosticOptions } from "../utils/config-loader.js";
 
-const EXTENSION_CONFIG_KEYS = ["*", "claude", "opencode", "codex", "cursor", "forgecode", "antigravity"] as const;
+const EXTENSION_CONFIG_KEYS = [
+  "*",
+  "claude",
+  "opencode",
+  "codex",
+  "cursor",
+  "forgecode",
+  "antigravity",
+  "hermes",
+] as const;
 
 /**
  * Load and validate the extensions config (yaml or json) from `sourceDir`.

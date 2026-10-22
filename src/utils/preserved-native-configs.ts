@@ -1,6 +1,6 @@
 import { existsSync, lstatSync, readFileSync, rmSync } from "node:fs";
 
-import type { Platform } from "../platforms.js";
+import { isSamePath, type Platform } from "../platforms.js";
 import {
   configValuesEqual,
   existingFileMode,
@@ -29,7 +29,7 @@ export interface PreservedNativeConfigContext {
 }
 
 export type Ownership = "file" | "paths";
-export type OverlayMode = "json" | "toml";
+export type OverlayMode = "json" | "toml" | "yaml";
 
 export interface PreservedNativeConfigSpec {
   readonly platform: Platform;
@@ -59,6 +59,8 @@ export interface PreservedNativeConfigSpec {
    *    (projects, plugins, theme, history, ...).
    */
   readonly ownership?: Ownership | ((context: PreservedNativeConfigContext) => Ownership);
+  /** `"global"`: the file exists only under the user's home, so a project install neither writes nor claims it. */
+  readonly scope?: "global";
 }
 
 export interface PreservedNativeConfigEntry {
@@ -115,25 +117,47 @@ export function nativeConfigFilenames(platform: Platform): ReadonlySet<string> {
   return new Set(PRESERVED_NATIVE_CONFIGS.filter((spec) => spec.platform === platform).flatMap((spec) => spec.names));
 }
 
+/** Native config names this install mode leaves alone, so the manifest must not claim them either. */
+export function inactiveNativeConfigFilenames(
+  platform: Platform,
+  context: Pick<PreservedNativeConfigContext, "destBase" | "userHome">,
+): ReadonlySet<string> {
+  return new Set(
+    PRESERVED_NATIVE_CONFIGS.filter((spec) => spec.platform === platform && !specApplies(spec, context)).flatMap(
+      (spec) => spec.names,
+    ),
+  );
+}
+
+function specApplies(
+  spec: PreservedNativeConfigSpec,
+  context: Pick<PreservedNativeConfigContext, "destBase" | "userHome">,
+): boolean {
+  return spec.scope !== "global" || isSamePath(context.destBase, context.userHome);
+}
+
 export function getPreservedNativeConfigEntries(
   platform: Platform,
   context: PreservedNativeConfigContext,
 ): readonly PreservedNativeConfigEntry[] {
-  return PRESERVED_NATIVE_CONFIGS.filter((spec) => spec.platform === platform).map((spec) => {
-    const rawOwnership = "ownership" in spec ? spec.ownership : undefined;
-    const ownership: Ownership = typeof rawOwnership === "function" ? rawOwnership(context) : (rawOwnership ?? "file");
-    const rawOverlay = "overlay" in spec ? spec.overlay : undefined;
-    const overlay = typeof rawOverlay === "function" ? rawOverlay(context) : rawOverlay;
-    return {
-      label: spec.label,
-      generatedPath: spec.generatedPath(context),
-      targetPath: spec.targetPath(context),
-      preservedPaths: spec.preservedPaths,
-      ...("mcpKey" in spec ? { mcpKey: spec.mcpKey } : {}),
-      ownership,
-      ...(overlay ? { overlay } : {}),
-    };
-  });
+  return PRESERVED_NATIVE_CONFIGS.filter((spec) => spec.platform === platform && specApplies(spec, context)).map(
+    (spec) => {
+      const rawOwnership = "ownership" in spec ? spec.ownership : undefined;
+      const ownership: Ownership =
+        typeof rawOwnership === "function" ? rawOwnership(context) : (rawOwnership ?? "file");
+      const rawOverlay = "overlay" in spec ? spec.overlay : undefined;
+      const overlay = typeof rawOverlay === "function" ? rawOverlay(context) : rawOverlay;
+      return {
+        label: spec.label,
+        generatedPath: spec.generatedPath(context),
+        targetPath: spec.targetPath(context),
+        preservedPaths: spec.preservedPaths,
+        ...("mcpKey" in spec ? { mcpKey: spec.mcpKey } : {}),
+        ownership,
+        ...(overlay ? { overlay } : {}),
+      };
+    },
+  );
 }
 
 export function capturePreservedNativeConfigs(

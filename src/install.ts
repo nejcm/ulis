@@ -16,6 +16,7 @@ import {
 } from "./install/manifest.js";
 import {
   installAntigravity,
+  installHermes,
   installClaude,
   installCodex,
   installCursor,
@@ -140,7 +141,7 @@ export async function runInstall(options: InstallOptions): Promise<readonly Plat
       defaultValue: { version: 1, name: "ulis" },
     });
     const runner = resolveRunner({ cliFlag: options.runner, configValue: ulisConfig.runner });
-    const previewInputs: PreviewInputs = { sourceDir, presets: options.presets ?? [], platforms };
+    const previewInputs: PreviewInputs = { sourceDir, presets: options.presets ?? [], platforms, destBase, userHome };
 
     // The gate runs before the build, not only before the copy. `runBuild` writes the remote-authored
     // merged tree into `<source>/generated/`, so gating after it would leave remote-authored files in
@@ -295,7 +296,7 @@ export async function runPresetInstall(options: PresetInstallOptions): Promise<r
       platforms,
       skillsConfig,
       extensionsConfig,
-      previewInputs: { presets, platforms },
+      previewInputs: { presets, platforms, destBase, userHome },
       runner,
       installExtensionsEnabled,
       installSkillsEnabled,
@@ -410,6 +411,9 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
             break;
           case "antigravity":
             await installAntigravity(context, platformOwnership, onWritten);
+            break;
+          case "hermes":
+            await installHermes(context, platformOwnership, onWritten);
             break;
         }
         reconcileOwnership(platform, platformOwnership, context.prune, context.logger);

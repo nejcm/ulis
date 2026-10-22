@@ -2,7 +2,7 @@
 name: ulis
 description: >-
   Use the ulis CLI and author a .ulis/ source tree that generates Claude Code,
-  Codex, Cursor, OpenCode, ForgeCode, and Antigravity configs. Use whenever the user mentions
+  Codex, Cursor, OpenCode, ForgeCode, Antigravity, and Hermes Agent configs. Use whenever the user mentions
   ulis, @nejcm/ulis or .ulis/. Do not invent platform dialects; edit the ULIS 
   source and run the CLI.
 allowImplicitInvocation: true
@@ -17,7 +17,7 @@ tags:
 
 # ULIS
 
-`ulis` (`@nejcm/ulis`) reads one source tree and writes native configs for Claude Code, Codex, Cursor, OpenCode, ForgeCode, and Antigravity.
+`ulis` (`@nejcm/ulis`) reads one source tree and writes native configs for Claude Code, Codex, Cursor, OpenCode, ForgeCode, Antigravity, and Hermes Agent.
 
 Docs: https://nejcm.github.io/ulis/ · field reference is generated from Zod, not from this skill.
 
@@ -90,7 +90,7 @@ Scaffold, then fill files. Read [references/source.md](references/source.md) bef
 ├── commands/
 ├── rules/
 └── raw/all/          # every platform
-    └── <platform>/   # one of claude, codex, cursor, opencode, forgecode, antigravity
+    └── <platform>/   # one of claude, codex, cursor, opencode, forgecode, antigravity, hermes
 ```
 
 Local skills live under `skills/<name>/`. External installs (`npx skills add …`) live in `skills.yaml`. Those are different.
@@ -119,7 +119,7 @@ ulis preset install <names...> [--global] [--yes] [--backup] [--no-prune]
 ulis tui
 ```
 
-Platforms: `claude`, `codex`, `cursor`, `opencode`, `forgecode`, `antigravity`. `--target` must name at least one.
+Platforms: `claude`, `codex`, `cursor`, `opencode`, `forgecode`, `antigravity`, `hermes`. `--target` must name at least one.
 
 Flags, presets, remote URLs, TUI keys, and project vs home paths: [references/cli.md](references/cli.md).
 

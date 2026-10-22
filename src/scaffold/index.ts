@@ -66,7 +66,7 @@ const SKILLS_TEMPLATE = `# yaml-language-server: $schema={{schemaBase}}/skills.s
 
 # Declarative skill installs per platform (via the \`skills\` CLI).
 # - "*"      applies to every platform
-# - "claude" / "codex" / "cursor" / "opencode" / "forgecode" / "antigravity" scope to one platform
+# - "claude" / "codex" / "cursor" / "opencode" / "forgecode" / "antigravity" / "hermes" scope to one platform
 #
 # Example:
 #
@@ -91,7 +91,7 @@ const EXTENSIONS_TEMPLATE = `# yaml-language-server: $schema={{schemaBase}}/exte
 # when \`bunx\` is on PATH).
 #
 # - "*"      applies to every platform
-# - "claude" / "codex" / "cursor" / "opencode" / "forgecode" / "antigravity" scope to one platform
+# - "claude" / "codex" / "cursor" / "opencode" / "forgecode" / "antigravity" / "hermes" scope to one platform
 #
 # Example:
 #

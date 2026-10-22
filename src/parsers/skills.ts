@@ -1,7 +1,7 @@
 import { SkillsConfigSchema, type GlobalSkill, type SkillsConfig } from "../schema.js";
 import { loadValidatedConfigFile, type ConfigDiagnosticOptions } from "../utils/config-loader.js";
 
-const SKILL_CONFIG_KEYS = ["*", "claude", "opencode", "codex", "cursor", "forgecode", "antigravity"] as const;
+const SKILL_CONFIG_KEYS = ["*", "claude", "opencode", "codex", "cursor", "forgecode", "antigravity", "hermes"] as const;
 
 /**
  * Load and validate the skills config (yaml or json) from `sourceDir`.

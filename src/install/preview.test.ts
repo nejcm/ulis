@@ -381,6 +381,10 @@ platforms:
     hooks:
       Stop:
         - command: native-hook
+  hermes:
+    hooks:
+      Stop:
+        - command: native-hook
 ---
 Body.
 `,
@@ -416,6 +420,71 @@ Body.
     const preview = previewInstalledExecution({ sourceDir, presets: [], platforms: ["antigravity"] }).join("\n");
     expect(preview).toContain("antigravity/mcp_config.json connects to https://remote.example/sse");
     expect(preview).not.toContain("TOPSECRET");
+  });
+
+  it("parses generated and raw Hermes config.yaml structurally, without leaking headers", () => {
+    const sourceDir = sourceWith({
+      "mcp.yaml": [
+        "servers:",
+        "  remote:",
+        "    type: remote",
+        "    url: https://remote.example/sse",
+        "    headers:",
+        "      Authorization: Bearer TOPSECRET",
+        "",
+      ].join("\n"),
+      "raw/hermes/config.yaml": [
+        "mcp_servers:",
+        "  x:",
+        "    command: echo",
+        "    args: [hi]",
+        "  y:",
+        "    url: https://raw.example",
+        "    headers:",
+        "      Authorization: Bearer RAWSECRET",
+        "",
+      ].join("\n"),
+    });
+    const userHome = join(sourceDir, "home");
+    const preview = previewInstalledExecution({
+      sourceDir,
+      presets: [],
+      platforms: ["hermes"],
+      destBase: userHome,
+      userHome,
+    }).join("\n");
+    expect(preview).toContain("installs hermes/config.yaml");
+    expect(preview).toContain("hermes/config.yaml runs: echo hi");
+    expect(preview).toContain("hermes/config.yaml connects to https://raw.example");
+    expect(preview).toContain("hermes/config.yaml connects to https://remote.example/sse");
+    expect(preview).not.toContain("SECRET");
+    const scopeless = previewInstalledExecution({ sourceDir, presets: [], platforms: ["hermes"] }).join("\n");
+    expect(scopeless).toContain("hermes/config.yaml runs: echo hi");
+  });
+
+  it("omits Hermes config.yaml from a project-scope preview, since a project install never writes it", () => {
+    const sourceDir = sourceWith({
+      "mcp.yaml": "servers:\n  remote:\n    type: remote\n    url: https://remote.example/sse\n",
+      "raw/hermes/config.yaml": "mcp_servers:\n  x:\n    command: echo\n",
+      "raw/hermes/skills/s/SKILL.md": "---\nname: s\nhooks:\n  Stop:\n    - command: skill-hook\n---\nBody.\n",
+    });
+    const preview = previewInstalledExecution({
+      sourceDir,
+      presets: [],
+      platforms: ["hermes"],
+      destBase: join(sourceDir, "project"),
+      userHome: join(sourceDir, "home"),
+    }).join("\n");
+    expect(preview).not.toContain("config.yaml");
+    expect(preview).not.toContain("remote.example");
+    expect(preview).toContain("hermes/skills/s/SKILL.md runs: skill-hook");
+  });
+
+  it("falls back to a text scan for a malformed raw Hermes config.yaml", () => {
+    const sourceDir = sourceWith({ "raw/hermes/config.yaml": "mcp_servers: [\n  command: echo\n" });
+    const preview = previewInstalledExecution({ sourceDir, presets: [], platforms: ["hermes"] }).join("\n");
+    expect(preview).toContain("installs hermes/config.yaml");
+    expect(preview).toContain("echo");
   });
 
   it("reports every distinct url and serverUrl of a raw Antigravity MCP fragment", () => {

@@ -3,7 +3,7 @@
 > Unified LLM Interface Specification — one config source for AI tools.
 
 `ulis` is a CLI that helps you write your agent configuration once, then publish it to:
-[Claude Code](https://claude.ai/code), [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex), [Cursor](https://cursor.com), [ForgeCode](https://forgecode.dev/docs/), and [Antigravity](https://antigravity.google/docs).
+[Claude Code](https://claude.ai/code), [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex), [Cursor](https://cursor.com), [ForgeCode](https://forgecode.dev/docs/), [Antigravity](https://antigravity.google/docs), and [Hermes Agent](https://hermes-agent.nousresearch.com/docs).
 
 **📖 Docs: [nejcm.github.io/ulis](https://nejcm.github.io/ulis/)**
 
@@ -174,19 +174,19 @@ In CI or other non-interactive runs, add `--yes` so a missing preset name fails 
 
 ### Common flags
 
-| Flag                     | Applies to                | Description                                                                               |
-| ------------------------ | ------------------------- | ----------------------------------------------------------------------------------------- |
-| `-g`, `--global`         | all                       | Operate on `~/.ulis/` and home-level install targets (`~/.claude/`…)                      |
-| `--source <path>`        | `build`, `install`        | Override the source directory; with `--global`, installs still target home                |
-| `--target <platforms>`   | `build`, `install`        | Comma-separated list: `claude`, `codex`, `cursor`, `opencode`, `forgecode`, `antigravity` |
-| `--preset <names>`       | `build`, `install`        | Apply preset(s) from `~/.ulis/presets/` or bundled presets (comma-separated)              |
-| `-y`, `--yes`            | `install`                 | Skip confirmation prompts                                                                 |
-| `--skip-rebuild`         | `install`                 | Skip the build step and deploy existing `generated/`                                      |
-| `--backup`               | `install`                 | Back up existing platform dirs (`<dir>.backup.YYYYMMDD_HHMMSS`)                           |
-| `--no-prune`             | `install`, preset install | Keep stale ULIS-installed agents and local skills; relinquish their ownership             |
-| `--runner <npx\|bunx>`   | `install`                 | Package runner for `extensions.yaml` (`npx` or `bunx`)                                    |
-| `--skip-extensions`      | `install`                 | Skip running entries from `extensions.yaml`                                               |
-| `--skip-external-skills` | `install`                 | Skip installing external skills declared in `skills.yaml`                                 |
+| Flag                     | Applies to                | Description                                                                                         |
+| ------------------------ | ------------------------- | --------------------------------------------------------------------------------------------------- |
+| `-g`, `--global`         | all                       | Operate on `~/.ulis/` and home-level install targets (`~/.claude/`…)                                |
+| `--source <path>`        | `build`, `install`        | Override the source directory; with `--global`, installs still target home                          |
+| `--target <platforms>`   | `build`, `install`        | Comma-separated list: `claude`, `codex`, `cursor`, `opencode`, `forgecode`, `antigravity`, `hermes` |
+| `--preset <names>`       | `build`, `install`        | Apply preset(s) from `~/.ulis/presets/` or bundled presets (comma-separated)                        |
+| `-y`, `--yes`            | `install`                 | Skip confirmation prompts                                                                           |
+| `--skip-rebuild`         | `install`                 | Skip the build step and deploy existing `generated/`                                                |
+| `--backup`               | `install`                 | Back up existing platform dirs (`<dir>.backup.YYYYMMDD_HHMMSS`)                                     |
+| `--no-prune`             | `install`, preset install | Keep stale ULIS-installed agents and local skills; relinquish their ownership                       |
+| `--runner <npx\|bunx>`   | `install`                 | Package runner for `extensions.yaml` (`npx` or `bunx`)                                              |
+| `--skip-extensions`      | `install`                 | Skip running entries from `extensions.yaml`                                                         |
+| `--skip-external-skills` | `install`                 | Skip installing external skills declared in `skills.yaml`                                           |
 
 ### Presets (quick reference)
 
@@ -232,20 +232,21 @@ For the full field-level schema and examples, see [docs/REFERENCE.md](docs/REFER
 
 ## Install behaviour
 
-| Tool        | Strategy         | Target (project mode) | Target (global mode)                                                       |
-| ----------- | ---------------- | --------------------- | -------------------------------------------------------------------------- |
-| OpenCode    | Merge by entry   | `./.opencode/`        | `~/.config/opencode/` (`%USERPROFILE%\.config\opencode\` on Windows)       |
-| Claude Code | Merge (additive) | `./.claude/`          | `~/.claude/`                                                               |
-| Codex       | Merge by entry   | `./.codex/`           | `~/.codex/`                                                                |
-| Cursor      | Merge (additive) | `./.cursor/`          | `~/.cursor/`                                                               |
-| ForgeCode   | Merge (additive) | `./.forge/`           | `~/.forge/`                                                                |
-| Antigravity | Merge (additive) | `./.agents/`          | `~/.gemini/config/` (the `skills` CLI uses `~/.gemini/antigravity/skills`) |
+| Tool        | Strategy         | Target (project mode)      | Target (global mode)                                                       |
+| ----------- | ---------------- | -------------------------- | -------------------------------------------------------------------------- |
+| OpenCode    | Merge by entry   | `./.opencode/`             | `~/.config/opencode/` (`%USERPROFILE%\.config\opencode\` on Windows)       |
+| Claude Code | Merge (additive) | `./.claude/`               | `~/.claude/`                                                               |
+| Codex       | Merge by entry   | `./.codex/`                | `~/.codex/`                                                                |
+| Cursor      | Merge (additive) | `./.cursor/`               | `~/.cursor/`                                                               |
+| ForgeCode   | Merge (additive) | `./.forge/`                | `~/.forge/`                                                                |
+| Antigravity | Merge (additive) | `./.agents/`               | `~/.gemini/config/` (the `skills` CLI uses `~/.gemini/antigravity/skills`) |
+| Hermes      | Merge (additive) | `./.hermes/` (skills only) | `~/.hermes/`                                                               |
 
 Zed has no target of its own: it reads project skills from `./.agents/skills/` in trusted worktrees, so a project install with `--target antigravity` covers them. A global Antigravity install does not reach Zed's `~/.agents/skills/`.
 
-Generated agent and local skill entries replace destination entries with the same native name. ULIS records their paths in each platform root's `.ulis-manifest.json`; later installs remove tracked paths that are no longer generated while preserving untracked and tool-provided entries. The first manifest-aware install only adopts the current set. Replacing an agent or skill no previous install recorded logs a warning, since `.agents/` is shared with other tools. Use `--no-prune` to retain stale paths and make them unmanaged. External `skills.yaml` installs are not tracked.
+Generated agent and local skill entries replace destination entries with the same native name. ULIS records their paths in each platform root's `.ulis-manifest.json`; later installs remove tracked paths that are no longer generated while preserving untracked and tool-provided entries. The first manifest-aware install only adopts the current set. Replacing an agent or skill no previous install recorded logs a warning ("not written by a previous ULIS install"), since `.agents/` is shared with other tools. The same applies to Hermes's `~/.hermes/skills/`, which holds Hermes's bundled category folders: a ULIS skill named like one of them (`mlops`, …) replaces that whole folder after the warning. Use `--no-prune` to retain stale paths and make them unmanaged. External `skills.yaml` installs are not tracked.
 
-`settings.json`, `settings.local.json`, `.claude.json`, `mcp.json`, ForgeCode's `.forge/.mcp.json`, and Antigravity's `mcp_config.json` are deep-merged so user content outside ULIS-managed keys is preserved. With `--backup`, existing platform directories/files, ownership manifests, and entries are copied aside before overwriting or pruning.
+`settings.json`, `settings.local.json`, `.claude.json`, `mcp.json`, ForgeCode's `.forge/.mcp.json`, Antigravity's `mcp_config.json`, and Hermes's `~/.hermes/config.yaml` `mcp_servers` are deep-merged so user content outside ULIS-managed keys is preserved. Hermes's `config.yaml` is re-serialised whenever the merge changes it, which drops YAML comments; an unchanged file keeps its bytes. With `--backup`, existing platform directories/files, ownership manifests, and entries are copied aside before overwriting or pruning.
 
 `ulis install` runs phases in this order: **build → files → skills → extensions**. Extensions run last because they typically mutate the same files ulis just deployed.
 
@@ -322,7 +323,7 @@ src/
   cli.ts                   # cac entry point (compiled to dist/cli.js)
   commands/                # init, install, build, tui
   parsers/                 # agent, skill, mcp, permissions loaders
-  generators/              # claude, opencode, codex, cursor, forgecode, antigravity
+  generators/              # claude, opencode, codex, cursor, forgecode, antigravity, hermes
   schema/                  # Zod schemas (ulis-config, agent, mcp, …)
   scaffold/                # inline templates used by `ulis init`
   tui/                     # TUI state/actions/view + OpenTUI app, controller, Bun launcher
