@@ -354,7 +354,7 @@ describe("runInstall", () => {
     expect(thrown).toBeInstanceOf(InstallError);
     expect((thrown as Error).message).toBe(`Failed to inspect managed path: ${join(installedCommands, "old.md")}`);
     // The point of aborting: ownership still names the file, so a later install can still remove it.
-    expect(JSON.parse(read(manifestPath)).rootEntries).toEqual(["commands/old.md"]);
+    expect(JSON.parse(read(manifestPath)).rootEntries).toEqual(["commands/old.md", "AGENTS.md"]);
     expect(read(join(installedCommands, "old.md"))).toBe("Old command.\n");
   });
 

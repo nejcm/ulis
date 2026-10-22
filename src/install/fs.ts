@@ -38,6 +38,8 @@ export interface CopyPlatformContentsOptions {
   readonly previouslyManagedRootEntries?: readonly string[];
   /** Root entries this install records, in the same shape. The sweep needs both to see a change. */
   readonly currentManagedRootEntries?: readonly string[];
+  /** False leaves the sweep after the copy to `sweepStaleRootEntries`; the blocking pre-sweep still runs. */
+  readonly finalSweep?: boolean;
   /** Agent and skill entries a previous install recorded; replacing any other existing entry warns. Omit to never warn. */
   readonly previouslyManagedEntries?: readonly string[];
   /** Called with each `targetDir`-relative path this copy left content at, even when it then fails. */
@@ -93,9 +95,7 @@ export function copyPlatformContents(
     logger,
     skipNames = new Set(),
     namedDirectories = {},
-    pruneExtraNames = false,
-    previouslyManagedRootEntries,
-    currentManagedRootEntries,
+    finalSweep = true,
     previouslyManagedEntries,
     onWritten,
   } = options;
@@ -114,17 +114,9 @@ export function copyPlatformContents(
   }
 
   const entries = readDirectoryEntries(sourceDir);
-  // No current list means nothing to compare against, and sweeping then would read as "this
-  // install owns nothing" - which would remove everything the last one recorded.
-  if (pruneExtraNames && currentManagedRootEntries) {
-    pruneExtraTargetEntries(
-      targetDir,
-      currentManagedRootEntries,
-      previouslyManagedRootEntries,
-      skipNames,
-      namedDirectories,
-    );
-  }
+  // Before the copy only what stands in its way, so a copy that fails leaves every other stale
+  // entry in place; the rest goes once every write has succeeded.
+  sweepStaleRootEntries(targetDir, options, (entry) => blocksSourceFile(sourceDir, entry));
 
   for (const entry of entries) {
     if (hasName(skipNames, entry)) {
@@ -146,6 +138,38 @@ export function copyPlatformContents(
     copyIntoTarget(sourcePath, targetPath, undefined, recordWritten);
     logger?.success(entry);
   }
+  if (finalSweep) sweepStaleRootEntries(targetDir, options);
+}
+
+export function sweepStaleRootEntries(
+  targetDir: string,
+  options: CopyPlatformContentsOptions,
+  only?: (entry: string) => boolean,
+): void {
+  const {
+    skipNames = new Set(),
+    namedDirectories = {},
+    previouslyManagedRootEntries,
+    currentManagedRootEntries,
+  } = options;
+  // No current list means nothing to compare against, and sweeping then would read as "this
+  // install owns nothing" - which would remove everything the last one recorded.
+  if (!options.pruneExtraNames || !currentManagedRootEntries) return;
+  pruneExtraTargetEntries(
+    targetDir,
+    currentManagedRootEntries,
+    previouslyManagedRootEntries,
+    skipNames,
+    namedDirectories,
+    only,
+  );
+}
+
+function blocksSourceFile(sourceDir: string, entry: string): boolean {
+  const parts = entry.split("/");
+  return parts
+    .slice(0, -1)
+    .some((_, depth) => statsOf(join(sourceDir, ...parts.slice(0, depth + 1)))?.isDirectory() === false);
 }
 
 function pruneExtraTargetEntries(
@@ -154,6 +178,7 @@ function pruneExtraTargetEntries(
   previouslyManagedRootEntries: readonly string[] | undefined,
   skipNames: ReadonlySet<string>,
   namedDirectories: Readonly<Record<string, NamedDirectoryCopyRule>>,
+  only?: (entry: string) => boolean,
 ): void {
   // Compared exactly, never case-folded. Case-folding makes `commands/Old.md` and `commands/old.md`
   // look like one entry, so on a case-sensitive destination the sweep skipped the old file while
@@ -177,6 +202,7 @@ function pruneExtraTargetEntries(
     if (current.has(targetEntry) || hasName(skipNames, rootName) || findNamedDirectory(namedDirectories, rootName)) {
       continue;
     }
+    if (only && !only(targetEntry)) continue;
 
     const identity = managedRootIdentity(targetDir, targetEntry);
     if (identity && identitiesOfCurrent().has(identity)) continue;
@@ -188,6 +214,7 @@ function pruneExtraTargetEntries(
 
   // Deepest first: a directory only becomes empty once the subdirectories under it are gone.
   for (const parent of [...emptiedParents].sort((left, right) => right.split("/").length - left.split("/").length)) {
+    if (only && !only(parent)) continue;
     removeManagedRootEntry(targetDir, parent);
   }
 }
@@ -394,16 +421,7 @@ function copyIntoTarget(
   copyLeaf(sourcePath, targetPath, onLeafWritten);
 }
 
-/**
- * Clear a path so a generated non-directory can take it - never recursively.
- *
- * A generated set that turns a name from a directory into a file used to bring `rmSync -r` down on
- * whatever the destination had under that name, which is the same shape as the `$HOME` deletion this
- * release exists to fix. Worse, the sweep runs first and deliberately keeps descendants no previous
- * install recorded, so the copy destroyed precisely the files the sweep had just saved. An empty
- * directory is removed and the file takes its place; one with anything in it stops the install and
- * says which path and why.
- */
+// Never recursive: a directory the sweep left non-empty holds files no install recorded as its own.
 function removeForReplacement(targetPath: string): void {
   const stats = statsOf(targetPath);
   if (!stats) return;

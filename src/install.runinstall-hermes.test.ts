@@ -54,7 +54,7 @@ describe("runInstall hermes global", () => {
     expect(servers()).toEqual(["managed", "mine"]);
     expect((parseYaml(read(config)) as any).model.default).toBe("x");
     expect(manifest().mcpServers).toEqual(["managed"]);
-    expect(manifest().rootEntries).toContain("config.yaml");
+    expect(manifest().rootEntries).not.toContain("config.yaml");
 
     const afterFirst = read(config);
     await runInstall(options);

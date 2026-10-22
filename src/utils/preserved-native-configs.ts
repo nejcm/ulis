@@ -117,7 +117,7 @@ export function nativeConfigFilenames(platform: Platform): ReadonlySet<string> {
   return new Set(PRESERVED_NATIVE_CONFIGS.filter((spec) => spec.platform === platform).flatMap((spec) => spec.names));
 }
 
-/** Native config names this install mode leaves alone, so the manifest must not claim them either. */
+/** Native config names this install mode leaves alone. */
 export function inactiveNativeConfigFilenames(
   platform: Platform,
   context: Pick<PreservedNativeConfigContext, "destBase" | "userHome">,
