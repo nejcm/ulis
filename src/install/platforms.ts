@@ -22,7 +22,14 @@ import {
   type CapturedPreservedNativeConfig,
 } from "../utils/preserved-native-configs.js";
 import { InstallError } from "./errors.js";
-import { backupPath, copyPlatformContents, copyToNewPath, ensureDir, readDirectoryEntries } from "./fs.js";
+import {
+  backupPath,
+  copyPlatformContents,
+  copyToNewPath,
+  ensureDir,
+  readDirectoryEntries,
+  sweepStaleRootEntries,
+} from "./fs.js";
 import { MANAGED_PLATFORM_LAYOUTS } from "./layouts.js";
 import { ULIS_MANIFEST_FILENAME, readManifest, type PlatformOwnership } from "./manifest.js";
 import type { InstallContext } from "./types.js";
@@ -166,31 +173,34 @@ export async function installForgecode(
   ensureDir(targetForgeDir);
   writePlatformPreservedNativeConfigs("forgecode", preservedConfigs, context, onWritten);
 
+  // Both passes land in one root, so the sweep waits until both have written.
+  const forgeRoot = {
+    skipNames: PLATFORM_INSTALL_SKIP_NAMES.forgecode,
+    namedDirectories: managedDirectoryRules("forgecode"),
+    pruneExtraNames: context.prune,
+    previouslyManagedRootEntries: ownership?.previous?.rootEntries,
+    currentManagedRootEntries: ownership?.current.rootEntries,
+    finalSweep: false,
+  };
   if (existsSync(sourceForgeDir)) {
     copyPlatformContents(sourceForgeDir, targetForgeDir, {
+      ...forgeRoot,
       logger: context.logger,
       onWritten,
-      skipNames: PLATFORM_INSTALL_SKIP_NAMES.forgecode,
-      namedDirectories: managedDirectoryRules("forgecode"),
       previouslyManagedEntries: previouslyManagedEntries(ownership),
-      pruneExtraNames: context.prune,
-      previouslyManagedRootEntries: ownership?.previous?.rootEntries,
-      currentManagedRootEntries: ownership?.current.rootEntries,
-      finalSweep: false,
     });
   }
 
   copyPlatformContents(sourceDir, targetForgeDir, {
+    ...forgeRoot,
     logger: context.logger,
     onWritten,
     skipNames: reservedNames(
       ...PLATFORM_INSTALL_SKIP_NAMES.forgecode,
       resolvePlatformDirSegment(PLATFORM_DIRS.forgecode.project),
     ),
-    pruneExtraNames: context.prune,
-    previouslyManagedRootEntries: ownership?.previous?.rootEntries,
-    currentManagedRootEntries: ownership?.current.rootEntries,
   });
+  sweepStaleRootEntries(targetForgeDir, forgeRoot);
   prunePlatformMcpServers("forgecode", context);
 }
 

@@ -38,7 +38,7 @@ export interface CopyPlatformContentsOptions {
   readonly previouslyManagedRootEntries?: readonly string[];
   /** Root entries this install records, in the same shape. The sweep needs both to see a change. */
   readonly currentManagedRootEntries?: readonly string[];
-  /** False leaves the sweep after the copy to a later pass into the same root; the blocking pre-sweep still runs. */
+  /** False leaves the sweep after the copy to `sweepStaleRootEntries`; the blocking pre-sweep still runs. */
   readonly finalSweep?: boolean;
   /** Agent and skill entries a previous install recorded; replacing any other existing entry warns. Omit to never warn. */
   readonly previouslyManagedEntries?: readonly string[];
@@ -95,9 +95,6 @@ export function copyPlatformContents(
     logger,
     skipNames = new Set(),
     namedDirectories = {},
-    pruneExtraNames = false,
-    previouslyManagedRootEntries,
-    currentManagedRootEntries,
     finalSweep = true,
     previouslyManagedEntries,
     onWritten,
@@ -117,23 +114,9 @@ export function copyPlatformContents(
   }
 
   const entries = readDirectoryEntries(sourceDir);
-  // No current list means nothing to compare against, and sweeping then would read as "this
-  // install owns nothing" - which would remove everything the last one recorded.
-  const sweep = (only?: (entry: string) => boolean) => {
-    if (pruneExtraNames && currentManagedRootEntries) {
-      pruneExtraTargetEntries(
-        targetDir,
-        currentManagedRootEntries,
-        previouslyManagedRootEntries,
-        skipNames,
-        namedDirectories,
-        only,
-      );
-    }
-  };
   // Before the copy only what stands in its way, so a copy that fails leaves every other stale
   // entry in place; the rest goes once every write has succeeded.
-  sweep((entry) => blocksSourceFile(sourceDir, entry));
+  sweepStaleRootEntries(targetDir, options, (entry) => blocksSourceFile(sourceDir, entry));
 
   for (const entry of entries) {
     if (hasName(skipNames, entry)) {
@@ -155,7 +138,31 @@ export function copyPlatformContents(
     copyIntoTarget(sourcePath, targetPath, undefined, recordWritten);
     logger?.success(entry);
   }
-  if (finalSweep) sweep();
+  if (finalSweep) sweepStaleRootEntries(targetDir, options);
+}
+
+export function sweepStaleRootEntries(
+  targetDir: string,
+  options: CopyPlatformContentsOptions,
+  only?: (entry: string) => boolean,
+): void {
+  const {
+    skipNames = new Set(),
+    namedDirectories = {},
+    previouslyManagedRootEntries,
+    currentManagedRootEntries,
+  } = options;
+  // No current list means nothing to compare against, and sweeping then would read as "this
+  // install owns nothing" - which would remove everything the last one recorded.
+  if (!options.pruneExtraNames || !currentManagedRootEntries) return;
+  pruneExtraTargetEntries(
+    targetDir,
+    currentManagedRootEntries,
+    previouslyManagedRootEntries,
+    skipNames,
+    namedDirectories,
+    only,
+  );
 }
 
 function blocksSourceFile(sourceDir: string, entry: string): boolean {

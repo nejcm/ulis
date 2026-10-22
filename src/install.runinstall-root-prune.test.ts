@@ -159,6 +159,17 @@ it("keeps stale ForgeCode native-root rules on disk when the outer-tree copy fai
   expect(existsSync(join(targetDir, "rules", "b.md"))).toBe(true);
 });
 
+it("prunes a stale managed entry under ForgeCode's nested .forge name", async () => {
+  const { sourceDir, targetDir, options, manifest } = rulesSource("forgecode", ".forge");
+  write(join(sourceDir, "raw", "forgecode", ".forge", ".forge", "stale.md"), "Stale.\n");
+  await runInstall(options);
+  expect(manifest().rootEntries).toContain(".forge/stale.md");
+
+  rmSync(join(sourceDir, "raw", "forgecode", ".forge", ".forge"), { recursive: true });
+  await runInstall(options);
+  expect(existsSync(join(targetDir, ".forge", "stale.md"))).toBe(false);
+});
+
 it("clears a stale ForgeCode native-root directory a raw fragment now needs as a file", async () => {
   const { sourceDir, targetDir, options } = rulesSource("forgecode", ".forge");
   write(join(sourceDir, "raw", "forgecode", ".forge", "foo", "old.md"), "Old.\n");
