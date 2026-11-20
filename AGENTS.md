@@ -30,7 +30,7 @@ So:
 
 - **No bundled canonical content.** The CLI parses, validates, generates. Anything user-facing is scaffolded by `ulis init` or read from the user's tree. `example/` is a reference config, not shipped content.
 - **Deterministic output.** Same source in, byte-identical generated files out. No timestamps, no map-iteration order, no `Date.now()` in generated content.
-- **Preserve what we did not write.** Unmanaged destination entries survive an install. Native config ULIS merges is registered in `PRESERVED_NATIVE_CONFIGS` (`src/utils/preserved-native-configs.data.ts`): the existing `preservedPaths` (for an `overlay`, the whole existing file) are kept except where generated output sets the same path; under `mcpKey`, unmanaged servers survive and stale managed ones are pruned; `reservedNames` are never written.
+- **Preserve what we did not write.** Unmanaged destination entries survive an install unless a generated entry has the same name. Native config ULIS merges instead of owning is registered per file in `PRESERVED_NATIVE_CONFIGS` (`src/utils/preserved-native-configs.data.ts`); `PreservedNativeConfigSpec` documents what each field keeps.
 - **New runtime dependencies need a reason.** The dependency list is short on purpose.
 
 ## Key conventions
