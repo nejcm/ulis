@@ -14,7 +14,15 @@ export interface ParsedSkill {
   origin?: DiagnosticOrigin;
 }
 
-export type SkillPlatform = "claude" | "opencode" | "codex" | "cursor" | "forgecode" | "antigravity" | "hermes";
+export type SkillPlatform =
+  | "claude"
+  | "opencode"
+  | "codex"
+  | "cursor"
+  | "forgecode"
+  | "antigravity"
+  | "hermes"
+  | "devin";
 
 /** Filter skills that are not explicitly disabled for the given platform. */
 export function enabledSkillsFor(skills: readonly ParsedSkill[], platform: SkillPlatform): readonly ParsedSkill[] {

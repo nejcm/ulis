@@ -37,6 +37,15 @@ describe("platform paths", () => {
     expect(platformConfigDir("hermes", workspace, userHome)).toBe(join(workspace, ".hermes"));
   });
 
+  it("uses .config/devin for home installs and .devin for project installs of devin", () => {
+    const userHome = createTempRoot("ulis-platform-dvhome-");
+    const workspace = createTempRoot("ulis-platform-dvws-");
+    const home =
+      process.platform === "win32" ? join(userHome, "AppData", "Roaming", "devin") : join(userHome, ".config", "devin");
+    expect(platformConfigDir("devin", userHome, userHome)).toBe(home);
+    expect(platformConfigDir("devin", workspace, userHome)).toBe(join(workspace, ".devin"));
+  });
+
   it("uses .config/opencode for home installs and .opencode for project installs", () => {
     const userHome = createTempRoot("ulis-platform-ochome-");
     const workspace = createTempRoot("ulis-platform-ocws-");

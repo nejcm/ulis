@@ -1,0 +1,125 @@
+import { describe, expect, it } from "bun:test";
+
+import type { ParsedSkill } from "../../../parsers/skill.js";
+import type { McpServer } from "../../../schema.js";
+import { toPlatformSkillMarkdown } from "../../../utils/skill-frontmatter.js";
+import type { ProjectBundle } from "../../types.js";
+import { generateDevin } from "./index.js";
+import { buildDevinMcpArtifact } from "./mcp.js";
+import { buildDevinSkillDirs } from "./skills.js";
+
+function mcpServers(servers: Record<string, McpServer>): Record<string, unknown> {
+  return JSON.parse(String(buildDevinMcpArtifact({ servers }).contents)).mcpServers;
+}
+
+const skill = {
+  name: "review",
+  dir: "/skills/review",
+  body: "",
+  frontmatter: { name: "review", description: "Review" },
+} as unknown as ParsedSkill;
+
+describe("buildDevinMcpArtifact", () => {
+  it("writes url/transport/headers and command/args/env, translating ${VAR} to ${env:VAR}", () => {
+    expect(
+      mcpServers({
+        remote: { type: "remote", url: "https://x/${REGION}", headers: { Authorization: "Bearer ${TOKEN}" } },
+        local: { type: "local", command: "${BIN}", args: ["--key", "${KEY}"], env: { API_KEY: "${KEY}" } },
+      }),
+    ).toEqual({
+      remote: { url: "https://x/${env:REGION}", transport: "http", headers: { Authorization: "Bearer ${env:TOKEN}" } },
+      local: { command: "${env:BIN}", args: ["--key", "${env:KEY}"], env: { API_KEY: "${env:KEY}" } },
+    });
+  });
+
+  it("keeps an sse transport", () => {
+    expect(mcpServers({ sse: { type: "remote", url: "https://s", transport: "sse" } })).toEqual({
+      sse: { url: "https://s", transport: "sse" },
+    });
+  });
+
+  it("marks disabled servers, honours targets and drops localFallback", () => {
+    expect(
+      mcpServers({
+        off: { type: "local", command: "a", disabled: true },
+        alsoOff: { type: "remote", url: "https://x", enabled: false },
+        on: { type: "local", command: "a", enabled: true },
+        elsewhere: { type: "local", command: "a", targets: ["claude"] },
+        here: { type: "local", command: "a", targets: ["devin"], localFallback: { command: "b", args: [] } },
+      }),
+    ).toEqual({
+      off: { command: "a", disabled: true },
+      alsoOff: { url: "https://x", transport: "http", disabled: true },
+      on: { command: "a" },
+      here: { command: "a" },
+    });
+  });
+
+  it("omits a local server without a command and a remote one without a url", () => {
+    expect(
+      mcpServers({
+        noCommand: { type: "local" },
+        emptyCommand: { type: "local", command: "" },
+        noUrl: { type: "remote" },
+        blankCommand: { type: "local", command: "  " },
+        blankUrl: { type: "remote", url: " " },
+        ok: { type: "local", command: "a" },
+      }),
+    ).toEqual({ ok: { command: "a" } });
+  });
+
+  it("always emits mcpServers so an install can prune", () => {
+    expect(buildDevinMcpArtifact({ servers: {} })).toEqual({
+      path: "mcp_config.json",
+      contents: JSON.stringify({ mcpServers: {} }, null, 2),
+    });
+  });
+});
+
+describe("generateDevin", () => {
+  it("emits mcp_config.json only and routes enabled skills through the writer", () => {
+    const result = generateDevin({
+      agents: [],
+      skills: [
+        skill,
+        { ...skill, name: "off", frontmatter: { ...skill.frontmatter, platforms: { devin: { enabled: false } } } },
+      ],
+      rules: [],
+      mcp: { servers: {} },
+      permissions: undefined,
+      ulisConfig: { version: 1, name: "test", unsupportedPlatformRules: "inject" },
+      sourceDir: "/unused",
+    } as unknown as ProjectBundle);
+    expect(result.artifacts.map((a) => a.path)).toEqual(["mcp_config.json"]);
+    expect(result.post?.skillDirs?.map((s) => s.name)).toEqual(["review"]);
+  });
+});
+
+describe("buildDevinSkillDirs", () => {
+  const source = "---\nname: review\ndescription: Review\nmodel: claude-haiku\nallowed-tools: Read Grep\n---\nBody.";
+  const markdown = (frontmatter: Record<string, unknown>) => {
+    const [dirs] = buildDevinSkillDirs([
+      { ...skill, frontmatter: { ...skill.frontmatter, ...frontmatter } } as ParsedSkill,
+    ]);
+    return toPlatformSkillMarkdown(source, dirs!.extraFrontmatter, dirs!.stripKeys);
+  };
+
+  it("drops the canonical model and string allowed-tools", () => {
+    const md = markdown({});
+    expect(md).not.toContain("model:");
+    expect(md).not.toContain("allowed-tools");
+    expect(md).toContain("name: review\n");
+  });
+
+  it("emits platforms.devin values as native frontmatter, list allowed-tools included", () => {
+    const md = markdown({
+      platforms: { devin: { enabled: true, model: "swe", triggers: ["user"], "allowed-tools": ["read", "grep"] } },
+    });
+    expect(md).toContain("model: swe\n");
+    expect(md).toContain("triggers:\n  - user\n");
+    expect(md).toContain("allowed-tools:\n  - read\n  - grep\n");
+    expect(md).not.toContain("claude-haiku");
+    expect(md).not.toContain("Read Grep");
+    expect(md).not.toContain("enabled");
+  });
+});

@@ -129,4 +129,17 @@ export const PRESERVED_NATIVE_CONFIGS = [
     overlay: "yaml",
     scope: "global",
   },
+  {
+    platform: "devin",
+    label: "mcp_config.json",
+    names: ["mcp_config.json"],
+    generatedPath: (context) => join(context.outputDir, "devin", "mcp_config.json"),
+    targetPath: (context) => join(platformConfigDir("devin", context.destBase, context.userHome), "mcp_config.json"),
+    preservedPaths: [["mcpServers"]],
+    mcpKey: "mcpServers",
+    overlay: "json",
+    jsonComments: true,
+    // User-local secrets and Devin's own settings: never written or pruned, raw fragments included.
+    reservedNames: ["mcp_config.local.json", "config.json", "config.local.json"],
+  },
 ] as const satisfies readonly PreservedNativeConfigSpec[];

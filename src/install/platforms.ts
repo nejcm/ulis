@@ -12,6 +12,7 @@ import {
   resolvePlatformDirSegment,
   type Platform,
 } from "../platforms.js";
+import { stripJsonComments } from "../utils/config-merge.js";
 import { readFile } from "../utils/fs.js";
 import {
   capturePreservedNativeConfigs,
@@ -264,6 +265,48 @@ export async function installHermes(
   }
 }
 
+export async function installDevin(
+  context: InstallContext,
+  ownership?: PlatformOwnership,
+  onWritten?: (relativePath: string) => void,
+): Promise<void> {
+  const targetDir = platformConfigDir("devin", context.destBase, context.userHome);
+  const sourceDir = join(context.outputDir, "devin");
+
+  logHeader(context, `Installing ${PLATFORM_LABELS.devin}`);
+  backupDirectory(targetDir, context);
+  const preservedConfigs = capturePlatformPreservedNativeConfigs("devin", context);
+  const commented = new Set(
+    preservedConfigs.filter(
+      (entry) => entry.originalContent && stripJsonComments(entry.originalContent) !== entry.originalContent,
+    ),
+  );
+  // Checked after each write, so the warning is not lost when a later step throws.
+  const warnIfCommentsLost = () => {
+    for (const entry of commented) {
+      if (readFile(entry.targetPath) === entry.originalContent) continue;
+      commented.delete(entry);
+      logWarn(context, `${entry.label}: rewritten without its comments (JSON is re-serialised); --backup keeps a copy`);
+    }
+  };
+  ensureDir(targetDir);
+  writePlatformPreservedNativeConfigs("devin", preservedConfigs, context, onWritten);
+  warnIfCommentsLost();
+
+  copyPlatformContents(sourceDir, targetDir, {
+    logger: context.logger,
+    onWritten,
+    skipNames: PLATFORM_INSTALL_SKIP_NAMES.devin,
+    namedDirectories: managedDirectoryRules("devin"),
+    previouslyManagedEntries: previouslyManagedEntries(ownership),
+    pruneExtraNames: context.prune,
+    previouslyManagedRootEntries: ownership?.previous?.rootEntries,
+    currentManagedRootEntries: ownership?.current.rootEntries,
+  });
+  prunePlatformMcpServers("devin", context);
+  warnIfCommentsLost();
+}
+
 export function detectInstallCollisions(
   destBase: string,
   targets: readonly Platform[],
@@ -289,6 +332,7 @@ function detectPlatformCollisions(platform: Platform, destBase: string, userHome
     case "opencode":
     case "antigravity":
     case "hermes":
+    case "devin":
       return detectPlatformDirCollisions(platform, destBase, userHome);
   }
 }

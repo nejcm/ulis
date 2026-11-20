@@ -20,6 +20,7 @@ import {
   installClaude,
   installCodex,
   installCursor,
+  installDevin,
   installForgecode,
   installOpencode,
 } from "./install/platforms.js";
@@ -414,6 +415,9 @@ async function installGeneratedOutput(options: GeneratedInstallOptions): Promise
             break;
           case "hermes":
             await installHermes(context, platformOwnership, onWritten);
+            break;
+          case "devin":
+            await installDevin(context, platformOwnership, onWritten);
             break;
         }
         reconcileOwnership(platform, platformOwnership, context.prune, context.logger);

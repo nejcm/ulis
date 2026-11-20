@@ -153,6 +153,16 @@ describe("preserved native config registry", () => {
         mcpKey: "mcpServers",
         ownership: "file",
       },
+      {
+        label: "mcp_config.json",
+        generatedPath: join("root", ".ulis", "generated", "devin", "mcp_config.json"),
+        targetPath: join("root", "project", ".devin", "mcp_config.json"),
+        preservedPaths: [["mcpServers"]],
+        mcpKey: "mcpServers",
+        ownership: "file",
+        overlay: "json",
+        jsonComments: true,
+      },
     ]);
   });
 

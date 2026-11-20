@@ -526,6 +526,21 @@ describe("Hermes generator", () => {
   });
 });
 
+describe("Devin generator", () => {
+  const m = run("devin");
+
+  it("generates mcp_config.json with url, transport and ${env:VAR} placeholders", () => {
+    const mcp = JSON.parse(get(m, "mcp_config.json"));
+    expect(mcp.mcpServers["test-local"].env.API_KEY).toBe("${env:TEST_API_KEY}");
+    expect(mcp.mcpServers["test-remote"]).toEqual({
+      url: "https://mcp.example.com/sse",
+      transport: "http",
+      headers: { Authorization: "Bearer ${env:TEST_REMOTE_TOKEN}" },
+    });
+    expect([...m.keys()]).toEqual(["mcp_config.json"]);
+  });
+});
+
 describe("Antigravity generator", () => {
   const m = run("antigravity");
 
@@ -601,7 +616,16 @@ Review security-sensitive changes.
       "antigravity:agents/worker.md": ["name", "description", "tools"],
     };
 
-    for (const platform of ["claude", "codex", "cursor", "opencode", "forgecode", "antigravity", "hermes"] as const) {
+    for (const platform of [
+      "claude",
+      "codex",
+      "cursor",
+      "opencode",
+      "forgecode",
+      "antigravity",
+      "hermes",
+      "devin",
+    ] as const) {
       const result = generate(platform, buildProject());
       expect(result).toBeDefined();
       for (const art of result!.artifacts as readonly FileArtifact[]) {
@@ -652,7 +676,16 @@ Review security-sensitive changes.
   });
 
   it("returns FileArtifact[] for every registered platform", () => {
-    for (const platform of ["claude", "codex", "cursor", "opencode", "forgecode", "antigravity", "hermes"] as const) {
+    for (const platform of [
+      "claude",
+      "codex",
+      "cursor",
+      "opencode",
+      "forgecode",
+      "antigravity",
+      "hermes",
+      "devin",
+    ] as const) {
       const result = generate(platform, buildProject());
       expect(result).toBeDefined();
       expect(Array.isArray(result!.artifacts)).toBe(true);

@@ -94,10 +94,10 @@ export function previewInstalledExecution(inputs: PreviewInputs): string[] {
   for (const platform of inputs.platforms) {
     const result = generate(platform, project);
     if (!result) continue;
-    const skipped =
-      inputs.destBase && inputs.userHome
-        ? inactiveNativeConfigFilenames(platform, { destBase: inputs.destBase, userHome: inputs.userHome })
-        : new Set<string>();
+    const skipped = inactiveNativeConfigFilenames(
+      platform,
+      inputs.destBase && inputs.userHome ? { destBase: inputs.destBase, userHome: inputs.userHome } : undefined,
+    );
     previews.push(...outputPreviews(simulatedOutput(result), platform, skipped));
   }
 
@@ -317,8 +317,8 @@ function mergedFragment(
   }
   const unscanned = existing.contents === undefined || existing.unscanned === true;
   try {
-    const base = existing.value ?? parseMergeableConfig(destination, existing.contents ?? "");
-    const value = mergeConfigValues(base, parseMergeableConfig(destination, fragment));
+    const base = existing.value ?? parseMergeableConfig(destination, existing.contents ?? "", { jsonComments: true });
+    const value = mergeConfigValues(base, parseMergeableConfig(destination, fragment, { jsonComments: true }));
     return { contents: fragment, value, copied: true, unscanned };
   } catch {
     return { contents: fragment, copied: true, unscanned };
@@ -332,8 +332,10 @@ function outputPreviews(
   skipped: ReadonlySet<string>,
 ): string[] {
   const previews: string[] = [];
+  // Case-folded like the copy's skip names (`hasName` in fs.ts).
+  const skippedNames = new Set([...skipped].map((name) => name.toLowerCase()));
   for (const [destination, file] of output) {
-    if (skipped.has(destination)) continue;
+    if (skippedNames.has(destination.toLowerCase())) continue;
     const scan = file.value === undefined ? commandsIn(file.contents, destination) : commandsInValue(file.value);
     if (file.copied) {
       const runsByWhereItLands = runsByDestination(destination);

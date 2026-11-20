@@ -1,0 +1,6 @@
+{
+  // Devin-only MCP fields, deep-merged into the generated servers.
+  "mcpServers": {
+    "github": { "disabledTools": ["push_files", "create_repository"] }
+  }
+}

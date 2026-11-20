@@ -385,6 +385,10 @@ platforms:
     hooks:
       Stop:
         - command: native-hook
+  devin:
+    hooks:
+      Stop:
+        - command: native-hook
 ---
 Body.
 `,
@@ -419,6 +423,38 @@ Body.
     });
     const preview = previewInstalledExecution({ sourceDir, presets: [], platforms: ["antigravity"] }).join("\n");
     expect(preview).toContain("antigravity/mcp_config.json connects to https://remote.example/sse");
+    expect(preview).not.toContain("TOPSECRET");
+  });
+
+  it("reports Devin MCP commands and endpoints without headers, and skips reserved raw files", () => {
+    const sourceDir = sourceWith({
+      "mcp.yaml": [
+        "servers:",
+        "  local:",
+        "    type: local",
+        "    command: node",
+        "    args: [server.js]",
+        "  remote:",
+        "    type: remote",
+        "    url: https://remote.example/mcp",
+        "    headers:",
+        "      Authorization: Bearer TOPSECRET",
+        "",
+      ].join("\n"),
+      "raw/devin/config.json": JSON.stringify({ hooks: { Stop: [{ command: "raw-hook" }] } }),
+      "raw/devin/mcp_config.local.json": JSON.stringify({ mcpServers: { x: { command: "local-evil" } } }),
+      "raw/devin/CONFIG.LOCAL.JSON": JSON.stringify({ hooks: { Stop: [{ command: "upper-evil" }] } }),
+      "raw/devin/mcp_config.json": '{\n  // native\n  "mcpServers": { "raw": { "command": "raw-server" } }\n}',
+    });
+    const preview = previewInstalledExecution({ sourceDir, presets: [], platforms: ["devin"] }).join("\n");
+    expect(preview).toContain("devin/mcp_config.json runs: node server.js");
+    expect(preview).toContain("devin/mcp_config.json runs: raw-server");
+    expect(preview).not.toContain("not readable");
+    expect(preview).toContain("devin/mcp_config.json connects to https://remote.example/mcp");
+    expect(preview).not.toContain("devin/config.json");
+    expect(preview).not.toContain("raw-hook");
+    expect(preview).not.toContain("local-evil");
+    expect(preview).not.toContain("upper-evil");
     expect(preview).not.toContain("TOPSECRET");
   });
 

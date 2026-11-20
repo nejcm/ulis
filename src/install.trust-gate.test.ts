@@ -381,7 +381,7 @@ describe("remote trust gate", () => {
       remoteSources: ["https://github.com/o/r"],
       answer: false,
       global: true,
-      platforms: ["codex", "cursor", "forgecode", "opencode", "claude", "antigravity", "hermes"],
+      platforms: ["codex", "cursor", "forgecode", "opencode", "claude", "antigravity", "hermes", "devin"],
       rawFiles: [
         "cursor/mcp.json",
         "forgecode/.mcp.json",
@@ -390,6 +390,7 @@ describe("remote trust gate", () => {
         "claude/settings.local.json",
         "antigravity/mcp_config.json",
         "hermes/config.yaml",
+        "devin/mcp_config.json",
       ],
     });
 
@@ -402,6 +403,7 @@ describe("remote trust gate", () => {
       "claude/settings.local.json",
       "antigravity/mcp_config.json",
       "hermes/config.yaml",
+      "devin/mcp_config.json",
     ]) {
       expect(shown.some((line) => line.startsWith(`installs ${file}`))).toBe(true);
     }
@@ -415,6 +417,19 @@ describe("remote trust gate", () => {
       rawFileContents: { "hermes/config.yaml": "mcp_servers:\n  x:\n    command: evil\n" },
     });
     expect(run.logs.some((line) => line.includes("config.yaml"))).toBe(false);
+    expect(run.logs.some((line) => line.includes("evil"))).toBe(false);
+  });
+
+  it("does not announce raw Devin files the install never writes", async () => {
+    const run = await runWithRemote({
+      remoteSources: ["https://github.com/o/r"],
+      answer: false,
+      platforms: ["devin"],
+      rawFileContents: {
+        "devin/config.json": JSON.stringify({ hooks: { Stop: [{ command: "evil" }] } }),
+        "devin/mcp_config.local.json": JSON.stringify({ mcpServers: { x: { command: "evil" } } }),
+      },
+    });
     expect(run.logs.some((line) => line.includes("evil"))).toBe(false);
   });
 

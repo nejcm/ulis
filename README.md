@@ -3,7 +3,7 @@
 > Unified LLM Interface Specification — one config source for AI tools.
 
 `ulis` is a CLI that helps you write your agent configuration once, then publish it to:
-[Claude Code](https://claude.ai/code), [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex), [Cursor](https://cursor.com), [ForgeCode](https://forgecode.dev/docs/), [Antigravity](https://antigravity.google/docs), and [Hermes Agent](https://hermes-agent.nousresearch.com/docs).
+[Claude Code](https://claude.ai/code), [OpenCode](https://opencode.ai), [Codex](https://github.com/openai/codex), [Cursor](https://cursor.com), [ForgeCode](https://forgecode.dev/docs/), [Antigravity](https://antigravity.google/docs), [Hermes Agent](https://hermes-agent.nousresearch.com/docs), and [Devin](https://docs.devin.ai/cli).
 
 **📖 Docs: [nejcm.github.io/ulis](https://nejcm.github.io/ulis/)**
 
@@ -178,7 +178,7 @@ In CI or other non-interactive runs, add `--yes` so a missing preset name fails 
 | ------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `-g`, `--global`         | all                       | Operate on `~/.ulis/` and home-level install targets (`~/.claude/`…)                                                           |
 | `--source <path>`        | `build`, `install`        | Override the source directory; with `--global`, installs still target home                                                     |
-| `--target <platforms>`   | `build`, `install`        | Comma-separated list: `claude`, `codex`, `cursor`, `opencode`, `forgecode`, `antigravity`, `hermes`                            |
+| `--target <platforms>`   | `build`, `install`        | Comma-separated list: `claude`, `codex`, `cursor`, `opencode`, `forgecode`, `antigravity`, `hermes`, `devin`                   |
 | `--preset <names>`       | `build`, `install`        | Apply preset(s) from `~/.ulis/presets/` or bundled presets (comma-separated)                                                   |
 | `-y`, `--yes`            | `install`                 | Skip confirmation prompts                                                                                                      |
 | `--skip-rebuild`         | `install`                 | Skip the build step and deploy existing `generated/`                                                                           |
@@ -241,12 +241,15 @@ For the full field-level schema and examples, see [docs/REFERENCE.md](docs/REFER
 | ForgeCode   | Merge (additive) | `./.forge/`                | `~/.forge/`                                                                |
 | Antigravity | Merge (additive) | `./.agents/`               | `~/.gemini/config/` (the `skills` CLI uses `~/.gemini/antigravity/skills`) |
 | Hermes      | Merge (additive) | `./.hermes/` (skills only) | `~/.hermes/`                                                               |
+| Devin       | Merge (additive) | `./.devin/`                | `~/.config/devin/` (`%APPDATA%\devin\` on Windows)                         |
 
 Zed has no target of its own: it reads project skills from `./.agents/skills/` in trusted worktrees, so a project install with `--target antigravity` covers them. A global Antigravity install does not reach Zed's `~/.agents/skills/`.
 
+The `devin` target writes Devin CLI and Devin Local (Devin Desktop) config: skills and `mcp_config.json`. Cloud Devin gets no output of its own; it reads skills from `.devin/skills/` (and `.agents/`, `.claude/`, `.codex/`, … skill directories) and `AGENTS.md` in cloned repositories, and keeps everything else in its web UI. Devin also imports `.claude/skills/`, `.codex/skills/` and `.agents/skills/`, so a skill installed for several targets can appear twice; turn an import off with `read_config_from` in Devin's `config.json`, which ULIS does not write.
+
 Generated agent and local skill entries replace destination entries with the same native name. ULIS records their paths in each platform root's `.ulis-manifest.json`; later installs remove tracked paths that are no longer generated while preserving untracked and tool-provided entries. The first manifest-aware install only adopts the current set. Replacing an agent or skill no previous install recorded logs a warning ("not written by a previous ULIS install"), since `.agents/` is shared with other tools. The same applies to Hermes's `~/.hermes/skills/`, which holds Hermes's bundled category folders: a ULIS skill named like one of them (`mlops`, …) replaces that whole folder after the warning. Use `--no-prune` to retain stale paths and make them unmanaged. External `skills.yaml` installs are not tracked.
 
-`settings.json`, `settings.local.json`, `.claude.json`, `mcp.json`, ForgeCode's `.forge/.mcp.json`, Antigravity's `mcp_config.json`, and Hermes's `~/.hermes/config.yaml` `mcp_servers` are deep-merged so user content outside ULIS-managed keys is preserved. Hermes's `config.yaml` is re-serialised whenever the merge changes it, which drops YAML comments; an unchanged file keeps its bytes. With `--backup`, existing platform directories/files, ownership manifests, and entries are copied aside before overwriting or pruning.
+`settings.json`, `settings.local.json`, `.claude.json`, `mcp.json`, ForgeCode's `.forge/.mcp.json`, Antigravity's and Devin's `mcp_config.json`, and Hermes's `~/.hermes/config.yaml` `mcp_servers` are deep-merged so user content outside ULIS-managed keys is preserved. Hermes's `config.yaml` is re-serialised whenever the merge changes it, which drops YAML comments; an unchanged file keeps its bytes. Devin's `mcp_config.json` may contain comments; a changed one is re-serialised without them (with a warning). Devin's `config.json`, `config.local.json` and `mcp_config.local.json` are never written, even from a raw fragment. With `--backup`, existing platform directories/files, ownership manifests, and entries are copied aside before overwriting or pruning.
 
 `ulis install` runs phases in this order: **build → files → skills → extensions**. Extensions run last because they typically mutate the same files ulis just deployed.
 
@@ -323,7 +326,7 @@ src/
   cli.ts                   # cac entry point (compiled to dist/cli.js)
   commands/                # init, install, build, tui
   parsers/                 # agent, skill, mcp, permissions loaders
-  generators/              # claude, opencode, codex, cursor, forgecode, antigravity, hermes
+  generators/              # claude, opencode, codex, cursor, forgecode, antigravity, hermes, devin
   schema/                  # Zod schemas (ulis-config, agent, mcp, …)
   scaffold/                # inline templates used by `ulis init`
   tui/                     # TUI state/actions/view + OpenTUI app, controller, Bun launcher

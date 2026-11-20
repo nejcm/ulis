@@ -105,6 +105,7 @@ export const SkillFrontmatterSchema = z
           .optional(),
         antigravity: z.looseObject({ enabled: z.boolean().default(true) }).optional(),
         hermes: z.looseObject({ enabled: z.boolean().default(true) }).optional(),
+        devin: z.looseObject({ enabled: z.boolean().default(true) }).optional(),
       })
       .loose()
       .optional(),
