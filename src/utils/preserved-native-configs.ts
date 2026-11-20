@@ -45,14 +45,15 @@ export interface PreservedNativeConfigSpec {
   readonly generatedPath: (context: PreservedNativeConfigContext) => string;
   readonly targetPath: (context: PreservedNativeConfigContext) => string;
   readonly preservedPaths: readonly ConfigPath[];
+  /** Key holding MCP servers: unmanaged servers survive, stale managed ones are pruned unless `--no-prune`. */
   readonly mcpKey?: string;
   /** Preserve the complete existing object as the base, taking precedence over `ownership`. */
   readonly overlay?: OverlayMode | ((context: PreservedNativeConfigContext) => OverlayMode | undefined);
   /**
    * Ownership model for the target file. May be a literal or context-derived:
    * - "file" (default): ULIS owns the whole file. `preservedPaths` are
-   *    exceptions PICKED from the existing file and merged on top of the
-   *    generated content (so user-owned keys like `hooks` survive).
+   *    exceptions PICKED from the existing file and merged under the
+   *    generated content, which wins a conflict (so user-owned `hooks` survive).
    * - "paths": ULIS owns ONLY `preservedPaths`. Everything else in the existing
    *    file is preserved. Used for host-owned files such as `~/.claude.json`
    *    where ULIS contributes only `mcpServers` but Claude Code owns the rest
