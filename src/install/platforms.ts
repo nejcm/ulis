@@ -1,6 +1,6 @@
 import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { ULIS_PROVENANCE_FILENAME } from "../config.js";
 import {
@@ -32,7 +32,14 @@ import {
   sweepStaleRootEntries,
 } from "./fs.js";
 import { MANAGED_PLATFORM_LAYOUTS } from "./layouts.js";
-import { ULIS_MANIFEST_FILENAME, readManifest, type PlatformOwnership } from "./manifest.js";
+import {
+  ULIS_MANIFEST_FILENAME,
+  assertDevinGlobalRules,
+  assertDevinRulesDestination,
+  devinGlobalRulesDir,
+  readManifest,
+  type PlatformOwnership,
+} from "./manifest.js";
 import type { InstallContext } from "./types.js";
 
 /** Enough to clear a same-second collision; a run needing more has a directory full of backups. */
@@ -272,9 +279,16 @@ export async function installDevin(
 ): Promise<void> {
   const targetDir = platformConfigDir("devin", context.destBase, context.userHome);
   const sourceDir = join(context.outputDir, "devin");
+  const globalRulesDir = devinGlobalRulesDir("devin", context.destBase, context.userHome);
+  if (globalRulesDir) assertDevinGlobalRules(sourceDir, globalRulesDir, targetDir);
 
   logHeader(context, `Installing ${PLATFORM_LABELS.devin}`);
   backupDirectory(targetDir, context);
+  // Beside the config backup: nothing in ~/.devin/ outside rules/ is written.
+  if (globalRulesDir && context.backup && existsSync(globalRulesDir)) {
+    ensureDir(dirname(targetDir));
+    backupDirectory(globalRulesDir, context, `${targetDir}-rules`);
+  }
   const preservedConfigs = capturePlatformPreservedNativeConfigs("devin", context);
   const commented = new Set(
     preservedConfigs.filter(
@@ -293,16 +307,43 @@ export async function installDevin(
   writePlatformPreservedNativeConfigs("devin", preservedConfigs, context, onWritten);
   warnIfCommentsLost();
 
-  copyPlatformContents(sourceDir, targetDir, {
-    logger: context.logger,
-    onWritten,
-    skipNames: PLATFORM_INSTALL_SKIP_NAMES.devin,
+  // Global rules load from ~/.devin/rules, outside the config root, so a second pass writes them there
+  // and both sweeps wait until both passes have written.
+  const configRoot = {
+    // Unswept too: a `rules/` an earlier install left here stays, unmanaged.
+    skipNames: globalRulesDir
+      ? reservedNames(...PLATFORM_INSTALL_SKIP_NAMES.devin, "rules")
+      : PLATFORM_INSTALL_SKIP_NAMES.devin,
     namedDirectories: managedDirectoryRules("devin"),
-    previouslyManagedEntries: previouslyManagedEntries(ownership),
     pruneExtraNames: context.prune,
     previouslyManagedRootEntries: ownership?.previous?.rootEntries,
     currentManagedRootEntries: ownership?.current.rootEntries,
+    finalSweep: false,
+  };
+  copyPlatformContents(sourceDir, targetDir, {
+    ...configRoot,
+    logger: context.logger,
+    onWritten,
+    previouslyManagedEntries: previouslyManagedEntries(ownership),
   });
+
+  const underRules = (entries?: readonly string[]) => entries?.map((entry) => entry.slice("rules/".length));
+  const rulesRoot = {
+    pruneExtraNames: context.prune,
+    previouslyManagedRootEntries: underRules(ownership?.previous?.globalRulesEntries),
+    currentManagedRootEntries: underRules(ownership?.current.globalRulesEntries),
+    finalSweep: false,
+  };
+  const sourceRulesDir = join(sourceDir, "rules");
+  if (globalRulesDir && existsSync(sourceRulesDir)) {
+    copyPlatformContents(sourceRulesDir, globalRulesDir, {
+      ...rulesRoot,
+      logger: context.logger,
+      onWritten: onWritten && ((relativePath) => onWritten(`rules/${relativePath}`)),
+    });
+  }
+  sweepStaleRootEntries(targetDir, configRoot);
+  if (globalRulesDir) sweepStaleRootEntries(globalRulesDir, rulesRoot);
   prunePlatformMcpServers("devin", context);
   warnIfCommentsLost();
 }
@@ -332,8 +373,9 @@ function detectPlatformCollisions(platform: Platform, destBase: string, userHome
     case "opencode":
     case "antigravity":
     case "hermes":
-    case "devin":
       return detectPlatformDirCollisions(platform, destBase, userHome);
+    case "devin":
+      return detectDevinCollisions(destBase, userHome);
   }
 }
 
@@ -363,6 +405,21 @@ function detectForgecodeCollisions(destBase: string, userHome?: string): readonl
     paths.push(mcpPath);
   }
   return paths;
+}
+
+function detectDevinCollisions(destBase: string, userHome: string): readonly string[] {
+  const rulesDir = devinGlobalRulesDir("devin", destBase, userHome);
+  // An unsafe destination is listed without being read through; the install refuses it.
+  let listed = false;
+  if (rulesDir) {
+    try {
+      assertDevinRulesDestination(rulesDir, platformConfigDir("devin", destBase, userHome));
+      listed = isNonEmptyDirectory(rulesDir);
+    } catch {
+      listed = true;
+    }
+  }
+  return [...detectPlatformDirCollisions("devin", destBase, userHome), ...(listed ? [rulesDir!] : [])];
 }
 
 function detectPlatformDirCollisions(platform: Platform, destBase: string, userHome?: string): readonly string[] {
@@ -447,12 +504,12 @@ function prunePlatformMcpServers(platform: Platform, context: InstallContext): v
   writePlatformPreservedNativeConfigs(platform, entries, context);
 }
 
-function backupDirectory(targetDir: string, context: InstallContext): void {
+function backupDirectory(targetDir: string, context: InstallContext, backupBase = targetDir): void {
   if (!context.backup || !existsSync(targetDir)) {
     return;
   }
 
-  reportBackup(targetDir, copyToUnusedBackupPath(targetDir, context), context);
+  reportBackup(targetDir, copyToUnusedBackupPath(targetDir, context, backupBase), context);
 }
 
 function backupFile(targetPath: string, context: InstallContext): void {
@@ -488,13 +545,13 @@ interface BackupResult {
  * happened to exist already, whatever was there. `copyToNewPath` also refuses to write through a
  * symbolic link, which this predictable name is otherwise a fine place to plant.
  */
-function copyToUnusedBackupPath(sourcePath: string, context: InstallContext): BackupResult {
+function copyToUnusedBackupPath(sourcePath: string, context: InstallContext, backupBase = sourcePath): BackupResult {
   const skipped: string[] = [];
   // A symlinked root (`~/.codex -> dotfiles/codex`) copied as a link would back up the live tree the
   // install is about to change; nested links are still copied as links.
   const contentPath = lstatSync(sourcePath).isSymbolicLink() ? realpathSync(sourcePath) : sourcePath;
   for (let attempt = 1; attempt <= MAX_BACKUP_ATTEMPTS; attempt += 1) {
-    const candidate = backupPath(sourcePath, context.timestamp, attempt);
+    const candidate = backupPath(backupBase, context.timestamp, attempt);
     if (copyToNewPath(contentPath, candidate, (path) => skipped.push(path))) return { path: candidate, skipped };
   }
   throw new InstallError(

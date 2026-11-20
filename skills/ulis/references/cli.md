@@ -14,18 +14,18 @@ Use this when you need exact flags, destinations, or preset/remote behavior.
 
 ## Project vs global destinations
 
-|             | Project (default)                | `--global`                                                         |
-| ----------- | -------------------------------- | ------------------------------------------------------------------ |
-| Source      | `./.ulis/`                       | `~/.ulis/`                                                         |
-| Generated   | `<source>/generated/<platform>/` | same, under that source                                            |
-| Claude      | `./.claude/`                     | `~/.claude/`                                                       |
-| Codex       | `./.codex/`                      | `~/.codex/`                                                        |
-| Cursor      | `./.cursor/`                     | `~/.cursor/`                                                       |
-| OpenCode    | `./.opencode/`                   | `~/.config/opencode/` (Windows: `%USERPROFILE%\.config\opencode\`) |
-| ForgeCode   | `./.forge/`                      | `~/.forge/`                                                        |
-| Antigravity | `./.agents/`                     | `~/.gemini/config/`                                                |
-| Hermes      | `./.hermes/` (skills only)       | `~/.hermes/`                                                       |
-| Devin       | `./.devin/`                      | `~/.config/devin/` (Windows: `%APPDATA%\devin\`)                   |
+|             | Project (default)                | `--global`                                                                |
+| ----------- | -------------------------------- | ------------------------------------------------------------------------- |
+| Source      | `./.ulis/`                       | `~/.ulis/`                                                                |
+| Generated   | `<source>/generated/<platform>/` | same, under that source                                                   |
+| Claude      | `./.claude/`                     | `~/.claude/`                                                              |
+| Codex       | `./.codex/`                      | `~/.codex/`                                                               |
+| Cursor      | `./.cursor/`                     | `~/.cursor/`                                                              |
+| OpenCode    | `./.opencode/`                   | `~/.config/opencode/` (Windows: `%USERPROFILE%\.config\opencode\`)        |
+| ForgeCode   | `./.forge/`                      | `~/.forge/`                                                               |
+| Antigravity | `./.agents/`                     | `~/.gemini/config/`                                                       |
+| Hermes      | `./.hermes/` (skills only)       | `~/.hermes/`                                                              |
+| Devin       | `./.devin/`                      | `~/.config/devin/` (Windows: `%APPDATA%\devin\`); rules `~/.devin/rules/` |
 
 `init` in project mode also appends `/.ulis/generated/` to `.gitignore`. Global init does not write a gitignore.
 

@@ -1,6 +1,6 @@
 import { withOrigin } from "../diagnostics.js";
 import { unmappedTools } from "../generators/platforms/antigravity/agents.js";
-import { buildAntigravityRuleArtifact } from "../generators/platforms/antigravity/rules.js";
+import { buildTriggerRuleArtifact } from "../generators/shared/trigger-rules.js";
 import { enabledAgentsFor, type ParsedAgent } from "../parsers/agent.js";
 import { enabledRulesFor, type ParsedRule } from "../parsers/rule.js";
 import type { Diagnostic } from "../types.js";
@@ -35,7 +35,7 @@ export function validateAntigravityAgentTools(agents: readonly ParsedAgent[]): D
 /** Antigravity truncates a rule file past 24,000 bytes. */
 export function validateAntigravityRuleSize(rules: readonly ParsedRule[]): Diagnostic[] {
   return enabledRulesFor(rules, "antigravity")
-    .map((rule) => ({ rule, bytes: Buffer.byteLength(buildAntigravityRuleArtifact(rule).contents) }))
+    .map((rule) => ({ rule, bytes: Buffer.byteLength(buildTriggerRuleArtifact(rule).contents) }))
     .filter(({ bytes }) => bytes > RULE_TRUNCATION_BYTES)
     .map(({ rule, bytes }) => ({
       level: "warning",

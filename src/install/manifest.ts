@@ -8,11 +8,11 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { basename, isAbsolute, join, relative } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 
 import type { Logger } from "../build.js";
 import { ULIS_PROVENANCE_FILENAME } from "../config.js";
-import { platformConfigDir, type Platform } from "../platforms.js";
+import { isSamePath, platformConfigDir, type Platform } from "../platforms.js";
 import { readMergeableConfig } from "../utils/config-merge.js";
 import { getConfigPath, isPlainObject } from "../utils/config-paths.js";
 import { getPreservedNativeConfigEntries, nativeConfigFilenames } from "../utils/preserved-native-configs.js";
@@ -40,6 +40,8 @@ export interface OwnershipManifest {
   readonly agents: readonly string[];
   readonly skills: readonly string[];
   readonly rootEntries: readonly string[] | undefined;
+  /** Devin global rules, relative to `~/.devin/` and always under `rules/`; `rootEntries` stay relative to the config root. */
+  readonly globalRulesEntries?: readonly string[];
   readonly mcpServers?: readonly string[];
   readonly mcpProjectServers?: readonly (readonly [string, string])[];
   readonly mcpConfig?: string;
@@ -61,6 +63,8 @@ export function preflightOwnership(
   const ownership = new Map<Platform, PlatformOwnership>();
   for (const platform of platforms) {
     const targetDir = platformConfigDir(platform, destBase, userHome);
+    const rulesDir = devinGlobalRulesDir(platform, destBase, userHome);
+    if (rulesDir) assertDevinGlobalRules(join(outputDir, platform), rulesDir, targetDir);
     ownership.set(platform, {
       targetDir,
       previous: readManifest(platform, targetDir),
@@ -105,7 +109,11 @@ export function recordPartialOwnership(
   const { previous, current } = ownership;
   const reached = (entries: readonly string[] | undefined) => (entries ?? []).filter((entry) => written.has(entry));
   if (
-    reached(current.agents).length + reached(current.skills).length + reached(current.rootEntries).length === 0 &&
+    reached(current.agents).length +
+      reached(current.skills).length +
+      reached(current.rootEntries).length +
+      reached(current.globalRulesEntries).length ===
+      0 &&
     !(current.mcpConfig && written.has(current.mcpConfig))
   ) {
     return;
@@ -118,6 +126,9 @@ export function recordPartialOwnership(
     agents: union(previous?.agents, current.agents),
     skills: union(previous?.skills, current.skills),
     rootEntries: union(previous?.rootEntries, current.rootEntries),
+    ...(current.globalRulesEntries || previous?.globalRulesEntries
+      ? { globalRulesEntries: union(previous?.globalRulesEntries, current.globalRulesEntries) }
+      : {}),
     mcpServers: [
       ...new Set([
         ...(previous?.mcpServers ?? []),
@@ -172,6 +183,15 @@ export function readManifest(platform: Platform, targetDir: string): OwnershipMa
   const skills = validatePaths(platform, "skills", raw.skills, manifestPath);
   const rootEntries =
     raw.version === 1 ? undefined : validateRootEntries(raw.rootEntries as readonly unknown[], manifestPath);
+  if (raw.globalRulesEntries !== undefined && !Array.isArray(raw.globalRulesEntries)) {
+    throw new InstallError(
+      `Invalid ULIS ownership manifest for ${platform} at ${manifestPath}: expected globalRulesEntries array`,
+    );
+  }
+  const globalRulesEntries =
+    raw.globalRulesEntries === undefined
+      ? undefined
+      : validateGlobalRulesEntries(raw.globalRulesEntries as readonly unknown[], manifestPath);
   if (
     raw.mcpServers !== undefined &&
     (!Array.isArray(raw.mcpServers) || raw.mcpServers.some((name) => typeof name !== "string"))
@@ -192,6 +212,7 @@ export function readManifest(platform: Platform, targetDir: string): OwnershipMa
     agents,
     skills,
     rootEntries,
+    ...(globalRulesEntries ? { globalRulesEntries } : {}),
     mcpServers: raw.mcpServers as string[] | undefined,
     mcpProjectServers: raw.mcpProjectServers as [string, string][] | undefined,
   };
@@ -230,6 +251,11 @@ function collectGeneratedManifest(
             : [];
         })
     : [];
+  const rootEntries = validateRootEntries(
+    listManagedRootFiles(platformOutput, layout, nativeConfigFilenames(platform)),
+    platformOutput,
+  );
+  const separateRules = devinGlobalRulesDir(platform, destBase, userHome) !== undefined;
   return {
     version: MANIFEST_VERSION,
     mcpServers: isPlainObject(mcpServers) ? Object.keys(mcpServers).sort() : [],
@@ -237,11 +263,91 @@ function collectGeneratedManifest(
     mcpConfig: mcpEntry ? basename(mcpEntry.generatedPath) : undefined,
     agents: validatePaths(platform, "agents", agents, platformOutput),
     skills: validatePaths(platform, "skills", skills, platformOutput),
-    rootEntries: validateRootEntries(
-      listManagedRootFiles(platformOutput, layout, nativeConfigFilenames(platform)),
-      platformOutput,
-    ),
+    rootEntries: separateRules ? rootEntries.filter((entry) => !isGlobalRule(entry)) : rootEntries,
+    ...(separateRules ? { globalRulesEntries: rootEntries.filter(isGlobalRule) } : {}),
   };
+}
+
+/** Devin loads global rules from `~/.devin/rules/`, outside its config root; a project install keeps them in `.devin/rules/`. */
+export function devinGlobalRulesDir(platform: Platform, destBase: string, userHome: string): string | undefined {
+  return platform === "devin" && isSamePath(destBase, userHome) ? join(userHome, ".devin", "rules") : undefined;
+}
+
+/**
+ * Refuse a global Devin install the two passes cannot split cleanly: a `rules` entry that is not a
+ * real directory, or a case variant of it (copied by neither pass), or an unsafe rules destination.
+ */
+export function assertDevinGlobalRules(platformOutput: string, rulesDir: string, configDir: string): void {
+  const entries = existsSync(platformOutput) ? readdirSync(platformOutput) : [];
+  for (const name of entries.filter((entry) => entry.toLowerCase() === "rules")) {
+    if (name !== "rules" || !lstatSync(join(platformOutput, name)).isDirectory()) {
+      throw new InstallError(
+        `Generated Devin rules must be a real directory named "rules": ${join(platformOutput, name)}`,
+      );
+    }
+  }
+  assertDevinRulesDestination(rulesDir, configDir);
+}
+
+/**
+ * A linked or non-directory `~/.devin/rules` would carry the copy and prune into the rest of Devin's
+ * data, and one that overlaps the config root would let either root's sweep delete the other's files.
+ */
+export function assertDevinRulesDestination(rulesDir: string, configDir: string): void {
+  let stats;
+  try {
+    stats = lstatSync(rulesDir);
+  } catch (error) {
+    if (!isMissingPathError(error)) {
+      throw new InstallError(`Failed to inspect the Devin rules directory: ${rulesDir}`, error);
+    }
+  }
+  if (stats && !stats.isDirectory()) {
+    throw new InstallError(`Unsafe Devin rules directory: ${rulesDir} is a symbolic link or not a directory`);
+  }
+  const rules = physicalPath(rulesDir);
+  const config = physicalPath(configDir);
+  if (pathsOverlap(rules, config)) {
+    throw new InstallError(
+      `Unsafe Devin rules directory: ${rulesDir} resolves to ${rules}, which overlaps the Devin config directory ${config}`,
+    );
+  }
+}
+
+/** True when the two absolute paths are equal or one contains the other; a filesystem root contains everything. */
+export function pathsOverlap(left: string, right: string): boolean {
+  const within = (child: string, parent: string) => {
+    const path = relative(parent, child);
+    return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
+  };
+  return within(left, right) || within(right, left);
+}
+
+/** Real path of the nearest existing ancestor, with the missing segments appended. */
+function physicalPath(path: string): string {
+  const missing: string[] = [];
+  let current = path;
+  while (!existsSync(current) && dirname(current) !== current) {
+    // A dangling link resolves nowhere yet; a later mkdir through it would move the destination.
+    if (lstatSync(current, { throwIfNoEntry: false })) {
+      throw new InstallError(`Unsafe Devin rules directory: ${current} is a dangling symbolic link`);
+    }
+    missing.unshift(basename(current));
+    current = dirname(current);
+  }
+  const resolved = join(realpathSync.native(current), ...missing);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+function isGlobalRule(entry: string): boolean {
+  return entry.startsWith("rules/");
+}
+
+function validateGlobalRulesEntries(values: readonly unknown[], sourcePath: string): string[] {
+  const entries = validateRootEntries(values, sourcePath);
+  const outside = entries.find((entry) => !isGlobalRule(entry));
+  if (outside) throw new InstallError(`Unsafe Devin rules entry in ULIS ownership data at ${sourcePath}: ${outside}`);
+  return entries;
 }
 
 /**

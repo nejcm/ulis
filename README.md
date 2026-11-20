@@ -232,20 +232,20 @@ For the full field-level schema and examples, see [docs/REFERENCE.md](docs/REFER
 
 ## Install behaviour
 
-| Tool        | Strategy         | Target (project mode)      | Target (global mode)                                                       |
-| ----------- | ---------------- | -------------------------- | -------------------------------------------------------------------------- |
-| OpenCode    | Merge by entry   | `./.opencode/`             | `~/.config/opencode/` (`%USERPROFILE%\.config\opencode\` on Windows)       |
-| Claude Code | Merge (additive) | `./.claude/`               | `~/.claude/`                                                               |
-| Codex       | Merge by entry   | `./.codex/`                | `~/.codex/`                                                                |
-| Cursor      | Merge (additive) | `./.cursor/`               | `~/.cursor/`                                                               |
-| ForgeCode   | Merge (additive) | `./.forge/`                | `~/.forge/`                                                                |
-| Antigravity | Merge (additive) | `./.agents/`               | `~/.gemini/config/` (the `skills` CLI uses `~/.gemini/antigravity/skills`) |
-| Hermes      | Merge (additive) | `./.hermes/` (skills only) | `~/.hermes/`                                                               |
-| Devin       | Merge (additive) | `./.devin/`                | `~/.config/devin/` (`%APPDATA%\devin\` on Windows)                         |
+| Tool        | Strategy         | Target (project mode)      | Target (global mode)                                                           |
+| ----------- | ---------------- | -------------------------- | ------------------------------------------------------------------------------ |
+| OpenCode    | Merge by entry   | `./.opencode/`             | `~/.config/opencode/` (`%USERPROFILE%\.config\opencode\` on Windows)           |
+| Claude Code | Merge (additive) | `./.claude/`               | `~/.claude/`                                                                   |
+| Codex       | Merge by entry   | `./.codex/`                | `~/.codex/`                                                                    |
+| Cursor      | Merge (additive) | `./.cursor/`               | `~/.cursor/`                                                                   |
+| ForgeCode   | Merge (additive) | `./.forge/`                | `~/.forge/`                                                                    |
+| Antigravity | Merge (additive) | `./.agents/`               | `~/.gemini/config/` (the `skills` CLI uses `~/.gemini/antigravity/skills`)     |
+| Hermes      | Merge (additive) | `./.hermes/` (skills only) | `~/.hermes/`                                                                   |
+| Devin       | Merge (additive) | `./.devin/`                | `~/.config/devin/` (`%APPDATA%\devin\` on Windows), rules in `~/.devin/rules/` |
 
 Zed has no target of its own: it reads project skills from `./.agents/skills/` in trusted worktrees, so a project install with `--target antigravity` covers them. A global Antigravity install does not reach Zed's `~/.agents/skills/`.
 
-The `devin` target writes Devin CLI and Devin Local (Devin Desktop) config: skills and `mcp_config.json`. Cloud Devin gets no output of its own; it reads skills from `.devin/skills/` (and `.agents/`, `.claude/`, `.codex/`, … skill directories) and `AGENTS.md` in cloned repositories, and keeps everything else in its web UI. Devin also imports `.claude/skills/`, `.codex/skills/` and `.agents/skills/`, so a skill installed for several targets can appear twice; turn an import off with `read_config_from` in Devin's `config.json`, which ULIS does not write.
+The `devin` target writes Devin CLI and Devin Local (Devin Desktop) config: skills, rules and `mcp_config.json`. A global install writes rules to `~/.devin/rules/`, where Devin reads global rules, and touches nothing else in `~/.devin/`. Cloud Devin gets no output of its own; it reads skills from `.devin/skills/` (and `.agents/`, `.claude/`, `.codex/`, … skill directories) and `AGENTS.md` in cloned repositories, and keeps everything else in its web UI. Devin also imports `.claude/skills/`, `.codex/skills/` and `.agents/skills/`, so a skill installed for several targets can appear twice; turn an import off with `read_config_from` in Devin's `config.json`, which ULIS does not write.
 
 Generated agent and local skill entries replace destination entries with the same native name. ULIS records their paths in each platform root's `.ulis-manifest.json`; later installs remove tracked paths that are no longer generated while preserving untracked and tool-provided entries. The first manifest-aware install only adopts the current set. Replacing an agent or skill no previous install recorded logs a warning ("not written by a previous ULIS install"), since `.agents/` is shared with other tools. The same applies to Hermes's `~/.hermes/skills/`, which holds Hermes's bundled category folders: a ULIS skill named like one of them (`mlops`, …) replaces that whole folder after the warning. Use `--no-prune` to retain stale paths and make them unmanaged. External `skills.yaml` installs are not tracked.
 
