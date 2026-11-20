@@ -106,7 +106,7 @@ Check whether these docs need updates:
 - `docs/CLI.md`, `docs/index.md`, `docs/guide/getting-started.md`, `docs/guide/project-vs-global.md`
 - `README.md` platform list, install table and caveats
 - `skills/ulis/SKILL.md` and `skills/ulis/references/`
-- `AGENTS.md`: the platform list, blast-radius directories, "Preserve what we did not write" list, "other N adapters" count, and the platform documentation link
+- `AGENTS.md`: the platform list, blast-radius directories, "other N adapters" count, and the platform documentation link
 - `CONTEXT.md` if the target adds a term
 - `CHANGELOG.md` Unreleased, including behavior changes on other platforms
 - `package.json` `description`
