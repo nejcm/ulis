@@ -1,14 +1,17 @@
+import { enabledAgentsFor } from "../../../parsers/agent.js";
 import { enabledRulesFor } from "../../../parsers/rule.js";
 import { enabledSkillsFor } from "../../../parsers/skill.js";
 import { buildTriggerRuleArtifacts } from "../../shared/trigger-rules.js";
 import { rawDirs } from "../../source-dirs.js";
 import type { GenerationResult, ProjectBundle } from "../../types.js";
+import { buildDevinAgentArtifact } from "./agents.js";
 import { buildDevinMcpArtifact } from "./mcp.js";
 import { buildDevinSkillDirs } from "./skills.js";
 
 export function generateDevin(project: ProjectBundle): GenerationResult {
   return {
     artifacts: [
+      ...enabledAgentsFor(project.agents, "devin").map(buildDevinAgentArtifact),
       // Devin CLI 3000.14 rejects a string `globs` with "expected a sequence".
       ...buildTriggerRuleArtifacts(enabledRulesFor(project.rules, "devin"), "Devin", "list"),
       buildDevinMcpArtifact(project.mcp),

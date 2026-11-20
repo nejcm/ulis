@@ -1,11 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import { join } from "node:path";
 
+import type { ParsedAgent } from "../../../parsers/agent.js";
 import type { ParsedRule } from "../../../parsers/rule.js";
 import type { ParsedSkill } from "../../../parsers/skill.js";
-import { RuleFrontmatterSchema, type McpServer } from "../../../schema.js";
+import { AgentFrontmatterSchema, RuleFrontmatterSchema, type McpServer } from "../../../schema.js";
 import { toPlatformSkillMarkdown } from "../../../utils/skill-frontmatter.js";
 import type { ProjectBundle } from "../../types.js";
+import { buildDevinAgentArtifact } from "./agents.js";
 import { generateDevin } from "./index.js";
 import { buildDevinMcpArtifact } from "./mcp.js";
 import { buildDevinSkillDirs } from "./skills.js";
@@ -159,5 +161,91 @@ describe("buildDevinSkillDirs", () => {
     expect(md).not.toContain("claude-haiku");
     expect(md).not.toContain("Read Grep");
     expect(md).not.toContain("enabled");
+  });
+});
+
+describe("buildDevinAgentArtifact", () => {
+  const contents = (frontmatter: Record<string, unknown>, name = "reviewer") =>
+    String(
+      buildDevinAgentArtifact({
+        name,
+        body: "Review.\n",
+        frontmatter: AgentFrontmatterSchema.parse({ description: "Reviews", ...frontmatter }),
+      } as ParsedAgent).contents,
+    );
+  const every = { read: true, write: true, edit: true, bash: true, search: true, browser: true };
+
+  it("writes agents/<name>.md with name, description, mapped allowed-tools and body, dropping the canonical model", () => {
+    const artifact = buildDevinAgentArtifact({
+      name: "reviewer",
+      body: "Review.\n",
+      frontmatter: AgentFrontmatterSchema.parse({ description: "Reviews", model: "opus", tools: { bash: true } }),
+    });
+    expect(artifact.path.replace(/\\/g, "/")).toBe("agents/reviewer.md");
+    expect(artifact.contents).toBe(
+      "---\nname: reviewer\ndescription: Reviews\nallowed-tools:\n  - read\n  - grep\n  - glob\n  - exec\n---\n\nReview.\n",
+    );
+  });
+
+  it("omits allowed-tools without a comment when every tool group is granted, with or without agent", () => {
+    for (const agent of [true, false, undefined]) {
+      expect(contents({ tools: { ...every, agent } })).toBe(
+        "---\nname: reviewer\ndescription: Reviews\n---\n\nReview.\n",
+      );
+    }
+    expect(contents({ tools: { ...every, bash: false } })).toContain("  - webfetch\n---");
+  });
+
+  it("emits the platforms.devin tools alias as allowed-tools, replacing the mapped list", () => {
+    expect(contents({ tools: { bash: true }, platforms: { devin: { tools: ["read"] } } })).toBe(
+      "---\nname: reviewer\ndescription: Reviews\nallowed-tools:\n  - read\n---\n\nReview.\n",
+    );
+    expect(contents({ tools: "Read", platforms: { devin: { tools: ["read"] } } })).toBe(
+      "---\nname: reviewer\ndescription: Reviews\nallowed-tools:\n  - read\n---\n\nReview.\n",
+    );
+    expect(contents({ tools: {}, platforms: { devin: { "allowed-tools": ["exec"], tools: ["read"] } } })).toContain(
+      "allowed-tools:\n  - exec\n---",
+    );
+  });
+
+  it("omits allowed-tools and lists the canonical tools in a comment when nothing maps", () => {
+    const none = { read: false };
+    expect(contents({ tools: none })).toBe(
+      "---\nname: reviewer\ndescription: Reviews\n---\n\n<!-- [ULIS tools] canonical: none; allowed-tools omitted -->\n\nReview.\n",
+    );
+    expect(contents({ tools: "Read, Bash" })).toContain(
+      "<!-- [ULIS tools] canonical: Read, Bash; allowed-tools omitted -->",
+    );
+    expect(contents({ tools: "Read", platforms: { devin: { "allowed-tools": ["read"] } } })).not.toContain(
+      "[ULIS tools]",
+    );
+  });
+
+  it("passes platforms.devin through, its allowed-tools replacing the mapped list", () => {
+    const c = contents({
+      model: "opus",
+      tools: {},
+      platforms: { devin: { model: "sonnet", "allowed-tools": ["read", "exec"], "max-nesting": 2, color: "blue" } },
+    });
+    expect(c).toBe(
+      "---\nname: reviewer\ndescription: Reviews\nallowed-tools:\n  - read\n  - exec\nmodel: sonnet\nmax-nesting: 2\ncolor: blue\n---\n\nReview.\n",
+    );
+  });
+
+  it("skips agents disabled for devin", () => {
+    const agent = (name: string, devin?: object) =>
+      ({
+        name,
+        body: "",
+        frontmatter: AgentFrontmatterSchema.parse({ description: "d", tools: {}, platforms: devin && { devin } }),
+      }) as ParsedAgent;
+    const { artifacts } = generateDevin({
+      agents: [agent("on"), agent("off", { enabled: false })],
+      skills: [],
+      rules: [],
+      mcp: { servers: {} },
+      sourceDir: "/unused",
+    } as unknown as ProjectBundle);
+    expect(artifacts.map((a) => a.path.replace(/\\/g, "/"))).toEqual(["agents/on.md", "mcp_config.json"]);
   });
 });

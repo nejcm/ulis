@@ -22,6 +22,8 @@ platforms:
     readonly: true
   antigravity:
     commandExecutionPolicy: off
+  devin:
+    model: sonnet
 ---
 
 # Security Agent

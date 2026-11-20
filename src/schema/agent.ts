@@ -173,6 +173,15 @@ export const AgentFrontmatterSchema = z
             plugins: z.array(z.string()).optional(),
           })
           .optional(),
+        devin: z
+          .looseObject({
+            enabled: z.boolean().default(true),
+            model: z.string().optional(),
+            "allowed-tools": z.array(z.string()).optional(),
+            tools: z.array(z.string()).optional(),
+            "max-nesting": z.number().int().nonnegative().optional(),
+          })
+          .optional(),
       })
       .loose()
       .optional(),

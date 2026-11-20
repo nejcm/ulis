@@ -197,6 +197,36 @@ describe.each([
     expect(ownedRules()).toEqual([]);
   });
 
+  it("installs agents, prunes stale managed ones and keeps unmanaged ones", async () => {
+    const { sourceDir, targetDir, options } = devinSource(global);
+    const agentsManifest = () =>
+      (JSON.parse(read(join(targetDir, ".ulis-manifest.json"))) as { agents: string[] }).agents;
+    for (const name of ["reviewer", "old"]) {
+      write(join(sourceDir, "agents", `${name}.md`), `---\ndescription: ${name}\ntools:\n  bash: true\n---\nBody.\n`);
+    }
+    write(join(targetDir, "agents", "mine.md"), "Mine.\n");
+    await runInstall(options);
+    expect(read(join(targetDir, "agents", "reviewer.md"))).toBe(
+      "---\nname: reviewer\ndescription: reviewer\nallowed-tools:\n  - read\n  - grep\n  - glob\n  - exec\n---\n\nBody.\n",
+    );
+    expect(agentsManifest()).toEqual(["agents/old.md", "agents/reviewer.md"]);
+    rmSync(join(sourceDir, "agents", "old.md"));
+    await runInstall(options);
+    expect(existsSync(join(targetDir, "agents", "old.md"))).toBe(false);
+    expect(existsSync(join(targetDir, "agents", "reviewer.md"))).toBe(true);
+    expect(read(join(targetDir, "agents", "mine.md"))).toBe("Mine.\n");
+    expect(agentsManifest()).toEqual(["agents/reviewer.md"]);
+  });
+
+  it("keeps stale agents with prune off", async () => {
+    const { sourceDir, targetDir, options } = devinSource(global);
+    write(join(sourceDir, "agents", "old.md"), "---\ndescription: old\ntools: {}\n---\nBody.\n");
+    await runInstall(options);
+    rmSync(join(sourceDir, "agents", "old.md"));
+    await runInstall({ ...options, prune: false });
+    expect(existsSync(join(targetDir, "agents", "old.md"))).toBe(true);
+  });
+
   it("never writes or claims a raw global_rules.md", async () => {
     const { sourceDir, targetDir, options, manifest } = devinSource(global);
     write(join(sourceDir, "raw", "devin", "global_rules.md"), "Raw.\n");
