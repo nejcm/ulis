@@ -43,3 +43,12 @@ cursor:
     - bun
     - find
     - ls
+devin:
+  allow:
+    - Read(**)
+    - Exec(git status)
+    - Exec(bun test)
+    - mcp__github__*
+  deny:
+    - Exec(rm -rf)
+    - Write(.env*)

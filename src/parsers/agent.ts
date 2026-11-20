@@ -9,7 +9,7 @@ export interface ParsedAgent {
   origin?: DiagnosticOrigin;
 }
 
-export type AgentPlatform = "claude" | "opencode" | "codex" | "cursor" | "forgecode" | "antigravity";
+export type AgentPlatform = "claude" | "opencode" | "codex" | "cursor" | "forgecode" | "antigravity" | "devin";
 
 export function resolveAgentName(fileName: string, frontmatter: AgentFrontmatter): string {
   return frontmatter.name ?? fileName;

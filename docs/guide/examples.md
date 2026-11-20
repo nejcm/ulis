@@ -278,6 +278,13 @@ cursor:
   terminalAllowlist:
     - bun
     - git status
+
+devin:
+  allow:
+    - "Exec(git)"
+    - "Read(src/**)"
+  deny:
+    - "Exec(rm)"
 ```
 
 ## External Skills

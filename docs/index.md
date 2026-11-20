@@ -62,7 +62,7 @@ pageClass: ulis-landing-page
           <div>├── forgecode/<span class="ul-dim">     AGENTS.md · .forge/</span></div>
           <div>├── antigravity/<span class="ul-dim">   agents · rules · mcp_config.json</span></div>
           <div>├── hermes/<span class="ul-dim">        skills · config.yaml</span></div>
-          <div>└── devin/<span class="ul-dim">         rules · skills · mcp_config.json</span></div>
+          <div>└── devin/<span class="ul-dim">         agents · rules · skills · mcp_config.json · config.json</span></div>
         </div>
       </div>
     </div>

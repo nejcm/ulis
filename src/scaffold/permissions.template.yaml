@@ -25,3 +25,10 @@
 # cursor:
 #   mcpAllowlist: []
 #   terminalAllowlist: []
+#
+# devin:
+#   allow:
+#     - "Exec(git status)"
+#     - "Read(src/**)"
+#   deny:
+#     - "Exec(rm)"

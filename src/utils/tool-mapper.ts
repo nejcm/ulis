@@ -1,6 +1,6 @@
 import type { ToolPermissions } from "../schema.js";
 
-export type ToolPlatform = "claude" | "cursor" | "opencode" | "codex" | "forgecode" | "antigravity";
+export type ToolPlatform = "claude" | "cursor" | "opencode" | "codex" | "forgecode" | "antigravity" | "devin";
 
 // mapping agent tool permissions to tool names for each platform
 const PLATFORM_TOOL_NAMES: Record<
@@ -47,6 +47,15 @@ const PLATFORM_TOOL_NAMES: Record<
     search: [],
     browser: [],
   },
+  // https://docs.devin.ai/cli/extensibility/hooks/lifecycle-hooks#tool-names-you-can-match
+  devin: {
+    read: ["read", "grep", "glob"],
+    write: ["write"],
+    edit: ["edit", "apply_patch"],
+    bash: ["exec"],
+    search: ["webfetch"],
+    browser: ["webfetch"],
+  },
 };
 
 /** Every tool name `mapTools` can emit for a list-based platform, in declaration order. */
@@ -60,13 +69,14 @@ export function allMappedToolNames(platform: keyof typeof PLATFORM_TOOL_NAMES): 
  * `codex`, which has no per-agent tool list.
  *
  * Subagent allowlist (`tools.agent`) is appended for `claude` (`Agent(name1, name2)`
- * in `allowed-tools`) and `antigravity` (`invoke_subagent`, no allowlist).
+ * in `allowed-tools`), `antigravity` (`invoke_subagent`) and `devin` (`run_subagent`, `read_subagent`), the last two without an allowlist.
  *
  * Tool name maps are internal ULIS defaults and not user-configurable.
  */
 export function mapTools(perms: ToolPermissions, platform: ToolPlatform): string[] {
-  // A string allowlist holds Claude tool names, which Antigravity would not recognize.
-  if (typeof perms === "string") return platform === "antigravity" ? [] : perms.split(",").map((t) => t.trim());
+  // A string allowlist holds Claude tool names, which Antigravity and Devin would not recognize.
+  if (typeof perms === "string")
+    return platform === "antigravity" || platform === "devin" ? [] : perms.split(",").map((t) => t.trim());
 
   if (platform === "opencode" || platform === "codex") {
     // These platforms consume the structured `ToolPermissions` directly;
@@ -96,9 +106,11 @@ export function mapTools(perms: ToolPermissions, platform: ToolPlatform): string
     (perms.agent === true || (Array.isArray(perms.agent) && perms.agent.length > 0))
   ) {
     tools.push("invoke_subagent");
+  } else if (platform === "devin" && (perms.agent === true || (Array.isArray(perms.agent) && perms.agent.length > 0))) {
+    tools.push("run_subagent", "read_subagent");
   }
 
-  return tools;
+  return [...new Set(tools)];
 }
 
 /**

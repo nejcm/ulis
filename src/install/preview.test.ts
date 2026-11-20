@@ -451,8 +451,7 @@ Body.
     expect(preview).toContain("devin/mcp_config.json runs: raw-server");
     expect(preview).not.toContain("not readable");
     expect(preview).toContain("devin/mcp_config.json connects to https://remote.example/mcp");
-    expect(preview).not.toContain("devin/config.json");
-    expect(preview).not.toContain("raw-hook");
+    expect(preview).toContain("devin/config.json runs: raw-hook");
     expect(preview).not.toContain("local-evil");
     expect(preview).not.toContain("upper-evil");
     expect(preview).not.toContain("TOPSECRET");

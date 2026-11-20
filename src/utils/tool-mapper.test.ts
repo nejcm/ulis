@@ -84,6 +84,36 @@ describe("mapTools — antigravity", () => {
   });
 });
 
+describe("mapTools — devin", () => {
+  it("maps each canonical group to Devin's documented tool names", () => {
+    expect(mapTools({ ...empty, read: true }, "devin")).toEqual(["read", "grep", "glob"]);
+    expect(mapTools({ ...empty, write: true }, "devin")).toEqual(["write"]);
+    expect(mapTools({ ...empty, edit: true }, "devin")).toEqual(["edit", "apply_patch"]);
+    expect(mapTools({ ...empty, bash: true }, "devin")).toEqual(["exec"]);
+    expect(mapTools({ ...empty, search: true }, "devin")).toEqual(["webfetch"]);
+    expect(mapTools({ ...empty, browser: true }, "devin")).toEqual(["webfetch"]);
+    expect(mapTools({ ...empty, agent: ["helper"] }, "devin")).toEqual(["run_subagent", "read_subagent"]);
+  });
+
+  it("lists webfetch once when search and browser are both granted", () => {
+    expect(mapTools(all, "devin")).toEqual([
+      "read",
+      "grep",
+      "glob",
+      "write",
+      "edit",
+      "apply_patch",
+      "exec",
+      "webfetch",
+    ]);
+  });
+
+  it("returns empty for empty permissions and for a Claude-name allowlist", () => {
+    expect(mapTools(empty, "devin")).toEqual([]);
+    expect(mapTools("Read, Bash", "devin")).toEqual([]);
+  });
+});
+
 describe("mapTools — opencode/codex", () => {
   it("returns empty for opencode (see mapOpencodeTools)", () => {
     expect(mapTools(all, "opencode")).toEqual([]);

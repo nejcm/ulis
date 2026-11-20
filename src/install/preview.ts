@@ -386,6 +386,9 @@ function approvalSettingPreviews(permissions: PermissionsConfig | undefined): st
     previews.push(settingLine(path, String(node)));
   };
   visit(permissions, []);
+  // Devin's lists are written whole, so an undeclared or empty one clears the user's saved rules.
+  if (permissions.devin)
+    previews.push(settingLine(["devin.permissions"], "replaces allow, deny and ask; unset lists become empty"));
   return previews;
 }
 

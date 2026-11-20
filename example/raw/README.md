@@ -52,6 +52,10 @@ Cross-platform agent instructions injected into every tool's config. Contains:
 
 Devin-only MCP fields (`disabledTools`) merged into the generated `mcp_config.json`. Comments are allowed; the merged output is plain JSON.
 
+### `devin/config.json`
+
+Sets `read_config_from` so Devin stops importing Codex skills and everything it reads from Claude Code — rules, skills, MCP servers and `.claude/settings*.json` hooks. ULIS writes the rules, skills and servers for Devin itself, but not hooks, so drop `claude: false` if Devin should keep running your Claude hooks. Merged into the generated `config.json` (which holds `permissions`), then overlaid onto the existing Devin `config.json`.
+
 ## When to Use `raw/` vs Other Directories
 
 | Use case                                              | Where to put it   |

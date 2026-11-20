@@ -273,10 +273,7 @@ export function devinGlobalRulesDir(platform: Platform, destBase: string, userHo
   return platform === "devin" && isSamePath(destBase, userHome) ? join(userHome, ".devin", "rules") : undefined;
 }
 
-/**
- * Refuse a global Devin install the two passes cannot split cleanly: a `rules` entry that is not a
- * real directory, or a case variant of it (copied by neither pass), or an unsafe rules destination.
- */
+/** Refuse a global Devin install whose `rules` entry or destination the two passes cannot split cleanly. */
 export function assertDevinGlobalRules(platformOutput: string, rulesDir: string, configDir: string): void {
   const entries = existsSync(platformOutput) ? readdirSync(platformOutput) : [];
   for (const name of entries.filter((entry) => entry.toLowerCase() === "rules")) {
@@ -289,10 +286,7 @@ export function assertDevinGlobalRules(platformOutput: string, rulesDir: string,
   assertDevinRulesDestination(rulesDir, configDir);
 }
 
-/**
- * A linked or non-directory `~/.devin/rules` would carry the copy and prune into the rest of Devin's
- * data, and one that overlaps the config root would let either root's sweep delete the other's files.
- */
+/** Refuse a linked, non-directory or config-overlapping `~/.devin/rules`, where copy or prune would reach other files. */
 export function assertDevinRulesDestination(rulesDir: string, configDir: string): void {
   let stats;
   try {

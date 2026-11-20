@@ -537,7 +537,24 @@ describe("Devin generator", () => {
       transport: "http",
       headers: { Authorization: "Bearer ${env:TEST_REMOTE_TOKEN}" },
     });
-    expect([...m.keys()]).toEqual(["mcp_config.json"]);
+    expect([...m.keys()]).toEqual(["agents/worker.md", "mcp_config.json"]);
+  });
+
+  it("emits config.json with all three permission lists when devin permissions are configured", () => {
+    const configured = runProject("devin", {
+      ...buildProject(),
+      permissions: { devin: { allow: ["Exec(git)", "Fetch(domain:npmjs.org)"], ask: ["Write(**)"] } },
+    });
+    expect(JSON.parse(get(configured, "config.json"))).toEqual({
+      permissions: { allow: ["Exec(git)", "Fetch(domain:npmjs.org)"], deny: [], ask: ["Write(**)"] },
+    });
+  });
+
+  it("generates agent markdown with name, description and mapped allowed-tools, dropping the canonical model", () => {
+    const c = get(m, "agents/worker.md");
+    expect(c).toContain("name: worker");
+    expect(c).not.toContain("model:");
+    expect(c).toContain("allowed-tools:\n  - read\n  - grep\n  - glob\n  - edit\n  - apply_patch\n");
   });
 
   it("generates flattened .devin/rules files with trigger frontmatter and list globs", () => {
@@ -629,6 +646,7 @@ Review security-sensitive changes.
       "cursor:agents/worker.mdc": ["description", "model", "readonly", "tools"],
       "forgecode:.forge/agents/worker.md": ["id", "title", "description", "model", "tools"],
       "antigravity:agents/worker.md": ["name", "description", "tools"],
+      "devin:agents/worker.md": ["name", "description", "allowed-tools"],
     };
 
     for (const platform of [

@@ -1,0 +1,4 @@
+{
+  // Skips Codex skills and Claude Code rules, skills and MCP servers, which ULIS writes for Devin; also drops Claude hooks.
+  "read_config_from": { "claude": false, "codex": false }
+}

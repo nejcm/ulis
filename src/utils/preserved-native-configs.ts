@@ -45,14 +45,15 @@ export interface PreservedNativeConfigSpec {
   readonly generatedPath: (context: PreservedNativeConfigContext) => string;
   readonly targetPath: (context: PreservedNativeConfigContext) => string;
   readonly preservedPaths: readonly ConfigPath[];
+  /** Key holding MCP servers: unmanaged servers survive, stale managed ones are pruned unless `--no-prune`. */
   readonly mcpKey?: string;
   /** Preserve the complete existing object as the base, taking precedence over `ownership`. */
   readonly overlay?: OverlayMode | ((context: PreservedNativeConfigContext) => OverlayMode | undefined);
   /**
    * Ownership model for the target file. May be a literal or context-derived:
    * - "file" (default): ULIS owns the whole file. `preservedPaths` are
-   *    exceptions PICKED from the existing file and merged on top of the
-   *    generated content (so user-owned keys like `hooks` survive).
+   *    exceptions PICKED from the existing file and merged under the
+   *    generated content, which wins a conflict (so user-owned `hooks` survive).
    * - "paths": ULIS owns ONLY `preservedPaths`. Everything else in the existing
    *    file is preserved. Used for host-owned files such as `~/.claude.json`
    *    where ULIS contributes only `mcpServers` but Claude Code owns the rest
@@ -217,6 +218,8 @@ function capturePreservedConfig(
   entry: PreservedNativeConfigEntry,
 ): Pick<CapturedPreservedNativeConfig, "preservedConfig" | "originalContent"> {
   if (!existsSync(entry.targetPath)) return { preservedConfig: undefined };
+  // Nothing to merge leaves an overlay untouched, so it is not parsed either: an unreadable file stays put.
+  if (entry.overlay && !entry.mcpKey && !existsSync(entry.generatedPath)) return { preservedConfig: undefined };
 
   try {
     const existing = parseTargetConfig(entry, readFile(entry.targetPath));
@@ -323,7 +326,10 @@ function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger
     }
 
     const generatedContent = readFile(entry.generatedPath);
-    const generated = readMergeableConfig(entry.generatedPath);
+    // A raw fragment with no generated counterpart is copied with its comments.
+    const generated = parseMergeableConfig(entry.generatedPath, generatedContent, {
+      jsonComments: entry.jsonComments === true,
+    });
     const merged = mergeConfigValues(generated, mergeConfigValues(entry.preservedConfig, generated));
     if (
       entry.originalContent !== undefined &&

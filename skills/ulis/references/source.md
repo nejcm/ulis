@@ -157,13 +157,29 @@ claude:
   deny:
     - "Bash(rm -rf*)"
 
+opencode:
+  permission:
+    edit: ask
+
+codex:
+  approvalMode: on-request
+  sandbox: workspace-write
+
 cursor:
   mcpAllowlist:
     - "github:*"
   terminalAllowlist:
     - bun
     - git
+
+devin:
+  allow:
+    - "Exec(git)"
+  deny:
+    - "Exec(rm)"
 ```
+
+`devin` replaces Devin's saved `allow`/`deny`/`ask` approvals in `config.json`.
 
 On preset merge, list fields such as `claude.allow` are **replaced** by the highest layer that declares them, not concatenated.
 

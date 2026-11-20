@@ -163,6 +163,15 @@ describe("preserved native config registry", () => {
         overlay: "json",
         jsonComments: true,
       },
+      {
+        label: "config.json",
+        generatedPath: join("root", ".ulis", "generated", "devin", "config.json"),
+        targetPath: join("root", "project", ".devin", "config.json"),
+        preservedPaths: [[]],
+        ownership: "file",
+        overlay: "json",
+        jsonComments: true,
+      },
     ]);
   });
 

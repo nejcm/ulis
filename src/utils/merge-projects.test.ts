@@ -108,6 +108,14 @@ describe("mergeProjects", () => {
       expect(merged.permissions?.claude?.allow).toEqual(["B"]);
     });
 
+    it("merges devin lists per field, base-wins and deduplicated", () => {
+      const preset = project({ permissions: { devin: { allow: ["Exec(git)"], deny: ["Exec(rm)"] } } });
+      const base = project({ permissions: { devin: { allow: ["Read(**)", "Read(**)"] } } });
+
+      const merged = mergeProjects([preset, base]);
+      expect(merged.permissions?.devin).toEqual({ allow: ["Read(**)"], deny: ["Exec(rm)"], ask: undefined });
+    });
+
     it("lets a base cursor.terminalAllowlist override a preset's (base-wins, not additive)", () => {
       const preset = project({ permissions: { cursor: { terminalAllowlist: ["git"] } } });
       const base = project({ permissions: { cursor: { terminalAllowlist: ["npm"] } } });

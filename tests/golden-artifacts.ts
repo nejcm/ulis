@@ -307,5 +307,37 @@ You are a minimal worker agent used for testing.
   }
 }
 `,
+    "agents/worker.md": `---
+name: worker
+description: "A minimal test agent, focus: safe changes"
+allowed-tools:
+  - read
+  - grep
+  - glob
+  - edit
+  - apply_patch
+---
+
+<!--
+  [ULIS contextHints]
+    maxInputTokens: 20000
+    priority: high
+-->
+
+<!--
+  [ULIS toolPolicy]
+    avoid: Bash
+    requireConfirmation: Write
+-->
+
+<!--
+  [ULIS security]
+    permissionLevel: readonly
+    blockedCommands: rm -rf
+    rateLimit: 30/hour
+-->
+
+You are a minimal worker agent used for testing.
+`,
   },
 } as const;
