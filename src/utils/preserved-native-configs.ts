@@ -217,6 +217,8 @@ function capturePreservedConfig(
   entry: PreservedNativeConfigEntry,
 ): Pick<CapturedPreservedNativeConfig, "preservedConfig" | "originalContent"> {
   if (!existsSync(entry.targetPath)) return { preservedConfig: undefined };
+  // Nothing to merge leaves an overlay untouched, so it is not parsed either: an unreadable file stays put.
+  if (entry.overlay && !entry.mcpKey && !existsSync(entry.generatedPath)) return { preservedConfig: undefined };
 
   try {
     const existing = parseTargetConfig(entry, readFile(entry.targetPath));
@@ -323,7 +325,10 @@ function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger
     }
 
     const generatedContent = readFile(entry.generatedPath);
-    const generated = readMergeableConfig(entry.generatedPath);
+    // A raw fragment with no generated counterpart is copied with its comments.
+    const generated = parseMergeableConfig(entry.generatedPath, generatedContent, {
+      jsonComments: entry.jsonComments === true,
+    });
     const merged = mergeConfigValues(generated, mergeConfigValues(entry.preservedConfig, generated));
     if (
       entry.originalContent !== undefined &&

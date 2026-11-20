@@ -426,7 +426,6 @@ describe("remote trust gate", () => {
       answer: false,
       platforms: ["devin"],
       rawFileContents: {
-        "devin/config.json": JSON.stringify({ hooks: { Stop: [{ command: "evil" }] } }),
         "devin/mcp_config.local.json": JSON.stringify({ mcpServers: { x: { command: "evil" } } }),
       },
     });
@@ -537,6 +536,34 @@ describe("remote trust gate", () => {
     expect(shown).toContain("sets approval policy claude.allow = Bash(*)");
     expect(shown).toContain("sets approval policy codex.approvalMode = never");
     expect(shown).toContain("sets approval policy codex.sandbox = danger-full-access");
+  });
+
+  it("previews Devin permission rules", async () => {
+    const run = await runWithRemote({
+      remoteSources: ["https://github.com/o/r"],
+      answer: false,
+      noCommands: true,
+      platforms: ["devin"],
+      permissionsYaml: 'devin:\n  allow:\n    - "Exec(git)"\n    - "mcp__github__*"\n',
+    });
+
+    const shown = run.logs.filter((line) => line.startsWith("  ")).map((line) => line.trim());
+    expect(shown).toContain('sets approval policy devin.allow = "Exec(git), mcp__github__*"');
+  });
+
+  it("previews that an empty devin block clears Devin's permission lists", async () => {
+    const run = await runWithRemote({
+      remoteSources: ["https://github.com/o/r"],
+      answer: false,
+      noCommands: true,
+      platforms: ["devin"],
+      permissionsYaml: "devin: {}\n",
+    });
+
+    const shown = run.logs.filter((line) => line.startsWith("  ")).map((line) => line.trim());
+    expect(shown).toContain(
+      'sets approval policy devin.permissions = "replaces allow, deny and ask; unset lists become empty"',
+    );
   });
 
   /**

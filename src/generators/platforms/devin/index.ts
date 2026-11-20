@@ -5,6 +5,7 @@ import { buildTriggerRuleArtifacts } from "../../shared/trigger-rules.js";
 import { rawDirs } from "../../source-dirs.js";
 import type { GenerationResult, ProjectBundle } from "../../types.js";
 import { buildDevinAgentArtifact } from "./agents.js";
+import { buildDevinConfigArtifacts } from "./config.js";
 import { buildDevinMcpArtifact } from "./mcp.js";
 import { buildDevinSkillDirs } from "./skills.js";
 
@@ -15,6 +16,7 @@ export function generateDevin(project: ProjectBundle): GenerationResult {
       // Devin CLI 3000.14 rejects a string `globs` with "expected a sequence".
       ...buildTriggerRuleArtifacts(enabledRulesFor(project.rules, "devin"), "Devin", "list"),
       buildDevinMcpArtifact(project.mcp),
+      ...buildDevinConfigArtifacts(project.permissions),
     ],
     post: {
       rawDirs: rawDirs(project, "devin"),

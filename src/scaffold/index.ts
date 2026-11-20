@@ -60,6 +60,13 @@ const PERMISSIONS_TEMPLATE = `# yaml-language-server: $schema={{schemaBase}}/per
 # cursor:
 #   mcpAllowlist: []
 #   terminalAllowlist: []
+#
+# devin:
+#   allow:
+#     - "Exec(git status)"
+#     - "Read(src/**)"
+#   deny:
+#     - "Exec(rm)"
 `;
 
 const SKILLS_TEMPLATE = `# yaml-language-server: $schema={{schemaBase}}/skills.schema.json

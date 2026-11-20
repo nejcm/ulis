@@ -67,6 +67,13 @@ function mergePermissions(configs: readonly (PermissionsConfig | undefined)[]): 
         terminalAllowlist: dedupeList(config.cursor.terminalAllowlist) ?? result.cursor?.terminalAllowlist,
       };
     }
+    if (config?.devin) {
+      result.devin = {
+        allow: dedupeList(config.devin.allow) ?? result.devin?.allow,
+        deny: dedupeList(config.devin.deny) ?? result.devin?.deny,
+        ask: dedupeList(config.devin.ask) ?? result.devin?.ask,
+      };
+    }
   }
 
   return result;

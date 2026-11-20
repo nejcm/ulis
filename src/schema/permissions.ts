@@ -64,6 +64,14 @@ export const PermissionsConfigSchema = emptyYamlAsEmptyObject(
         terminalAllowlist: z.array(z.string()).optional(),
       })
       .optional(),
+
+    devin: z
+      .object({
+        allow: z.array(z.string()).optional(), // e.g. ["Exec(git)", "Read(src/**)", "Fetch(domain:x)", "mcp__s__*"]
+        deny: z.array(z.string()).optional(),
+        ask: z.array(z.string()).optional(),
+      })
+      .optional(),
   }),
 );
 

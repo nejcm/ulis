@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { __test, runInstall } from "./install.js";
 import { platformConfigDir } from "./platforms.js";
 import { cleanupInstallTempRoots, createTempRoot, read, silentLogger, write } from "./test-utils/install.js";
+import { stripJsonComments } from "./utils/config-merge.js";
 
 afterEach(() => {
   __test.resetRuntimeDependencies();
@@ -33,7 +34,7 @@ function devinSource(global: boolean) {
     write(join(sourceDir, "skills", name, "SKILL.md"), `---\nname: ${name}\ndescription: ${name}\n---\nBody.\n`);
     write(join(sourceDir, "raw", "devin", "notes", `${name}.md`), `Note ${name}.\n`);
   }
-  for (const reserved of ["config.json", "config.local.json", "mcp_config.local.json"]) {
+  for (const reserved of ["config.local.json", "mcp_config.local.json"]) {
     write(join(sourceDir, "raw", "devin", reserved), '{ "mcpServers": { "personal": { "command": "evil" } } }\n');
   }
   const targetDir = platformConfigDir("devin", destBase, userHome);
@@ -225,6 +226,52 @@ describe.each([
     rmSync(join(sourceDir, "agents", "old.md"));
     await runInstall({ ...options, prune: false });
     expect(existsSync(join(targetDir, "agents", "old.md"))).toBe(true);
+  });
+
+  it("replaces only permissions in config.json when permissions.devin is set", async () => {
+    const { sourceDir, targetDir, options, manifest } = devinSource(global);
+    write(join(sourceDir, "permissions.yaml"), 'devin:\n  allow: ["Read(src/**)"]\n  deny: ["Exec(rm)"]\n');
+    await runInstall(options);
+    expect(JSON.parse(stripJsonComments(read(join(targetDir, "config.json"))))).toEqual({
+      permissions: { allow: ["Read(src/**)"], deny: ["Exec(rm)"], ask: [] },
+      agent: { model: "swe" },
+    });
+    expect(JSON.stringify(manifest())).not.toContain("config.json");
+  });
+
+  it("merges a raw read_config_from fragment into config.json, keeping saved permissions", async () => {
+    const { sourceDir, targetDir, options } = devinSource(global);
+    write(
+      join(sourceDir, "raw", "devin", "config.json"),
+      '{\n  // off-switch\n  "read_config_from": { "claude": false }\n}\n',
+    );
+    await runInstall(options);
+    expect(JSON.parse(read(join(targetDir, "config.json")))).toEqual({
+      permissions: { allow: ["Exec(git)"] },
+      agent: { model: "swe" },
+      read_config_from: { claude: false },
+    });
+  });
+
+  it("keeps config.json as it is when permissions.devin is removed", async () => {
+    const { sourceDir, targetDir, options } = devinSource(global);
+    write(join(sourceDir, "permissions.yaml"), 'devin:\n  allow: ["Exec(npm)"]\n');
+    await runInstall(options);
+    const installed = read(join(targetDir, "config.json"));
+    rmSync(join(sourceDir, "permissions.yaml"));
+    await runInstall(options);
+    expect(read(join(targetDir, "config.json"))).toBe(installed);
+    expect(JSON.parse(installed).agent).toEqual({ model: "swe" });
+  });
+
+  it("leaves an unparseable config.json alone unless it has permissions to merge", async () => {
+    const { sourceDir, targetDir, options } = devinSource(global);
+    write(join(targetDir, "config.json"), "{ trailing, }\n");
+    await runInstall(options);
+    expect(read(join(targetDir, "config.json"))).toBe("{ trailing, }\n");
+    write(join(sourceDir, "permissions.yaml"), 'devin:\n  allow: ["Exec(git)"]\n');
+    await expect(runInstall(options)).rejects.toThrow();
+    expect(read(join(targetDir, "config.json"))).toBe("{ trailing, }\n");
   });
 
   it("never writes or claims a raw global_rules.md", async () => {

@@ -540,6 +540,16 @@ describe("Devin generator", () => {
     expect([...m.keys()]).toEqual(["agents/worker.md", "mcp_config.json"]);
   });
 
+  it("emits config.json with all three permission lists when devin permissions are configured", () => {
+    const configured = runProject("devin", {
+      ...buildProject(),
+      permissions: { devin: { allow: ["Exec(git)", "Fetch(domain:npmjs.org)"], ask: ["Write(**)"] } },
+    });
+    expect(JSON.parse(get(configured, "config.json"))).toEqual({
+      permissions: { allow: ["Exec(git)", "Fetch(domain:npmjs.org)"], deny: [], ask: ["Write(**)"] },
+    });
+  });
+
   it("generates agent markdown with name, description and mapped allowed-tools, dropping the canonical model", () => {
     const c = get(m, "agents/worker.md");
     expect(c).toContain("name: worker");

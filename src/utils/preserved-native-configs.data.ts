@@ -139,7 +139,19 @@ export const PRESERVED_NATIVE_CONFIGS = [
     mcpKey: "mcpServers",
     overlay: "json",
     jsonComments: true,
-    // User-local secrets, Devin's own settings and global_rules.md: never written or pruned, raw fragments included.
-    reservedNames: ["mcp_config.local.json", "config.json", "config.local.json", "global_rules.md"],
+    // User-local secrets, local overrides and global_rules.md: never written or pruned, raw fragments included.
+    reservedNames: ["mcp_config.local.json", "config.local.json", "global_rules.md"],
+  },
+  {
+    platform: "devin",
+    // Devin saves approvals and user settings here, so the existing file is the base; ULIS overlays only
+    // `permissions` (when `permissions.devin` is set) and raw-fragment keys.
+    label: "config.json",
+    names: ["config.json"],
+    generatedPath: (context) => join(context.outputDir, "devin", "config.json"),
+    targetPath: (context) => join(platformConfigDir("devin", context.destBase, context.userHome), "config.json"),
+    preservedPaths: [[]],
+    overlay: "json",
+    jsonComments: true,
   },
 ] as const satisfies readonly PreservedNativeConfigSpec[];

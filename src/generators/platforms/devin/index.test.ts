@@ -8,6 +8,7 @@ import { AgentFrontmatterSchema, RuleFrontmatterSchema, type McpServer } from ".
 import { toPlatformSkillMarkdown } from "../../../utils/skill-frontmatter.js";
 import type { ProjectBundle } from "../../types.js";
 import { buildDevinAgentArtifact } from "./agents.js";
+import { buildDevinConfigArtifacts } from "./config.js";
 import { generateDevin } from "./index.js";
 import { buildDevinMcpArtifact } from "./mcp.js";
 import { buildDevinSkillDirs } from "./skills.js";
@@ -96,6 +97,21 @@ describe("generateDevin", () => {
     } as unknown as ProjectBundle);
     expect(result.artifacts.map((a) => a.path)).toEqual(["mcp_config.json"]);
     expect(result.post?.skillDirs?.map((s) => s.name)).toEqual(["review"]);
+  });
+});
+
+describe("buildDevinConfigArtifacts", () => {
+  it("emits nothing without permissions.devin", () => {
+    expect(buildDevinConfigArtifacts(undefined)).toEqual([]);
+    expect(buildDevinConfigArtifacts({ claude: { allow: ["Read(**)"] } })).toEqual([]);
+  });
+
+  it("writes all three permission lists, empty when undeclared", () => {
+    const [artifact] = buildDevinConfigArtifacts({ devin: { allow: ["Exec(git)", "mcp__github__*"] } });
+    expect(artifact?.path).toBe("config.json");
+    expect(JSON.parse(String(artifact?.contents))).toEqual({
+      permissions: { allow: ["Exec(git)", "mcp__github__*"], deny: [], ask: [] },
+    });
   });
 });
 
