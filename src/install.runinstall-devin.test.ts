@@ -315,7 +315,7 @@ describe("runInstall devin global rules", () => {
     expect(manifest().globalRulesEntries).toContain("rules/a.md");
   });
 
-  it("leaves a Phase 1 config-root rule unmanaged and keeps the same-named user rule in ~/.devin/rules", async () => {
+  it("leaves a legacy config-root rule unmanaged and keeps the same-named user rule in ~/.devin/rules", async () => {
     const { targetDir, userHome, options, manifest } = devinSource(true);
     await runInstall(options);
     const legacy = manifest();
