@@ -109,6 +109,10 @@ Before opening the PR, re-read each doc page cited in the capability table and c
 
 Fix every mismatch, or record it under "Not verified" in the PR body with the doc URL. Docs change; a mapping verified at research time may be stale at review time.
 
+### Load It In The Real Tool
+
+Docs are not enough: Antigravity `globs` and Devin `globs` both passed a docs check and were still wrong. If the tool has a command that parses its config without signing in (`devin rules list`, `devin doctor`), install the tool with `HOME` and `XDG_*` pointing at a scratch directory (read its install script first), run `bun run dev:install` against that home, and run the command on every generated file. Record which commands needed a login under "Not verified".
+
 ## Output
 
 When using this skill, produce:
