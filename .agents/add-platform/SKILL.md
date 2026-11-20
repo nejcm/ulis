@@ -111,7 +111,7 @@ Fix every mismatch, or record it under "Not verified" in the PR body with the do
 
 ### Load It In The Real Tool
 
-Docs are not enough: Antigravity `globs` and Devin `globs` both passed a docs check and were still wrong. If the tool has a command that parses its config without signing in (`devin rules list`, `devin doctor`), install the tool with `HOME` and `XDG_*` pointing at a scratch directory (read its install script first), run `bun run dev:install` against that home, and run the command on every generated file. Record which commands needed a login under "Not verified".
+Docs are not enough: Antigravity `globs` and Devin `globs` both passed a docs check and were still wrong. If the tool has a command that parses its config without signing in (`devin rules list`, `devin doctor`), install the tool with `HOME` and `XDG_*` pointing at a scratch directory (read its install script first). Run that command from the project directory `bun run dev:install` prints, then again after `HOME=<scratch> bun run dev:install -- --global` (set `HOME` on that same command, or the install hits your real home), so both scopes load every generated file. Record which commands needed a login under "Not verified".
 
 ## Output
 
