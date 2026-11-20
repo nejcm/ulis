@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, spyOn } from "bun:test";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 
 import { PLATFORMS, platformConfigDir, type Platform } from "../platforms.js";
 import { cleanupTempRoots, createTempRoot, writeTextFile } from "../test-utils/fs.js";
 import * as installFs from "./fs.js";
+import { pathsOverlap } from "./manifest.js";
 import {
   detectInstallCollisions,
   installAntigravity,
@@ -68,11 +69,58 @@ describe("detectInstallCollisions", () => {
     expect(detectInstallCollisions(root, ["opencode"], root)).toEqual([opencodeHomeDir]);
   });
 
+  it("detects Devin global rules in ~/.devin/rules, and not in a project install", () => {
+    const root = createTempRoot("ulis-install-collisions-");
+    write(join(root, ".devin", "rules", "mine.md"), "Mine.\n");
+
+    expect(detectInstallCollisions(root, ["devin"], root)).toEqual([join(root, ".devin", "rules")]);
+    expect(detectInstallCollisions(join(root, "project"), ["devin"], root)).toEqual([]);
+  });
+
+  it("lists the Devin global rules path when ~/.devin links into the config dir", () => {
+    const root = createTempRoot("ulis-install-collisions-");
+    const configDir = platformConfigDir("devin", root, root);
+    mkdirSync(join(configDir, "local-state"), { recursive: true });
+    symlinkSync(join(configDir, "local-state"), join(root, ".devin"));
+
+    expect(detectInstallCollisions(root, ["devin"], root)).toEqual([configDir, join(root, ".devin", "rules")]);
+  });
+
+  it("lists the Devin global rules path when ~/.devin is a dangling link", () => {
+    const root = createTempRoot("ulis-install-collisions-");
+    symlinkSync(join(platformConfigDir("devin", root, root), "local-state"), join(root, ".devin"));
+
+    expect(detectInstallCollisions(root, ["devin"], root)).toEqual([join(root, ".devin", "rules")]);
+  });
+
+  it("lists the Devin global rules path when ~/.devin is a file", () => {
+    const root = createTempRoot("ulis-install-collisions-");
+    write(join(root, ".devin"), "not a directory\n");
+
+    expect(detectInstallCollisions(root, ["devin"], root)).toEqual([join(root, ".devin", "rules")]);
+  });
+
+  it("lists a file at the Devin global rules path without reading it", () => {
+    const root = createTempRoot("ulis-install-collisions-");
+    write(join(root, ".devin", "rules"), "not a directory\n");
+
+    expect(detectInstallCollisions(root, ["devin"], root)).toEqual([join(root, ".devin", "rules")]);
+  });
+
   it("does not return duplicate paths", () => {
     const root = createTempRoot("ulis-install-collisions-");
     write(join(root, ".mcp.json"), "{}");
 
     expect(detectInstallCollisions(root, ["claude", "claude"])).toEqual([join(root, ".mcp.json")]);
+  });
+});
+
+describe("pathsOverlap", () => {
+  it("treats a filesystem root and equal paths as overlapping, siblings as not", () => {
+    expect(pathsOverlap("/", "/home/x/.devin/rules")).toBe(true);
+    expect(pathsOverlap("/a/devin", "/a/devin")).toBe(true);
+    expect(pathsOverlap("/a/devin", "/a/devin/rules")).toBe(true);
+    expect(pathsOverlap("/a/devin", "/a/devin-extra")).toBe(false);
   });
 });
 
@@ -100,6 +148,7 @@ describe("platform install skip names", () => {
         "mcp_config.local.json",
         "config.json",
         "config.local.json",
+        "global_rules.md",
       ],
     };
     const installers = {

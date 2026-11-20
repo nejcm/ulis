@@ -15,7 +15,7 @@ This repo has no `CLAUDE.md`, and should not get one. `AGENTS.md` is the single 
 
 ## Blast radius
 
-`ulis install` writes into real config directories, and with `--global` into `$HOME`: `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.forge/`, `~/.config/opencode/`, `~/.gemini/config/`, `~/.hermes/`, `~/.config/devin/`. A project install of the `antigravity` target writes `./.agents/`, which in this repo already holds `.agents/add-platform/`; `hermes` writes `./.hermes/` (skills only); `devin` writes `./.devin/`. Two defaults matter (`src/install.ts`):
+`ulis install` writes into real config directories, and with `--global` into `$HOME`: `~/.claude/`, `~/.codex/`, `~/.cursor/`, `~/.forge/`, `~/.config/opencode/`, `~/.gemini/config/`, `~/.hermes/`, `~/.config/devin/`, `~/.devin/rules/`. A project install of the `antigravity` target writes `./.agents/`, which in this repo already holds `.agents/add-platform/`; `hermes` writes `./.hermes/` (skills only); `devin` writes `./.devin/`. Two defaults matter (`src/install.ts`):
 
 - **`prune` defaults to on** — install deletes destination agents and local skills that appear in the manifest but not in the current generated set.
 - **`backup` defaults to off** — nothing is copied aside before overwrite.

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "bun:test";
+import { join } from "node:path";
 
+import type { ParsedRule } from "../../../parsers/rule.js";
 import type { ParsedSkill } from "../../../parsers/skill.js";
-import type { McpServer } from "../../../schema.js";
+import { RuleFrontmatterSchema, type McpServer } from "../../../schema.js";
 import { toPlatformSkillMarkdown } from "../../../utils/skill-frontmatter.js";
 import type { ProjectBundle } from "../../types.js";
 import { generateDevin } from "./index.js";
@@ -92,6 +94,42 @@ describe("generateDevin", () => {
     } as unknown as ProjectBundle);
     expect(result.artifacts.map((a) => a.path)).toEqual(["mcp_config.json"]);
     expect(result.post?.skillDirs?.map((s) => s.name)).toEqual(["review"]);
+  });
+});
+
+describe("generateDevin rules", () => {
+  const rule = (name: string, frontmatter: Record<string, unknown> = {}): ParsedRule => ({
+    name,
+    filename: `${name}.md`,
+    frontmatter: RuleFrontmatterSchema.parse(frontmatter),
+    body: "Rule body.",
+  });
+  const generate = (rules: ParsedRule[]) =>
+    generateDevin({
+      agents: [],
+      skills: [],
+      rules,
+      mcp: { servers: {} },
+      ulisConfig: { version: 1, name: "test", unsupportedPlatformRules: "inject" },
+      sourceDir: "/unused",
+    } as unknown as ProjectBundle);
+
+  it("writes flattened trigger rules and skips rules disabled for devin", () => {
+    const result = generate([
+      rule("golang/coding-style", { description: "Go", paths: ["**/*.go", "**/go.mod"] }),
+      rule("off", { platforms: { devin: { enabled: false } } }),
+    ]);
+    expect(result.artifacts).toEqual([
+      {
+        path: join("rules", "golang-coding-style.md"),
+        contents: '---\ntrigger: glob\ndescription: Go\nglobs:\n  - "**/*.go"\n  - "**/go.mod"\n---\n\nRule body.\n',
+      },
+      { path: "mcp_config.json", contents: JSON.stringify({ mcpServers: {} }, null, 2) },
+    ]);
+  });
+
+  it("throws when two nested rules flatten to the same path", () => {
+    expect(() => generate([rule("a/b"), rule("a-b")])).toThrow('Rules "a/b" and "a-b" both flatten to');
   });
 });
 

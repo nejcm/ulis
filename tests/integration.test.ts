@@ -539,6 +539,21 @@ describe("Devin generator", () => {
     });
     expect([...m.keys()]).toEqual(["mcp_config.json"]);
   });
+
+  it("generates flattened .devin/rules files with trigger frontmatter and list globs", () => {
+    const sourceDir = createTempSource();
+    write(join(sourceDir, "rules", "common", "security.md"), "---\ndescription: Security rules\n---\n\nBe careful.\n");
+    write(join(sourceDir, "rules", "base.md"), "Always.\n");
+    write(join(sourceDir, "rules", "ts.md"), '---\npaths:\n  - "**/*.ts"\n  - "**/*.tsx"\n---\n\nTyped.\n');
+    const rules = runProject("devin", { ...buildProject(), sourceDir, rules: parseProject(sourceDir).rules });
+    expect(get(rules, "rules/common-security.md")).toBe(
+      "---\ntrigger: model_decision\ndescription: Security rules\n---\n\nBe careful.\n",
+    );
+    expect(get(rules, "rules/base.md")).toBe("---\ntrigger: always_on\n---\n\nAlways.\n");
+    expect(get(rules, "rules/ts.md")).toBe(
+      '---\ntrigger: glob\nglobs:\n  - "**/*.ts"\n  - "**/*.tsx"\n---\n\nTyped.\n',
+    );
+  });
 });
 
 describe("Antigravity generator", () => {

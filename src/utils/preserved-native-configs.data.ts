@@ -139,7 +139,7 @@ export const PRESERVED_NATIVE_CONFIGS = [
     mcpKey: "mcpServers",
     overlay: "json",
     jsonComments: true,
-    // User-local secrets and Devin's own settings: never written or pruned, raw fragments included.
-    reservedNames: ["mcp_config.local.json", "config.json", "config.local.json"],
+    // User-local secrets, Devin's own settings and global_rules.md: never written or pruned, raw fragments included.
+    reservedNames: ["mcp_config.local.json", "config.json", "config.local.json", "global_rules.md"],
   },
 ] as const satisfies readonly PreservedNativeConfigSpec[];

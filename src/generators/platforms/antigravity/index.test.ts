@@ -6,11 +6,11 @@ import type { ParsedRule } from "../../../parsers/rule.js";
 import type { ParsedSkill } from "../../../parsers/skill.js";
 import { AgentFrontmatterSchema, RuleFrontmatterSchema, type McpServer } from "../../../schema.js";
 import { toPlatformSkillMarkdown } from "../../../utils/skill-frontmatter.js";
+import { buildTriggerRuleArtifact as buildAntigravityRuleArtifact } from "../../shared/trigger-rules.js";
 import type { ProjectBundle } from "../../types.js";
 import { buildAntigravityAgentArtifact } from "./agents.js";
 import { generateAntigravity } from "./index.js";
 import { buildAntigravityMcpArtifact } from "./mcp.js";
-import { buildAntigravityRuleArtifact } from "./rules.js";
 import { buildAntigravitySkillDirs } from "./skills.js";
 
 function agent(frontmatter: Record<string, unknown>, name = "worker"): ParsedAgent {
