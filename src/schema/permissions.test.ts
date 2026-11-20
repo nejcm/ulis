@@ -14,7 +14,7 @@ const platforms = Object.keys(
 
 function permissionsExampleKeys(markdown: string): string[] {
   const section = /^## Permissions\b[\s\S]*?(?=^## |(?![\s\S]))/m.exec(markdown)?.[0] ?? "";
-  const blocks = [...section.matchAll(/^```yaml\n([\s\S]*?)^```/gm)].map((match) => parseYaml(match[1]!) ?? {});
+  const blocks = [...section.matchAll(/^ *```ya?ml\r?\n([\s\S]*?)^ *```/gm)].map((match) => parseYaml(match[1]!) ?? {});
   return blocks.flatMap((block) => Object.keys(block));
 }
 
