@@ -16,6 +16,7 @@ const SKILL_PLATFORM_AGENT_NAMES: Partial<Record<Platform, string>> = {
   cursor: "cursor",
   antigravity: "antigravity",
   hermes: "hermes-agent",
+  devin: "devin",
 };
 
 const SKILL_INSTALL_CONCURRENCY = 4;

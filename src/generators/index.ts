@@ -3,6 +3,7 @@ import { generateAntigravity } from "./platforms/antigravity/index.js";
 import { generateClaude } from "./platforms/claude/index.js";
 import { generateCodex } from "./platforms/codex/index.js";
 import { generateCursor } from "./platforms/cursor/index.js";
+import { generateDevin } from "./platforms/devin/index.js";
 import { generateForgecode } from "./platforms/forgecode/index.js";
 import { generateHermes } from "./platforms/hermes/index.js";
 import { generateOpencode } from "./platforms/opencode/index.js";
@@ -22,6 +23,7 @@ const GENERATORS: Partial<Record<Platform, (p: ProjectBundle) => GenerationResul
   opencode: generateOpencode,
   antigravity: generateAntigravity,
   hermes: generateHermes,
+  devin: generateDevin,
 };
 
 /**

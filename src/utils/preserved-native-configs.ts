@@ -61,6 +61,10 @@ export interface PreservedNativeConfigSpec {
   readonly ownership?: Ownership | ((context: PreservedNativeConfigContext) => Ownership);
   /** `"global"`: the file exists only under the user's home, so a project install neither writes nor claims it. */
   readonly scope?: "global";
+  /** The host accepts JavaScript-style comments in this JSON file. */
+  readonly jsonComments?: true;
+  /** Basenames the host owns in this directory that ULIS neither writes nor claims. */
+  readonly reservedNames?: readonly string[];
 }
 
 export interface PreservedNativeConfigEntry {
@@ -71,6 +75,7 @@ export interface PreservedNativeConfigEntry {
   readonly mcpKey?: string;
   readonly ownership?: Ownership;
   readonly overlay?: OverlayMode;
+  readonly jsonComments?: true;
 }
 
 export interface CapturedPreservedNativeConfig extends PreservedNativeConfigEntry {
@@ -113,19 +118,26 @@ export const NATIVE_CONFIG_FILENAMES: ReadonlySet<string> = new Set(
   PRESERVED_NATIVE_CONFIGS.flatMap((spec) => spec.names),
 );
 
+/** Root basenames install never copies or claims for `platform`: its native configs plus host-reserved names. */
 export function nativeConfigFilenames(platform: Platform): ReadonlySet<string> {
-  return new Set(PRESERVED_NATIVE_CONFIGS.filter((spec) => spec.platform === platform).flatMap((spec) => spec.names));
+  return new Set(
+    PRESERVED_NATIVE_CONFIGS.filter((spec) => spec.platform === platform).flatMap((spec) => [
+      ...spec.names,
+      ...("reservedNames" in spec ? spec.reservedNames : []),
+    ]),
+  );
 }
 
-/** Native config names this install mode leaves alone. */
+/** Native config names this install mode leaves alone; without a context, only the reserved ones. */
 export function inactiveNativeConfigFilenames(
   platform: Platform,
-  context: Pick<PreservedNativeConfigContext, "destBase" | "userHome">,
+  context?: Pick<PreservedNativeConfigContext, "destBase" | "userHome">,
 ): ReadonlySet<string> {
   return new Set(
-    PRESERVED_NATIVE_CONFIGS.filter((spec) => spec.platform === platform && !specApplies(spec, context)).flatMap(
-      (spec) => spec.names,
-    ),
+    PRESERVED_NATIVE_CONFIGS.filter((spec) => spec.platform === platform).flatMap((spec) => [
+      ...(!context || specApplies(spec, context) ? [] : spec.names),
+      ...("reservedNames" in spec ? spec.reservedNames : []),
+    ]),
   );
 }
 
@@ -155,6 +167,7 @@ export function getPreservedNativeConfigEntries(
         ...("mcpKey" in spec ? { mcpKey: spec.mcpKey } : {}),
         ownership,
         ...(overlay ? { overlay } : {}),
+        ...("jsonComments" in spec ? { jsonComments: spec.jsonComments } : {}),
       };
     },
   );
@@ -196,13 +209,17 @@ export function writePreservedNativeConfigs(
   }
 }
 
+function parseTargetConfig(entry: PreservedNativeConfigEntry, content: string): unknown {
+  return parseMergeableConfig(entry.targetPath, content, { jsonComments: entry.jsonComments === true });
+}
+
 function capturePreservedConfig(
   entry: PreservedNativeConfigEntry,
 ): Pick<CapturedPreservedNativeConfig, "preservedConfig" | "originalContent"> {
   if (!existsSync(entry.targetPath)) return { preservedConfig: undefined };
 
   try {
-    const existing = readMergeableConfig(entry.targetPath);
+    const existing = parseTargetConfig(entry, readFile(entry.targetPath));
     if (entry.overlay) {
       return {
         preservedConfig: existing,
@@ -279,7 +296,7 @@ function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger
       if (
         (entry.overlay && !entry.prunedMcp && existsSync(entry.targetPath)) ||
         (entry.originalContent !== undefined &&
-          configValuesEqual(parseMergeableConfig(entry.targetPath, entry.originalContent), entry.preservedConfig))
+          configValuesEqual(parseTargetConfig(entry, entry.originalContent), entry.preservedConfig))
       ) {
         logger?.success(`${entry.label} (preserved)`);
         return;
@@ -310,7 +327,7 @@ function writePreservedNativeConfig(entry: CapturedPreservedNativeConfig, logger
     const merged = mergeConfigValues(generated, mergeConfigValues(entry.preservedConfig, generated));
     if (
       entry.originalContent !== undefined &&
-      configValuesEqual(parseMergeableConfig(entry.targetPath, entry.originalContent), merged)
+      configValuesEqual(parseTargetConfig(entry, entry.originalContent), merged)
     ) {
       writeDestinationFile(entry.targetPath, entry.originalContent);
     } else if (entry.overlay === "toml") {

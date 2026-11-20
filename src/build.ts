@@ -15,6 +15,7 @@ import type { ResolvedPreset } from "./utils/resolve-presets.js";
 import { validateAntigravityAgentTools, validateAntigravityRuleSize } from "./validators/antigravity.js";
 import { validateCollisions } from "./validators/collisions.js";
 import { validateCrossRefs } from "./validators/cross-refs.js";
+import { validateDevinMcpEndpoints, validateDevinSkills } from "./validators/devin.js";
 import { validateAntigravityAgentMcp, validateMcpPlaceholders } from "./validators/mcp-placeholders.js";
 
 export interface Logger {
@@ -101,6 +102,8 @@ function validateAndReport(parsed: ParsedProject, logger: Logger): ProjectAnalys
     ...validateAntigravityAgentMcp(parsed.agents),
     ...validateAntigravityAgentTools(parsed.agents),
     ...validateAntigravityRuleSize(parsed.rules),
+    ...validateDevinSkills(parsed.skills),
+    ...validateDevinMcpEndpoints(parsed.mcp),
   ];
 
   for (const diagnostic of diagnostics) {

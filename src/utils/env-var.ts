@@ -10,10 +10,20 @@
  * - forgecode:       ${VAR} → ${VAR}
  * - antigravity:     ${VAR} → ${VAR}     (verbatim; Antigravity documents no interpolation)
  * - hermes:          ${VAR} → ${VAR}     (verbatim; Hermes interpolates from env and ~/.hermes/.env)
+ * - devin:           ${VAR} → ${env:VAR}  (Devin mcp_config.json command, args, env, url, headers)
  */
 export function translateEnvVar(
   value: string,
-  target: "opencode_env" | "opencode_header" | "codex" | "cursor" | "claude" | "forgecode" | "antigravity" | "hermes",
+  target:
+    | "opencode_env"
+    | "opencode_header"
+    | "codex"
+    | "cursor"
+    | "claude"
+    | "forgecode"
+    | "antigravity"
+    | "hermes"
+    | "devin",
 ): string {
   return value.replace(/\$\{(\w+)\}/g, (_match, varName) => {
     switch (target) {
@@ -21,6 +31,7 @@ export function translateEnvVar(
       case "opencode_header":
         return `{env:${varName}}`;
       case "cursor":
+      case "devin":
         return `\${env:${varName}}`;
       case "codex":
       case "claude":

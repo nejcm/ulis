@@ -178,6 +178,9 @@ describe("runInstall", () => {
     ["antigravity", ["antigravity"] as const, ["-a", "antigravity"]],
     ['"*"', ["hermes"] as const, ["-a", "hermes-agent"]],
     ["hermes", ["hermes"] as const, ["-a", "hermes-agent"]],
+    ['"*"', ["devin"] as const, ["-a", "devin"]],
+    ["devin", ["devin"] as const, ["-a", "devin"]],
+    ['"*"', ["claude", "devin"] as const, ["-a", "claude-code", "devin"]],
     ['"*"', ["forgecode"] as const, undefined],
   ])("maps the %s skills section to the skills CLI agent for %p", async (section, platforms, expected) => {
     const root = createTempRoot();
@@ -190,6 +193,7 @@ describe("runInstall", () => {
     mkdirSync(userHome, { recursive: true });
     write(join(outputDir, "antigravity", "rules", "a.md"), "Rule.\n");
     write(join(outputDir, "hermes", "skills", "s", "SKILL.md"), "---\nname: s\ndescription: d\n---\n");
+    write(join(outputDir, "devin", "skills", "s", "SKILL.md"), "---\nname: s\ndescription: d\n---\n");
     createForgecodeOutput(outputDir);
     write(join(sourceDir, "skills.yaml"), [`${section}:`, "  skills:", "    - name: test/skill", ""].join("\n"));
 

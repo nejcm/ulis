@@ -459,9 +459,11 @@ describe("SkillsConfigSchema", () => {
       forgecode: { skills: [{ name: "forgecode-skill" }] },
       antigravity: { skills: [{ name: "antigravity-skill" }] },
       hermes: { skills: [{ name: "hermes-skill" }] },
+      devin: { skills: [{ name: "devin-skill" }] },
     });
     expect(result.antigravity?.skills[0].name).toBe("antigravity-skill");
     expect(result.hermes?.skills[0].name).toBe("hermes-skill");
+    expect(result.devin?.skills[0].name).toBe("devin-skill");
     expect(result.opencode?.skills[0].name).toBe("opencode-skill");
     expect(result.codex?.skills[0].args).toEqual(["--yes"]);
     expect(result.cursor?.skills).toHaveLength(0);

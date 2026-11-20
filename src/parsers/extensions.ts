@@ -10,6 +10,7 @@ const EXTENSION_CONFIG_KEYS = [
   "forgecode",
   "antigravity",
   "hermes",
+  "devin",
 ] as const;
 
 /**

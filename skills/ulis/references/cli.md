@@ -25,6 +25,7 @@ Use this when you need exact flags, destinations, or preset/remote behavior.
 | ForgeCode   | `./.forge/`                      | `~/.forge/`                                                        |
 | Antigravity | `./.agents/`                     | `~/.gemini/config/`                                                |
 | Hermes      | `./.hermes/` (skills only)       | `~/.hermes/`                                                       |
+| Devin       | `./.devin/`                      | `~/.config/devin/` (Windows: `%APPDATA%\devin\`)                   |
 
 `init` in project mode also appends `/.ulis/generated/` to `.gitignore`. Global init does not write a gitignore.
 
@@ -82,7 +83,7 @@ ulis install --source https://github.com/acme/ulis-config#main
 
 Ownership: `.ulis-manifest.json` in each selected platform root. First manifest-aware install adopts the current set and prunes nothing. Later installs prune `previous managed − current generated` for **selected** platforms only. External `skills.yaml` installs are not in the manifest.
 
-Preserved when possible: Claude `settings.json` / `settings.local.json` / `.claude.json`, project `.mcp.json` servers, OpenCode `opencode.json` `mcp`, Codex `config.toml` (base-first overlay), Cursor `mcp.json` servers, ForgeCode `.forge/.mcp.json` and `.forge.toml`, Antigravity `mcp_config.json` servers, Hermes `config.yaml` (everything outside managed `mcp_servers`; comments are lost when the merge changes the file, `--backup` first).
+Preserved when possible: Claude `settings.json` / `settings.local.json` / `.claude.json`, project `.mcp.json` servers, OpenCode `opencode.json` `mcp`, Codex `config.toml` (base-first overlay), Cursor `mcp.json` servers, ForgeCode `.forge/.mcp.json` and `.forge.toml`, Antigravity `mcp_config.json` servers, Hermes `config.yaml` (everything outside managed `mcp_servers`; comments are lost when the merge changes the file, `--backup` first), Devin `mcp_config.json` (everything outside managed `mcpServers`; comments are lost when the merge changes the file). Devin's `config.json`, `config.local.json` and `mcp_config.local.json` are never written.
 
 `.env`: install loads `<destBase>/.env` then `<source>/.env` into **its** process only, adding keys, never overwriting the existing environment. A **remote** source's `.env` is never read.
 

@@ -285,4 +285,27 @@ You are a minimal worker agent used for testing.
       Authorization: Bearer \${TEST_REMOTE_TOKEN}
 `,
   },
+  devin: {
+    "mcp_config.json": `{
+  "mcpServers": {
+    "test-local": {
+      "command": "node",
+      "args": [
+        "./mcp-server.js"
+      ],
+      "env": {
+        "API_KEY": "\${env:TEST_API_KEY}"
+      }
+    },
+    "test-remote": {
+      "url": "https://mcp.example.com/sse",
+      "transport": "http",
+      "headers": {
+        "Authorization": "Bearer \${env:TEST_REMOTE_TOKEN}"
+      }
+    }
+  }
+}
+`,
+  },
 } as const;

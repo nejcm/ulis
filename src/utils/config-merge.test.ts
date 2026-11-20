@@ -5,10 +5,25 @@ import { parse } from "smol-toml";
 import {
   configValuesEqual,
   mergeConfigValues,
+  parseMergeableConfig,
   patchTomlOverlay,
   readMergeableConfig,
   writeMergeableConfig,
 } from "./config-merge.js";
+
+describe("parseMergeableConfig jsonComments", () => {
+  const jsonc = '{\n  // line\n  "a": "x//y /* not */", /* block\n */ "b": "q\\"//"\n}';
+
+  it("strips comments outside strings only when asked", () => {
+    expect(parseMergeableConfig("c.json", jsonc, { jsonComments: true })).toEqual({ a: "x//y /* not */", b: 'q"//' });
+    expect(() => parseMergeableConfig("c.json", jsonc)).toThrow();
+  });
+
+  it("ends a line comment at CR and rejects an unterminated block comment", () => {
+    expect(parseMergeableConfig("c.json", '{ "a": 1 // x\r}', { jsonComments: true })).toEqual({ a: 1 });
+    expect(() => parseMergeableConfig("c.json", '{ "a": 1 } /* open', { jsonComments: true })).toThrow();
+  });
+});
 
 describe("mergeConfigValues", () => {
   it("recursively merges objects and replaces arrays at the same path", () => {

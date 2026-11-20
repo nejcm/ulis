@@ -13,7 +13,8 @@ raw/
 ├── opencode/   # OpenCode-specific injections
 ├── forgecode/  # ForgeCode-specific injections
 ├── antigravity/ # Antigravity-specific injections
-└── hermes/      # Hermes Agent-specific injections
+├── hermes/      # Hermes Agent-specific injections
+└── devin/       # Devin-specific injections
 ```
 
 ## How It's Used
@@ -30,6 +31,7 @@ During `bun run build`, the build system reads each subdirectory and copies its 
 | `raw/forgecode/`   | `generated/forgecode/`   |
 | `raw/antigravity/` | `generated/antigravity/` |
 | `raw/hermes/`      | `generated/hermes/`      |
+| `raw/devin/`       | `generated/devin/`       |
 
 Files in `raw/all/` are copied to **every** platform's generated directory.
 
@@ -45,6 +47,10 @@ Cross-platform agent instructions injected into every tool's config. Contains:
 - **Honesty policy** — never lie, never omit, ask for clarification when unsure
 - **Efficiency rules** — minimize tokens, search before reading, use quiet flags, show diffs not full files
 - **Coding rule** — always apply the `coding-principles` skill before writing, reviewing, or refactoring code
+
+### `devin/mcp_config.json`
+
+Devin-only MCP fields (`disabledTools`) merged into the generated `mcp_config.json`. Comments are allowed; the merged output is plain JSON.
 
 ## When to Use `raw/` vs Other Directories
 

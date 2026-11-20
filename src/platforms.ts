@@ -1,7 +1,16 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
-export const PLATFORMS = ["opencode", "claude", "codex", "cursor", "forgecode", "antigravity", "hermes"] as const;
+export const PLATFORMS = [
+  "opencode",
+  "claude",
+  "codex",
+  "cursor",
+  "forgecode",
+  "antigravity",
+  "hermes",
+  "devin",
+] as const;
 
 export type Platform = (typeof PLATFORMS)[number];
 
@@ -27,6 +36,7 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   forgecode: "ForgeCode",
   antigravity: "Antigravity",
   hermes: "Hermes Agent",
+  devin: "Devin",
 };
 
 export const PLATFORM_DESCRIPTIONS: Record<Platform, string> = {
@@ -37,6 +47,7 @@ export const PLATFORM_DESCRIPTIONS: Record<Platform, string> = {
   forgecode: "Generate ForgeCode agents, skills, MCP config, and project rules.",
   antigravity: "Generate Antigravity subagents, rules, skills, and MCP config.",
   hermes: "Generate Hermes Agent skills and MCP servers (config.yaml).",
+  devin: "Generate Devin skills, subagents, rules, and MCP config.",
 };
 
 export const PLATFORM_DIRS: Record<Platform, PlatformDirsEntry> = {
@@ -47,6 +58,7 @@ export const PLATFORM_DIRS: Record<Platform, PlatformDirsEntry> = {
   forgecode: { home: ".forge", project: ".forge" },
   antigravity: { home: ".gemini/config", project: ".agents" },
   hermes: { home: ".hermes", project: ".hermes" },
+  devin: { home: { default: ".config/devin", win32: "AppData/Roaming/devin" }, project: ".devin" },
 };
 
 export function resolvePlatformDirSegment(segment: PlatformDirSegment): string {

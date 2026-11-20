@@ -245,13 +245,25 @@ export function readMergeableConfig(filePath: string): unknown {
   return parseMergeableConfig(filePath, () => readFile(filePath));
 }
 
-export function parseMergeableConfig(filePath: string, contents: string | (() => string)): unknown {
+export function parseMergeableConfig(
+  filePath: string,
+  contents: string | (() => string),
+  options: { readonly jsonComments?: boolean } = {},
+): unknown {
   const ext = extname(filePath).toLowerCase();
   if (!MERGE_EXTS.has(ext)) throw new Error(`Unsupported config extension: ${ext}`);
   const content = typeof contents === "string" ? contents : contents();
-  if (ext === ".json") return JSON.parse(content) as unknown;
+  if (ext === ".json") return JSON.parse(options.jsonComments ? stripJsonComments(content) : content) as unknown;
   if (ext === ".toml") return smolToml.parse(content);
   return parseYaml(content) as unknown;
+}
+
+/** JSONC to JSON: blanks line and block comments outside strings, keeping parse-error positions. */
+export function stripJsonComments(content: string): string {
+  // An unterminated block comment matches nothing and is left for JSON.parse to reject.
+  return content.replace(/"(?:\\.|[^"\\])*"|\/\/[^\r\n]*|\/\*[\s\S]*?\*\//g, (match) =>
+    match.startsWith('"') ? match : match.replace(/[^\r\n]/g, " "),
+  );
 }
 
 export function writeMergeableConfig(filePath: string, value: unknown): void {
@@ -341,8 +353,9 @@ function mergeOrCopyFile(srcFile: string, destFile: string): void {
   }
 
   try {
-    const generated = readMergeableConfig(destFile);
-    const raw = readMergeableConfig(srcFile);
+    // `raw/` fragments are user-authored, so JSONC is accepted; the merged output is plain JSON.
+    const generated = parseMergeableConfig(destFile, () => readFile(destFile), { jsonComments: true });
+    const raw = parseMergeableConfig(srcFile, () => readFile(srcFile), { jsonComments: true });
     writeGeneratedFile(destFile, serializeMergeableConfig(destFile, mergeConfigValues(generated, raw)));
   } catch (err) {
     console.warn(`[config-merge] merge failed for ${destFile}: ${err}. Copying raw file as-is.`);
