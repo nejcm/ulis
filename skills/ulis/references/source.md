@@ -157,6 +157,14 @@ claude:
   deny:
     - "Bash(rm -rf*)"
 
+opencode:
+  permission:
+    edit: ask
+
+codex:
+  approvalMode: on-request
+  sandbox: workspace-write
+
 cursor:
   mcpAllowlist:
     - "github:*"
